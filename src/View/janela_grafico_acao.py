@@ -33,9 +33,6 @@ PERIODOS = [
     ("personalizado", "Personalizado"),
 ]
 
-COR_GRAFICO = "#2563EB"
-
-
 class JanelaGraficoAcao(ctk.CTkToplevel):
     """Tela ampla com periodo, grafico, tooltip e selecao de intervalo."""
 
@@ -316,7 +313,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         figura = Figure(
             figsize=(largura_px / dpi, altura_px / dpi),
             dpi=dpi,
-            facecolor=CORES["superficie"],
+            facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
 
@@ -324,7 +321,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         linha, = eixo.plot(
             indices,
             valores,
-            color=COR_GRAFICO,
+            color=CORES["primaria"],
             linewidth=2,
             marker="o",
             markersize=3,

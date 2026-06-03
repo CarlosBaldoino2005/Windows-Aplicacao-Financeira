@@ -47,6 +47,29 @@ def criar_card_tabela(
     tabela.column("preco", width=120)
     tabela.column("variacao", width=180)
 
+    tabela.pack(fill="both", expand=expandir)
+    aplicar_estilo_tabela(tabela)
+    if ao_duplo_clique:
+        tabela.bind("<Double-1>", ao_duplo_clique)
+
+    label_vazio = ctk.CTkLabel(
+        card,
+        text="",
+        font=ctk.CTkFont(size=13),
+        text_color=CORES["textoSecundario"],
+        wraplength=900,
+        justify="left",
+    )
+    label_vazio.pack(fill="x", padx=12, pady=(0, 12))
+    label_vazio.pack_forget()
+    tabela._card_pai = card  # type: ignore[attr-defined]
+    tabela._label_vazio = label_vazio  # type: ignore[attr-defined]
+
+    return tabela
+
+
+def aplicar_estilo_tabela(tabela: ttk.Treeview) -> None:
+    """Atualiza cores da grid (chamar apos trocar tema claro/escuro)."""
     estilo = ttk.Style()
     estilo.theme_use("clam")
     estilo.configure(
@@ -56,22 +79,42 @@ def criar_card_tabela(
         foreground=CORES["texto"],
         rowheight=28,
     )
-    estilo.configure("Treeview.Heading", background="#E2E8F0", font=("Segoe UI", 10, "bold"))
+    estilo.configure(
+        "Treeview.Heading",
+        background=CORES["zebraEscura"],
+        foreground=CORES["texto"],
+        font=("Segoe UI", 10, "bold"),
+    )
     tabela.tag_configure("par", background=CORES["zebraClara"])
     tabela.tag_configure("impar", background=CORES["zebraEscura"])
     tabela.tag_configure("selecionado", background=CORES["selecao"], foreground=CORES["selecaoTexto"])
 
-    tabela.pack(fill="both", expand=expandir)
-    if ao_duplo_clique:
-        tabela.bind("<Double-1>", ao_duplo_clique)
 
-    return tabela
-
-
-def preencher_tabela(tabela: ttk.Treeview, itens: list[CotacaoResumo]) -> None:
+def preencher_tabela(
+    tabela: ttk.Treeview,
+    itens: list[CotacaoResumo],
+    mensagem_vazio: str | None = None,
+) -> None:
     """Preenche linhas com cotacao formatada em pt-BR."""
+    label_vazio = getattr(tabela, "_label_vazio", None)
+    card_pai = getattr(tabela, "_card_pai", None)
+
     for linha in tabela.get_children():
         tabela.delete(linha)
+
+    if not itens:
+        if label_vazio is not None:
+            texto = mensagem_vazio or "Nenhum registro no momento."
+            label_vazio.configure(text=texto)
+            label_vazio.pack(fill="x", padx=12, pady=(0, 12))
+        if card_pai is not None:
+            card_pai.configure(fg_color=CORES["superficie"])
+        return
+
+    if label_vazio is not None:
+        label_vazio.pack_forget()
+
+    aplicar_estilo_tabela(tabela)
 
     for i, item in enumerate(itens):
         tag = "par" if i % 2 == 0 else "impar"

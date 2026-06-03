@@ -41,6 +41,21 @@ def validar_data_ptbr(texto: str) -> tuple[datetime | None, str | None]:
     return data, None
 
 
+def validar_modo_aparencia(texto: str) -> tuple[str, str | None]:
+    """Valida modo claro ou escuro para o INI."""
+    from src.View.tema import normalizar_modo_aparencia
+
+    if not texto or not str(texto).strip():
+        return normalizar_modo_aparencia("claro"), None
+    limpo = str(texto).strip().lower()
+    if limpo in ("claro", "light", "escuro", "dark"):
+        return normalizar_modo_aparencia(limpo), None
+    return (
+        "claro",
+        "Modo de aparencia invalido. Use claro ou escuro.",
+    )
+
+
 def validar_lista_simbolos(simbolos: list[str], maximo: int = 6) -> tuple[list[str], str | None]:
     """Valida lista de tickers para comparacao."""
     if not simbolos:

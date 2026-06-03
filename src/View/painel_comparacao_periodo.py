@@ -212,7 +212,7 @@ class PainelComparacaoPeriodo:
             text=texto,
             font=ctk.CTkFont(size=12),
             text_color=CORES["texto"],
-            fg_color="#FEE2E2",
+            fg_color=CORES.get("destaqueInstrucao", CORES["erroFundo"]),
             corner_radius=8,
             wraplength=1050,
             justify="left",
@@ -233,7 +233,7 @@ class PainelComparacaoPeriodo:
             text=texto,
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color=CORES["primaria"],
-            fg_color="#EFF6FF",
+            fg_color=CORES.get("destaqueParcial", CORES["infoFundo"]),
             corner_radius=8,
         ).pack(fill="x", padx=4, pady=6)
         ctk.CTkLabel(
@@ -245,7 +245,9 @@ class PainelComparacaoPeriodo:
 
     @staticmethod
     def _exibir_completo(container: ctk.CTkFrame, dados: dict) -> None:
-        faixa_periodo = ctk.CTkFrame(container, fg_color="#FEE2E2", corner_radius=10)
+        faixa_periodo = ctk.CTkFrame(
+            container, fg_color=CORES.get("destaquePeriodo", CORES["erroFundo"]), corner_radius=10
+        )
         faixa_periodo.pack(fill="x", padx=4, pady=(4, 8))
 
         grid_periodo = ctk.CTkFrame(faixa_periodo, fg_color="transparent")
@@ -311,7 +313,7 @@ class PainelComparacaoPeriodo:
     def _card_acao(pai: ctk.CTkFrame, acao: dict, linha: int, coluna: int) -> None:
         pct = acao["variacao_indice_pct"]
         cor_pct = CORES["sucesso"] if pct >= 0 else CORES["erro"]
-        fundo_pct = "#F0FDF4" if pct >= 0 else "#FEF2F2"
+        fundo_pct = CORES["sucessoFundo"] if pct >= 0 else CORES["erroFundo"]
         sinal = "+" if pct >= 0 else ""
 
         card = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=10, border_width=1)
@@ -403,7 +405,7 @@ class PainelComparacaoPeriodo:
 
     @staticmethod
     def _exibir_faixa_cdi_periodo(container: ctk.CTkFrame, dados: dict) -> None:
-        faixa = ctk.CTkFrame(container, fg_color="#FFF7ED", corner_radius=8)
+        faixa = ctk.CTkFrame(container, fg_color=CORES.get("destaqueCdi", CORES["avisoFundo"]), corner_radius=8)
         faixa.pack(fill="x", padx=4, pady=(0, 8))
 
         if dados.get("cdi_carregando"):

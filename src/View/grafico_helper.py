@@ -10,6 +10,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.lines import Line2D
 
 from src.View.formatadores import formatar_moeda
+from src.View.tema import CORES
 from src.View.painel_comparacao_periodo import (
     calcular_comparacao_acao_unica,
     calcular_comparacao_multiplas,
@@ -43,8 +44,13 @@ def _criar_anotacao_tooltip(eixo):
         xy=(0, 0),
         xytext=(DESLOC_TOOLTIP_PONTOS, DESLOC_TOOLTIP_PONTOS),
         textcoords="offset points",
-        bbox=dict(boxstyle="round,pad=0.5", fc="#EFF6FF", ec="#2563EB", alpha=0.98),
-        arrowprops=dict(arrowstyle="->", color="#2563EB", lw=1),
+        bbox=dict(
+            boxstyle="round,pad=0.5",
+            fc=CORES.get("graficoTooltipFundo", CORES["infoFundo"]),
+            ec=CORES["primaria"],
+            alpha=0.98,
+        ),
+        arrowprops=dict(arrowstyle="->", color=CORES["primaria"], lw=1),
         fontsize=9,
         annotation_clip=False,
         clip_on=False,

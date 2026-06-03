@@ -6,11 +6,17 @@ from pathlib import Path
 
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
 from src.Tool.registrador_log import RegistradorLog
-from src.Tool.validadores import validar_quantidade_acoes, validar_quantidade_cotas
+from src.Tool.validadores import (
+    validar_modo_aparencia,
+    validar_quantidade_acoes,
+    validar_quantidade_cotas,
+)
+from src.View.tema import MODO_PADRAO
 
 SECAO_PAINEL = "PAINEL"
 CHAVE_QUANTIDADE_ACOES = "quantidade_acoes"
 CHAVE_QUANTIDADE_COTAS_GRAFICO = "quantidade_cotas_grafico"
+CHAVE_MODO_APARENCIA = "modo_aparencia"
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 NOME_ARQUIVO = "painel.ini"
 
@@ -34,6 +40,27 @@ class ConfigPainelIni:
 
     def padrao_cotas_grafico(self) -> int:
         return QUANTIDADE_PADRAO_COTAS_GRAFICO
+
+    def padrao_modo_aparencia(self) -> str:
+        return MODO_PADRAO
+
+    def carregar_modo_aparencia(self) -> str:
+        """Modo visual: claro ou escuro."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_MODO_APARENCIA in secao:
+            modo, _ = validar_modo_aparencia(secao.get(CHAVE_MODO_APARENCIA, ""))
+            return modo
+        modo = self.padrao_modo_aparencia()
+        self.salvar_modo_aparencia(modo)
+        return modo
+
+    def salvar_modo_aparencia(self, modo: str) -> None:
+        modo_ok, _ = validar_modo_aparencia(modo)
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_MODO_APARENCIA] = modo_ok
+        self._gravar(parser)
 
     def carregar(self) -> int:
         """Quantidade de acoes listadas no painel (Em alta, Em queda, Todas)."""
@@ -84,11 +111,13 @@ class ConfigPainelIni:
         if not self._caminho_ini.exists():
             self.salvar(self.padrao_painel())
             self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
+            self.salvar_modo_aparencia(self.padrao_modo_aparencia())
 
         parser = self._ler_parser()
         if SECAO_PAINEL not in parser:
             self.salvar(self.padrao_painel())
             self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
+            self.salvar_modo_aparencia(self.padrao_modo_aparencia())
             parser = self._ler_parser()
 
         return dict(parser[SECAO_PAINEL])

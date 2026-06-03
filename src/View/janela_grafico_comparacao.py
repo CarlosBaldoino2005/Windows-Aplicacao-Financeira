@@ -138,7 +138,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         figura = Figure(
             figsize=(largura_px / dpi, altura_px / dpi),
             dpi=dpi,
-            facecolor=CORES["superficie"],
+            facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
         linhas_plot: list = []

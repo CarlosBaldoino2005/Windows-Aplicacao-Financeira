@@ -6,10 +6,10 @@ Toda a interface e logica estao em Python (CustomTkinter + Matplotlib). Nao e ne
 
 ## Funcionalidades
 
-- **Painel**: abas **Em alta**, **Em queda** e **Todas**; quantidades em `dados/painel.ini` (modelo em `dados/painel.example.ini`).
-- **Pesquisar acao** e **Acoes favoritas**: telas dedicadas; favoritos gravados em `dados/favoritos.json` (ate 40 acoes).
+- **Painel**: abas **Em alta**, **Em queda** e **Todas**; configuracoes em `dados/painel.ini` (quantidades e tema claro/escuro).
+- **Pesquisar acao**, **Acoes favoritas** e **Comparar acoes**: botoes na tela principal abrem janelas dedicadas; favoritos gravados em `dados/favoritos.json` (ate 40 acoes).
 - **Grafico da acao**: abre em janela dedicada (periodo dia/mes/ano etc.); duplo clique no painel ou nos favoritos; **linha laranja tracejada** com evolucao em 100% CDI no grafico (acoes em reais); selecao de dois pontos com quantidade mostra valor pago, valor final, lucro/prejuizo e comparacao CDI no painel; botao **Mais detalhes** com perfil da empresa, indicadores, DRE/balanco/fluxo e concorrentes (yfinance).
-- **Comparar acoes**: ate 6 tickers com indice base 100, linha de referencia **100% CDI** e desempenho relativo em nova janela.
+- **Comparar acoes** (`janela_comparar_acoes.py`): ate 6 tickers, periodo configuravel; grafico em nova janela com indice base 100, linha **100% CDI** e desempenho relativo.
 
 ## Requisitos
 
@@ -102,12 +102,14 @@ Modelo: `dados/painel.example.ini`
 [PAINEL]
 quantidade_acoes = 10
 quantidade_cotas_grafico = 100
+modo_aparencia = claro
 ```
 
 - **quantidade_acoes**: maximo de linhas nas abas Em alta, Em queda e Todas (1 a 100).
 - **quantidade_cotas_grafico**: quantidade padrao na janela do grafico para simular compra (1 a 9.999.999).
+- **modo_aparencia**: `claro` ou `escuro` (tambem alteravel no canto superior direito da tela principal).
 
-Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No grafico, o valor e gravado ao clicar em **Atualizar grafico** ou ao fechar a janela.
+Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No grafico, o valor e gravado ao clicar em **Atualizar grafico** ou ao fechar a janela. A troca de tema e salva no INI ao selecionar **Claro** ou **Escuro**.
 
 ## Logs
 
@@ -115,7 +117,7 @@ Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No
 
 ## Interface visual
 
-Segue tokens em `modelo-ui/design-tokens.json` (cores, zebrado em tabelas).
+Segue tokens em `modelo-ui/design-tokens.json` (paletas `claro` e `escuro` na secao `modos`, zebrado em tabelas).
 
 ## Aviso
 
