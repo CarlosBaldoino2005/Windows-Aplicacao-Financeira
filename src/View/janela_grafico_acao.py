@@ -9,6 +9,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from src.Controller.controlador_mercado import ControladorMercado
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import maximizar_janela
 from src.Tool.validadores import validar_quantidade_cotas
 from src.View.grafico_helper import configurar_selecao_periodo, configurar_tooltip_acao
@@ -39,6 +40,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._janela_detalhes: JanelaDetalhesAcao | None = None
+        self._config_ini = ConfigPainelIni()
 
         codigo = simbolo.replace(".SA", "")
         self.title(f"Grafico da acao — {codigo}")
@@ -52,6 +54,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self.after(200, self._carregar_grafico)
 
     def _ao_fechar(self) -> None:
+        self._persistir_quantidade_cotas_ini()
         if self._janela_detalhes is not None:
             try:
                 if self._janela_detalhes.winfo_exists():
@@ -112,7 +115,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         ctk.CTkLabel(barra, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
         self._entrada_quantidade_cotas = ctk.CTkEntry(barra, width=90, justify="center")
-        self._entrada_quantidade_cotas.insert(0, "100")
+        qtd_ini = self._config_ini.carregar_quantidade_cotas_grafico()
+        self._entrada_quantidade_cotas.insert(0, str(qtd_ini))
         self._entrada_quantidade_cotas.pack(side="left", padx=(0, 16))
 
         ctk.CTkButton(
@@ -185,12 +189,28 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
                 pass
         self._janela_detalhes = JanelaDetalhesAcao(self, self._controlador, self._simbolo)
 
-    def _ler_quantidade_cotas(self) -> int:
-        quantidade, erro = validar_quantidade_cotas(self._entrada_quantidade_cotas.get())
+    def _ler_quantidade_cotas(self) -> tuple[int | None, str | None]:
+        padrao = self._config_ini.padrao_cotas_grafico()
+        return validar_quantidade_cotas(
+            self._entrada_quantidade_cotas.get(),
+            padrao=padrao,
+        )
+
+    def _persistir_quantidade_cotas_ini(self) -> None:
+        quantidade, erro = self._ler_quantidade_cotas()
+        if erro or quantidade is None:
+            return
+        try:
+            self._config_ini.salvar_quantidade_cotas_grafico(quantidade)
+        except OSError:
+            pass
+
+    def _obter_quantidade_cotas_para_grafico(self) -> int:
+        quantidade, erro = self._ler_quantidade_cotas()
         if erro:
             self._label_status.configure(text=erro, text_color=CORES["erro"])
-            return 100
-        return quantidade or 100
+            return self._config_ini.padrao_cotas_grafico()
+        return quantidade or self._config_ini.padrao_cotas_grafico()
 
     def _alternar_datas(self, _valor=None) -> None:
         if self._periodo_chave() == "personalizado":
@@ -209,6 +229,20 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         threading.Thread(target=trabalho, daemon=True).start()
 
     def _carregar_grafico(self) -> None:
+        quantidade, erro_qtd = self._ler_quantidade_cotas()
+        if erro_qtd:
+            self._label_status.configure(text=erro_qtd, text_color=CORES["erro"])
+            return
+        if quantidade is not None:
+            try:
+                self._config_ini.salvar_quantidade_cotas_grafico(quantidade)
+            except OSError:
+                self._label_status.configure(
+                    text="Nao foi possivel salvar a quantidade no painel.ini.",
+                    text_color=CORES["erro"],
+                )
+                return
+
         periodo = self._periodo_chave()
         self._label_status.configure(text="Gerando grafico...")
 
@@ -293,7 +327,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             simbolo,
             moeda,
             atualizar_painel,
-            obter_quantidade_cotas=self._ler_quantidade_cotas,
+            obter_quantidade_cotas=self._obter_quantidade_cotas_para_grafico,
         )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)

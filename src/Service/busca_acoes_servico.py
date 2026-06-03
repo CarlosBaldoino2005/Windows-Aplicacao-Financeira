@@ -1,4 +1,4 @@
-"""Busca de acoes por nome ou codigo (Yahoo Finance + lista local B3)."""
+"""Busca de acoes por nome ou codigo (Yahoo + lista local; busca online com fallback)."""
 import re
 
 import yfinance as yf
@@ -111,7 +111,9 @@ class BuscaAcoesServico:
             for item in self._buscar_yahoo(termo_limpo, limite):
                 agregado[item.simbolo] = item
         except Exception as exc:
-            self._log.aviso(f"Busca Yahoo falhou: {exc}")
+            self._log.aviso(
+                f"Busca Yahoo indisponivel ({exc}). Resultados locais e backups de cotacao continuam ativos."
+            )
 
         lista = self._priorizar_b3(list(agregado.values()))[:limite]
         if not lista:

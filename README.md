@@ -80,6 +80,18 @@ src/
 - `customtkinter` — interface moderna
 - `matplotlib` — graficos
 
+## Provedores de dados (fallback automatico)
+
+Cotacoes, historico e parte dos detalhes tentam fontes nesta ordem:
+
+1. **Yahoo Finance** (`yfinance`) — principal  
+2. **Brapi** (`https://brapi.dev`) — backup para acoes **B3** (sem token obrigatorio)  
+3. **Yahoo Chart API** — backup REST direto (B3 e EUA)
+
+Se o Yahoo falhar, o sistema troca sozinho para a proxima fonte e registra no `log\log-dd-mm-aaaa.log` qual provedor respondeu.
+
+Token opcional da Brapi (mais limite): variavel `BRAPI_TOKEN` no arquivo `.env` (modelo em `config.example.env`).
+
 ## Configuracao do painel (INI)
 
 Arquivo: `dados/painel.ini` (criado automaticamente na primeira execucao).
@@ -89,11 +101,13 @@ Modelo: `dados/painel.example.ini`
 ```ini
 [PAINEL]
 quantidade_acoes = 10
+quantidade_cotas_grafico = 100
 ```
 
 - **quantidade_acoes**: maximo de linhas nas abas Em alta, Em queda e Todas (1 a 100).
+- **quantidade_cotas_grafico**: quantidade padrao na janela do grafico para simular compra (1 a 9.999.999).
 
-Ao clicar em **Atualizar cotacoes**, o valor do campo na tela e gravado no INI.
+Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No grafico, o valor e gravado ao clicar em **Atualizar grafico** ou ao fechar a janela.
 
 ## Logs
 
@@ -105,4 +119,4 @@ Segue tokens em `modelo-ui/design-tokens.json` (cores, zebrado em tabelas).
 
 ## Aviso
 
-Dados publicos do Yahoo Finance. Uso educacional; nao constitui recomendacao de investimento.
+Dados publicos (Yahoo Finance, Brapi e APIs relacionadas). Uso educacional; nao constitui recomendacao de investimento.

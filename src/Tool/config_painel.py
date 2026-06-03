@@ -1,4 +1,4 @@
-"""Leitura e gravacao da quantidade do painel em arquivo INI."""
+"""Leitura e gravacao de configuracoes do painel e do grafico em dados/painel.ini."""
 from __future__ import annotations
 
 from configparser import ConfigParser
@@ -6,15 +6,17 @@ from pathlib import Path
 
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
 from src.Tool.registrador_log import RegistradorLog
-from src.Tool.validadores import validar_quantidade_acoes
+from src.Tool.validadores import validar_quantidade_acoes, validar_quantidade_cotas
 
 SECAO_PAINEL = "PAINEL"
-CHAVE_QUANTIDADE = "quantidade_acoes"
+CHAVE_QUANTIDADE_ACOES = "quantidade_acoes"
+CHAVE_QUANTIDADE_COTAS_GRAFICO = "quantidade_cotas_grafico"
+QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 NOME_ARQUIVO = "painel.ini"
 
 
 class ConfigPainelIni:
-    """Gerencia dados/painel.ini — um valor para alta, baixa e todas."""
+    """Gerencia dados/painel.ini — painel principal e simulacao no grafico."""
 
     def __init__(self, pasta_base: Path | None = None) -> None:
         raiz = pasta_base or Path(__file__).resolve().parents[2]
@@ -27,51 +29,80 @@ class ConfigPainelIni:
     def caminho_arquivo(self) -> Path:
         return self._caminho_ini
 
-    def padrao(self) -> int:
+    def padrao_painel(self) -> int:
         return QUANTIDADE_PADRAO_PAINEL
 
+    def padrao_cotas_grafico(self) -> int:
+        return QUANTIDADE_PADRAO_COTAS_GRAFICO
+
     def carregar(self) -> int:
-        """Le o INI; se nao existir, cria com valor padrao."""
-        if not self._caminho_ini.exists():
-            valor = self.padrao()
-            self.salvar(valor)
-            return valor
+        """Quantidade de acoes listadas no painel (Em alta, Em queda, Todas)."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_QUANTIDADE_ACOES in secao:
+            return self._ler_quantidade_acoes(secao.get(CHAVE_QUANTIDADE_ACOES))
 
-        parser = ConfigParser()
-        try:
-            parser.read(self._caminho_ini, encoding="utf-8")
-        except Exception as exc:
-            self._log.erro(f"Falha ao ler {NOME_ARQUIVO}: {exc}")
-            return self.padrao()
-
-        if SECAO_PAINEL not in parser:
-            valor = self.padrao()
-            self.salvar(valor)
-            return valor
-
-        secao = parser[SECAO_PAINEL]
-
-        if CHAVE_QUANTIDADE in secao:
-            return self._ler_valor(secao.get(CHAVE_QUANTIDADE))
-
-        # Compatibilidade com INI antigo (tres chaves): usa quantidade_todas ou a primeira valida.
         for chave_antiga in (
             "quantidade_todas",
             "quantidade_em_alta",
             "quantidade_em_baixa",
         ):
             if chave_antiga in secao:
-                valor = self._ler_valor(secao.get(chave_antiga))
+                valor = self._ler_quantidade_acoes(secao.get(chave_antiga))
                 self.salvar(valor)
                 return valor
 
-        valor = self.padrao()
+        valor = self.padrao_painel()
         self.salvar(valor)
         return valor
 
+    def carregar_quantidade_cotas_grafico(self) -> int:
+        """Quantidade de acoes/cotas na simulacao da janela de grafico."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_QUANTIDADE_COTAS_GRAFICO in secao:
+            return self._ler_quantidade_cotas(secao.get(CHAVE_QUANTIDADE_COTAS_GRAFICO))
+        valor = self.padrao_cotas_grafico()
+        self.salvar_quantidade_cotas_grafico(valor)
+        return valor
+
     def salvar(self, quantidade: int) -> None:
+        """Grava quantidade do painel preservando demais chaves do INI."""
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_QUANTIDADE_ACOES] = str(quantidade)
+        self._gravar(parser)
+
+    def salvar_quantidade_cotas_grafico(self, quantidade: int) -> None:
+        """Grava quantidade do grafico preservando demais chaves do INI."""
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_QUANTIDADE_COTAS_GRAFICO] = str(quantidade)
+        self._gravar(parser)
+
+    def _ler_ou_criar_secao(self) -> dict[str, str]:
+        if not self._caminho_ini.exists():
+            self.salvar(self.padrao_painel())
+            self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
+
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            self.salvar(self.padrao_painel())
+            self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
+            parser = self._ler_parser()
+
+        return dict(parser[SECAO_PAINEL])
+
+    def _ler_parser(self) -> ConfigParser:
         parser = ConfigParser()
-        parser[SECAO_PAINEL] = {CHAVE_QUANTIDADE: str(quantidade)}
+        if self._caminho_ini.exists():
+            try:
+                parser.read(self._caminho_ini, encoding="utf-8")
+            except Exception as exc:
+                self._log.erro(f"Falha ao ler {NOME_ARQUIVO}: {exc}")
+        return parser
+
+    def _gravar(self, parser: ConfigParser) -> None:
         try:
             with open(self._caminho_ini, "w", encoding="utf-8") as arquivo:
                 parser.write(arquivo)
@@ -79,8 +110,17 @@ class ConfigPainelIni:
             self._log.erro(f"Falha ao salvar {NOME_ARQUIVO}: {exc}")
             raise
 
-    def _ler_valor(self, texto: str) -> int:
+    def _ler_quantidade_acoes(self, texto: str) -> int:
         valor, erro = validar_quantidade_acoes(texto)
         if erro or valor is None:
-            return self.padrao()
+            return self.padrao_painel()
+        return valor
+
+    def _ler_quantidade_cotas(self, texto: str) -> int:
+        valor, erro = validar_quantidade_cotas(
+            texto,
+            padrao=self.padrao_cotas_grafico(),
+        )
+        if erro or valor is None:
+            return self.padrao_cotas_grafico()
         return valor
