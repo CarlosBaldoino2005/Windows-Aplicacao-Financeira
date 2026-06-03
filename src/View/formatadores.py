@@ -11,3 +11,39 @@ def formatar_moeda(valor: float, moeda: str = "BRL") -> str:
 def formatar_variacao(valor: float, percentual: float, moeda: str = "BRL") -> str:
     sinal = "+" if percentual >= 0 else ""
     return f"{sinal}{percentual:.2f}% ({sinal}{formatar_moeda(valor, moeda)})"
+
+
+def formatar_percentual(valor: float | None, casas: int = 2) -> str:
+    if valor is None:
+        return "—"
+    return f"{valor * 100:.{casas}f}%"
+
+
+def formatar_numero_grande(valor: float | None, moeda: str = "BRL") -> str:
+    """Formata valores muito grandes (bilhoes/milhoes) para leitura em pt-BR."""
+    if valor is None:
+        return "—"
+
+    absoluto = abs(valor)
+    sinal = "-" if valor < 0 else ""
+
+    if absoluto >= 1_000_000_000_000:
+        texto = f"{absoluto / 1_000_000_000_000:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        sufixo = " tri"
+    elif absoluto >= 1_000_000_000:
+        texto = f"{absoluto / 1_000_000_000:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        sufixo = " bi"
+    elif absoluto >= 1_000_000:
+        texto = f"{absoluto / 1_000_000:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        sufixo = " mi"
+    else:
+        return f"{sinal}{formatar_moeda(valor, moeda).replace('R$ ', '').replace('US$ ', '')}"
+
+    prefixo = "R$ " if moeda == "BRL" else "US$ "
+    return f"{sinal}{prefixo}{texto}{sufixo}"
+
+
+def formatar_texto_opcional(valor: str | int | float | None) -> str:
+    if valor is None or valor == "":
+        return "—"
+    return str(valor)

@@ -12,6 +12,7 @@ from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.janela_helper import maximizar_janela
 from src.Tool.validadores import validar_quantidade_cotas
 from src.View.grafico_helper import configurar_selecao_periodo, configurar_tooltip_acao
+from src.View.janela_detalhes_acao import JanelaDetalhesAcao
 from src.View.painel_comparacao_periodo import PainelComparacaoPeriodo, payload_instrucao
 from src.View.tema import CORES
 
@@ -37,6 +38,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._simbolo = simbolo
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
+        self._janela_detalhes: JanelaDetalhesAcao | None = None
 
         codigo = simbolo.replace(".SA", "")
         self.title(f"Grafico da acao — {codigo}")
@@ -50,6 +52,12 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self.after(200, self._carregar_grafico)
 
     def _ao_fechar(self) -> None:
+        if self._janela_detalhes is not None:
+            try:
+                if self._janela_detalhes.winfo_exists():
+                    self._janela_detalhes.destroy()
+            except Exception:
+                pass
         if self._figura:
             import matplotlib.pyplot as plt
 
@@ -105,7 +113,16 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ctk.CTkLabel(barra, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
         self._entrada_quantidade_cotas = ctk.CTkEntry(barra, width=90, justify="center")
         self._entrada_quantidade_cotas.insert(0, "100")
-        self._entrada_quantidade_cotas.pack(side="left")
+        self._entrada_quantidade_cotas.pack(side="left", padx=(0, 16))
+
+        ctk.CTkButton(
+            barra,
+            text="Mais detalhes",
+            command=self._abrir_mais_detalhes,
+            fg_color=CORES["secundaria"],
+            hover_color=CORES["primariaHover"],
+            width=130,
+        ).pack(side="left")
 
         self._frame_datas = ctk.CTkFrame(cabecalho, fg_color="transparent")
         ctk.CTkLabel(self._frame_datas, text="Inicio (dd/mm/aaaa)").pack(side="left", padx=16)
@@ -157,6 +174,16 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             if nome == rotulo:
                 return chave
         return "mes"
+
+    def _abrir_mais_detalhes(self) -> None:
+        if self._janela_detalhes is not None:
+            try:
+                if self._janela_detalhes.winfo_exists():
+                    self._janela_detalhes.focus_force()
+                    return
+            except Exception:
+                pass
+        self._janela_detalhes = JanelaDetalhesAcao(self, self._controlador, self._simbolo)
 
     def _ler_quantidade_cotas(self) -> int:
         quantidade, erro = validar_quantidade_cotas(self._entrada_quantidade_cotas.get())

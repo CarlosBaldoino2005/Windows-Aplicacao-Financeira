@@ -8,7 +8,7 @@ Toda a interface e logica estao em Python (CustomTkinter + Matplotlib). Nao e ne
 
 - **Painel**: abas **Em alta**, **Em queda** e **Todas**; quantidades em `dados/painel.ini` (modelo em `dados/painel.example.ini`).
 - **Pesquisar acao** e **Acoes favoritas**: telas dedicadas; favoritos gravados em `dados/favoritos.json` (ate 40 acoes).
-- **Grafico da acao**: abre em janela dedicada (periodo dia/mes/ano etc.); duplo clique no painel ou nos favoritos.
+- **Grafico da acao**: abre em janela dedicada (periodo dia/mes/ano etc.); duplo clique no painel ou nos favoritos; botao **Mais detalhes** com perfil da empresa, indicadores, DRE/balanco/fluxo e concorrentes (yfinance).
 - **Comparar acoes**: ate 6 tickers com indice base 100 (desempenho relativo em nova janela).
 
 ## Requisitos

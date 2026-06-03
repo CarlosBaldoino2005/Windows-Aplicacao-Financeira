@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from src.Service.busca_acoes_servico import BuscaAcoesServico
+from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.favoritos_servico import FavoritosServico
 from src.Service.mercado_servico import MercadoServico
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
@@ -15,6 +16,7 @@ class ControladorMercado:
         self._servico = MercadoServico()
         self._busca = BuscaAcoesServico()
         self._favoritos = FavoritosServico()
+        self._detalhes = DetalhesAcaoServico()
 
     def pesquisar_acoes(self, termo: str) -> tuple[list, str | None]:
         return self._busca.buscar(termo)
@@ -54,6 +56,13 @@ class ControladorMercado:
             return None, "Cotacao indisponivel. Verifique o codigo e tente novamente."
 
         return resumos[0], None
+
+    def obter_detalhes_acao(self, simbolo: str):
+        """Carrega perfil, demonstrativos e concorrentes da acao."""
+        simbolo_ok, erro = normalizar_simbolo(simbolo)
+        if erro:
+            return None, erro
+        return self._detalhes.obter_detalhes(simbolo_ok)
 
     def obter_historico(
         self,
