@@ -1,4 +1,4 @@
-"""Helper para abrir janelas desktop maximizadas no monitor da janela pai."""
+"""Helper canonico: janelas maximizadas no monitor da janela pai (copiar para src/Tool/)."""
 from __future__ import annotations
 
 from collections.abc import Callable
