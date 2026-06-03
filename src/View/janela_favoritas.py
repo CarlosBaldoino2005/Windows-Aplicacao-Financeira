@@ -9,7 +9,7 @@ import customtkinter as ctk
 from tkinter import ttk
 
 from src.Controller.controlador_mercado import ControladorMercado
-from src.Tool.janela_helper import maximizar_janela
+from src.Tool.janela_helper import configurar_janela_maximizada
 from src.Tool.validadores import normalizar_simbolo
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.tabela_mercado_helper import criar_card_tabela, preencher_tabela
@@ -30,7 +30,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
         self.minsize(820, 560)
 
         self._montar_interface()
-        self.after(0, lambda: maximizar_janela(self))
+        configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(250, self._atualizar_grid)

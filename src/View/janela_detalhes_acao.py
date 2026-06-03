@@ -8,7 +8,7 @@ import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.detalhes_acao import DetalhesAcao, LinhaDemonstrativo, PeriodoResultado
-from src.Tool.janela_helper import maximizar_janela
+from src.Tool.janela_helper import configurar_janela_maximizada
 from src.View.formatadores import (
     formatar_moeda,
     formatar_numero_grande,
@@ -45,9 +45,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self.minsize(960, 640)
 
         self._montar_interface()
-        self.after(50, self._aplicar_maximizar)
-        self.after(250, self._aplicar_maximizar)
-        self.bind("<Map>", self._ao_mapear_janela)
+        configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.focus_force()
         self.after(150, self._carregar_dados)
@@ -129,12 +127,6 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             self._botoes_aba[nome] = botao
 
         self._selecionar_aba("Empresa")
-
-    def _aplicar_maximizar(self) -> None:
-        maximizar_janela(self)
-
-    def _ao_mapear_janela(self, _evento=None) -> None:
-        self._aplicar_maximizar()
 
     def _selecionar_aba(self, nome: str) -> None:
         for rotulo, botao in self._botoes_aba.items():

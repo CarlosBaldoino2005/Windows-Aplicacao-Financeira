@@ -56,6 +56,7 @@ def calcular_comparacao_multiplas(
         "acoes": acoes,
         "melhor_desempenho": melhor,
         "pior_desempenho": pior,
+        "comparar_cdi": True,
     }
 
 
@@ -119,7 +120,7 @@ def calcular_comparacao_acao_unica(
         "lucro": resultado_total >= 0,
     }
 
-    return {
+    payload = {
         "tipo": "completo",
         "data_inicio": p_ini["data"],
         "data_fim": p_fim["data"],
@@ -129,6 +130,62 @@ def calcular_comparacao_acao_unica(
         "pior_desempenho": codigo,
         "uma_acao": True,
     }
+    if moeda == "BRL" and qtd > 0:
+        payload["comparar_cdi"] = True
+    return payload
+
+
+def enriquecer_comparacao_com_cdi(payload: dict) -> dict:
+    """Adiciona rendimento em 100% CDI (grafico unico em R$ ou comparacao em indice 100)."""
+    if not payload.get("comparar_cdi") or payload.get("tipo") != "completo":
+        return payload
+
+    from src.Service.cdi_servico import CdiServico
+
+    data_ini = str(payload.get("data_inicio", ""))
+    data_fim = str(payload.get("data_fim", ""))
+    servico = CdiServico()
+
+    if payload.get("uma_acao"):
+        acoes = payload.get("acoes") or []
+        if not acoes:
+            return payload
+        acao = acoes[0]
+        valor_ini = acao.get("valor_inicio_total")
+        if valor_ini is None or acao.get("moeda") != "BRL":
+            return payload
+
+        resultado = servico.calcular_rendimento(float(valor_ini), data_ini, data_fim)
+        if resultado is None:
+            acao["cdi_erro"] = "Nao foi possivel calcular o CDI para este periodo."
+            return payload
+
+        acao["cdi_valor_fim"] = resultado["valor_fim"]
+        acao["cdi_resultado"] = resultado["rendimento"]
+        acao["cdi_pct"] = resultado["rendimento_pct"]
+        acao["cdi_dias_uteis"] = resultado["dias_uteis"]
+        acao["cdi_lucro"] = resultado["rendimento"] >= 0
+        resultado_acao = float(acao.get("resultado_total") or 0)
+        acao["cdi_diferenca_acao"] = round(resultado_acao - resultado["rendimento"], 2)
+        return payload
+
+    resultado = servico.calcular_rendimento(100.0, data_ini, data_fim)
+    if resultado is None:
+        payload["cdi_erro"] = "Nao foi possivel calcular o CDI para este periodo."
+        return payload
+
+    pct_cdi = float(resultado["rendimento_pct"])
+    payload["cdi_indice_inicio"] = 100.0
+    payload["cdi_indice_fim"] = resultado["valor_fim"]
+    payload["cdi_pct"] = pct_cdi
+    payload["cdi_lucro"] = pct_cdi >= 0
+    payload["cdi_dias_uteis"] = resultado["dias_uteis"]
+
+    for acao in payload.get("acoes") or []:
+        acao["cdi_pct_periodo"] = pct_cdi
+        acao["cdi_diferenca_pct"] = round(float(acao["variacao_indice_pct"]) - pct_cdi, 2)
+
+    return payload
 
 
 class PainelComparacaoPeriodo:
@@ -221,6 +278,7 @@ class PainelComparacaoPeriodo:
                 font=ctk.CTkFont(size=11, weight="bold"),
                 text_color=CORES["textoSecundario"],
             ).pack(anchor="w", padx=8, pady=(0, 6))
+            PainelComparacaoPeriodo._exibir_faixa_cdi_periodo(container, dados)
 
         grade = ctk.CTkFrame(container, fg_color="transparent")
         grade.pack(fill="x", padx=4, pady=4)
@@ -286,6 +344,7 @@ class PainelComparacaoPeriodo:
                 "Indice relativo",
                 f"{acao['indice_inicio']:.1f}  →  {acao['indice_fim']:.1f}",
             )
+            PainelComparacaoPeriodo._linha_vs_cdi_indice(card, acao)
 
         if acao.get("quantidade_cotas"):
             qtd = int(acao["quantidade_cotas"])
@@ -314,6 +373,8 @@ class PainelComparacaoPeriodo:
                     CORES["sucesso"] if lucro else CORES["erro"],
                 )
 
+            PainelComparacaoPeriodo._exibir_bloco_cdi(card, acao, moeda)
+
         if acao.get("preco_inicio") is not None and acao.get("preco_fim") is not None:
             rotulo_preco = "Preco por acao" if acao.get("quantidade_cotas") else "Preco fechamento"
             if not somente_preco:
@@ -339,6 +400,111 @@ class PainelComparacaoPeriodo:
             vol_fim = acao.get("volume_fim")
             vol_fim_txt = f"{int(vol_fim):,}".replace(",", ".") if vol_fim is not None else "—"
             PainelComparacaoPeriodo._linha_metrica(card, "Volume", f"{vol_ini}  →  {vol_fim_txt}")
+
+    @staticmethod
+    def _exibir_faixa_cdi_periodo(container: ctk.CTkFrame, dados: dict) -> None:
+        faixa = ctk.CTkFrame(container, fg_color="#FFF7ED", corner_radius=8)
+        faixa.pack(fill="x", padx=4, pady=(0, 8))
+
+        if dados.get("cdi_carregando"):
+            texto = "100% CDI no periodo: calculando..."
+            cor = CORES["textoSecundario"]
+        elif dados.get("cdi_erro"):
+            texto = dados["cdi_erro"]
+            cor = CORES["textoSecundario"]
+        elif dados.get("cdi_pct") is not None:
+            pct = float(dados["cdi_pct"])
+            indice_fim = float(dados.get("cdi_indice_fim") or 100)
+            sinal = "+" if pct >= 0 else ""
+            texto = (
+                f"100% CDI no periodo: indice {dados.get('cdi_indice_inicio', 100):.1f}  →  "
+                f"{indice_fim:.2f} ({sinal}{pct:.2f}%)"
+            )
+            cor = CORES["sucesso"] if pct >= 0 else CORES["erro"]
+        else:
+            return
+
+        ctk.CTkLabel(
+            faixa,
+            text=texto,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=cor,
+            wraplength=1000,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=10)
+
+    @staticmethod
+    def _linha_vs_cdi_indice(card: ctk.CTkFrame, acao: dict) -> None:
+        if acao.get("cdi_diferenca_pct") is None:
+            return
+        diff = float(acao["cdi_diferenca_pct"])
+        pct_cdi = float(acao.get("cdi_pct_periodo") or 0)
+        if diff > 0:
+            texto = f"{diff:+.2f} p.p. acima do CDI ({pct_cdi:+.2f}% no periodo)"
+            cor = CORES["sucesso"]
+        elif diff < 0:
+            texto = f"{diff:.2f} p.p. abaixo do CDI ({pct_cdi:+.2f}% no periodo)"
+            cor = CORES["erro"]
+        else:
+            texto = f"Empate com CDI ({pct_cdi:+.2f}% no periodo)"
+            cor = CORES["textoSecundario"]
+        PainelComparacaoPeriodo._linha_metrica(card, "Acao x CDI", texto, cor)
+
+    @staticmethod
+    def _exibir_bloco_cdi(card: ctk.CTkFrame, acao: dict, moeda: str) -> None:
+        if acao.get("cdi_carregando"):
+            PainelComparacaoPeriodo._linha_metrica(card, "100% CDI (mesmo valor)", "Calculando...")
+            return
+        if acao.get("cdi_erro"):
+            PainelComparacaoPeriodo._linha_metrica(
+                card,
+                "100% CDI",
+                acao["cdi_erro"],
+                CORES["textoSecundario"],
+            )
+            return
+        if acao.get("cdi_valor_fim") is None:
+            return
+
+        moeda_cdi = "BRL"
+        PainelComparacaoPeriodo._linha_metrica(
+            card,
+            "Valor final em 100% CDI",
+            formatar_moeda(float(acao["cdi_valor_fim"]), moeda_cdi),
+        )
+        res_cdi = float(acao.get("cdi_resultado") or 0)
+        lucro_cdi = acao.get("cdi_lucro", res_cdi >= 0)
+        PainelComparacaoPeriodo._linha_metrica(
+            card,
+            "Rendimento CDI",
+            formatar_moeda(abs(res_cdi), moeda_cdi),
+            CORES["sucesso"] if lucro_cdi else CORES["erro"],
+        )
+        if acao.get("cdi_pct") is not None:
+            pct_cdi = float(acao["cdi_pct"])
+            sinal_cdi = "+" if pct_cdi >= 0 else ""
+            PainelComparacaoPeriodo._linha_metrica(
+                card,
+                "% CDI no periodo",
+                f"{sinal_cdi}{pct_cdi:.2f}%",
+                CORES["sucesso"] if pct_cdi >= 0 else CORES["erro"],
+            )
+        if acao.get("cdi_diferenca_acao") is not None:
+            diff = float(acao["cdi_diferenca_acao"])
+            if diff > 0:
+                texto_diff = (
+                    f"Acao rendeu {formatar_moeda(diff, moeda)} a mais que 100% CDI"
+                )
+                cor_diff = CORES["sucesso"]
+            elif diff < 0:
+                texto_diff = (
+                    f"CDI rendeu {formatar_moeda(abs(diff), moeda_cdi)} a mais que a acao"
+                )
+                cor_diff = CORES["erro"]
+            else:
+                texto_diff = "Empate com 100% CDI no periodo"
+                cor_diff = CORES["textoSecundario"]
+            PainelComparacaoPeriodo._linha_metrica(card, "Acao x CDI", texto_diff, cor_diff)
 
     @staticmethod
     def _linha_metrica(

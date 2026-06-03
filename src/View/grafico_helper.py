@@ -1,7 +1,9 @@
 """Tooltip e selecao de periodo por clique nos graficos Matplotlib."""
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
+from copy import deepcopy
 
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -11,11 +13,19 @@ from src.View.formatadores import formatar_moeda
 from src.View.painel_comparacao_periodo import (
     calcular_comparacao_acao_unica,
     calcular_comparacao_multiplas,
+    enriquecer_comparacao_com_cdi,
     payload_inicio_selecionado,
     payload_instrucao,
 )
 
+TEXTO_INSTRUCAO_GRAFICO_ACAO = (
+    "Informe a quantidade de acoes. Clique no grafico: 1º ponto (inicio) "
+    "e 2º ponto (fim) para ver valor pago, valor final, lucro ou prejuizo "
+    "e comparacao com 100% do CDI no mesmo periodo (acoes em reais)."
+)
+
 COR_VERMELHO = "#DC2626"
+COR_LINHA_CDI = "#D97706"
 DESLOC_TOOLTIP_PONTOS = 18
 MARGEM_TOOLTIP_FRACAO = 0.22
 
@@ -160,6 +170,31 @@ def _desenhar_marcador_vermelho(eixo, estado: dict, x: float, y: float) -> None:
     estado["artistas"].append(marcador)
 
 
+def _publicar_payload_com_cdi(
+    canvas: FigureCanvasTkAgg,
+    payload: dict,
+    ao_atualizar_comparacao: Callable[[dict], None],
+) -> None:
+    """Atualiza o painel e busca CDI em thread para nao travar a interface."""
+    ao_atualizar_comparacao(payload)
+    if payload.get("tipo") != "completo" or not payload.get("comparar_cdi"):
+        return
+
+    widget_raiz = canvas.get_tk_widget()
+
+    def trabalho() -> None:
+        copia_loading = deepcopy(payload)
+        if copia_loading.get("uma_acao") and copia_loading.get("acoes"):
+            copia_loading["acoes"][0]["cdi_carregando"] = True
+        else:
+            copia_loading["cdi_carregando"] = True
+        widget_raiz.after(0, lambda: ao_atualizar_comparacao(copia_loading))
+        enriquecido = enriquecer_comparacao_com_cdi(deepcopy(payload))
+        widget_raiz.after(0, lambda p=enriquecido: ao_atualizar_comparacao(p))
+
+    threading.Thread(target=trabalho, daemon=True).start()
+
+
 def configurar_selecao_periodo(
     canvas: FigureCanvasTkAgg,
     eixo,
@@ -218,12 +253,7 @@ def configurar_selecao_periodo(
         if len(selecionados) >= 2:
             _limpar_artistas(estado)
             selecionados.clear()
-            ao_atualizar_comparacao(
-                payload_instrucao(
-                    "Informe a quantidade de acoes. Clique no grafico: 1º ponto (inicio) "
-                    "e 2º ponto (fim) para ver valor pago, valor final, lucro ou prejuizo."
-                )
-            )
+            ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO))
 
         if len(selecionados) == 0:
             selecionados.append(indice)
@@ -245,7 +275,8 @@ def configurar_selecao_periodo(
             indice_fim = max(selecionados)
             _limpar_artistas(estado)
             desenhar_intervalo(indice_inicio, indice_fim)
-            ao_atualizar_comparacao(
+            _publicar_payload_com_cdi(
+                canvas,
                 calcular_comparacao_acao_unica(
                     pontos,
                     simbolo,
@@ -253,17 +284,19 @@ def configurar_selecao_periodo(
                     indice_inicio,
                     indice_fim,
                     _quantidade_cotas(),
-                )
+                ),
+                ao_atualizar_comparacao,
             )
         canvas.draw_idle()
 
     canvas.mpl_connect("button_press_event", ao_clicar)
-    ao_atualizar_comparacao(
-        payload_instrucao(
-            "Informe a quantidade de acoes. Clique no grafico: 1º ponto (inicio) "
-            "e 2º ponto (fim) para ver valor pago, valor final, lucro ou prejuizo."
-        )
-    )
+    ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO))
+
+
+TEXTO_INSTRUCAO_GRAFICO_COMPARACAO = (
+    "Clique no grafico: 1º ponto (inicio) e 2º ponto (fim) para comparar o periodo entre as acoes "
+    "e ver o rendimento do CDI no mesmo intervalo."
+)
 
 
 def configurar_selecao_periodo_comparacao(
@@ -324,11 +357,7 @@ def configurar_selecao_periodo_comparacao(
         if len(selecionados) >= 2:
             _limpar_artistas(estado)
             selecionados.clear()
-            ao_atualizar_comparacao(
-                payload_instrucao(
-                    "Clique no grafico: 1º ponto (inicio) e 2º ponto (fim) para comparar o periodo."
-                )
-            )
+            ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_COMPARACAO))
 
         if len(selecionados) == 0:
             selecionados.append(indice)
@@ -343,17 +372,15 @@ def configurar_selecao_periodo_comparacao(
             indice_fim = max(selecionados)
             _limpar_artistas(estado)
             desenhar_intervalo(indice_inicio, indice_fim)
-            ao_atualizar_comparacao(
-                calcular_comparacao_multiplas(series, simbolos, indice_inicio, indice_fim)
+            _publicar_payload_com_cdi(
+                canvas,
+                calcular_comparacao_multiplas(series, simbolos, indice_inicio, indice_fim),
+                ao_atualizar_comparacao,
             )
         canvas.draw_idle()
 
     canvas.mpl_connect("button_press_event", ao_clicar)
-    ao_atualizar_comparacao(
-        payload_instrucao(
-            "Clique no grafico: 1º ponto (inicio) e 2º ponto (fim) para comparar o periodo entre as acoes."
-        )
-    )
+    ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_COMPARACAO))
 
 
 def configurar_tooltip_acao(

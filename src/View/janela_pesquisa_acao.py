@@ -8,7 +8,7 @@ import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.cotacao import CotacaoResumo
-from src.Tool.janela_helper import maximizar_janela
+from src.Tool.janela_helper import configurar_janela_maximizada
 from src.Tool.validadores import normalizar_simbolo
 from src.View.formatadores import formatar_moeda, formatar_variacao
 from src.View.janela_grafico_acao import JanelaGraficoAcao
@@ -30,7 +30,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
         self.minsize(720, 520)
 
         self._montar_interface()
-        self.after(0, lambda: maximizar_janela(self))
+        configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
 

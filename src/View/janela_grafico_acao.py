@@ -10,9 +10,15 @@ from matplotlib.figure import Figure
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import maximizar_janela
+from src.Tool.janela_helper import configurar_janela_maximizada
 from src.Tool.validadores import validar_quantidade_cotas
-from src.View.grafico_helper import configurar_selecao_periodo, configurar_tooltip_acao
+from src.Service.cdi_servico import CdiServico
+from src.View.grafico_helper import (
+    COR_LINHA_CDI,
+    TEXTO_INSTRUCAO_GRAFICO_ACAO,
+    configurar_selecao_periodo,
+    configurar_tooltip_acao,
+)
 from src.View.janela_detalhes_acao import JanelaDetalhesAcao
 from src.View.painel_comparacao_periodo import PainelComparacaoPeriodo, payload_instrucao
 from src.View.tema import CORES
@@ -48,7 +54,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self.minsize(900, 600)
 
         self._montar_interface()
-        self.after(0, lambda: maximizar_janela(self))
+        configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(200, self._carregar_grafico)
@@ -69,8 +75,18 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self.destroy()
 
     def _montar_interface(self) -> None:
+        rodape = ctk.CTkFrame(self, fg_color="transparent")
+        rodape.pack(side="bottom", fill="x", padx=16, pady=(0, 12))
+        ctk.CTkButton(
+            rodape,
+            text="Fechar",
+            command=self._ao_fechar,
+            fg_color=CORES["secundaria"],
+            width=120,
+        ).pack(side="right")
+
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
-        cabecalho.pack(fill="x")
+        cabecalho.pack(side="top", fill="x")
 
         codigo = self._simbolo.replace(".SA", "")
         ctk.CTkLabel(
@@ -83,8 +99,9 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Passe o mouse para detalhes. Informe quantas acoes comprou e clique em 2 pontos "
-                "no grafico para simular valor pago, valor final, lucro ou prejuizo."
+                "Passe o mouse para detalhes. Linha laranja tracejada: rendimento em 100% CDI "
+                "(mesmo valor do 1º dia). Informe quantas acoes e clique em 2 pontos para simular "
+                "valor pago, valor final, lucro ou prejuizo."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -153,24 +170,11 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._frame_painel_periodo.pack(fill="x", padx=16, pady=(0, 12))
         PainelComparacaoPeriodo.exibir(
             self._frame_painel_periodo,
-            payload_instrucao(
-                "Informe a quantidade de acoes. Clique no grafico: 1º ponto (inicio) "
-                "e 2º ponto (fim) para ver valor pago, valor final, lucro ou prejuizo."
-            ),
+            payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO),
         )
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
-        self._frame_grafico.pack(fill="both", expand=True, padx=16, pady=(0, 8))
-
-        rodape = ctk.CTkFrame(self, fg_color="transparent")
-        rodape.pack(fill="x", padx=16, pady=(0, 12))
-        ctk.CTkButton(
-            rodape,
-            text="Fechar",
-            command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
-            width=120,
-        ).pack(side="right")
+        self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
 
     def _periodo_chave(self) -> str:
         rotulo = self._combo_periodo.get()
@@ -272,6 +276,9 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
                 }
                 for p in serie.pontos
             ]
+            valores_cdi = None
+            if moeda == "BRL":
+                valores_cdi = CdiServico().montar_linha_preco_equivalente_cdi(pontos_tooltip)
             self._desenhar_grafico(
                 [p.data_exibicao for p in serie.pontos],
                 [p.preco_fechamento for p in serie.pontos],
@@ -279,6 +286,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
                 serie.simbolo,
                 moeda,
                 pontos_tooltip,
+                valores_cdi=valores_cdi,
             )
             self._label_status.configure(text="Grafico atualizado.", text_color=CORES["sucesso"])
 
@@ -292,6 +300,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         simbolo: str,
         moeda: str,
         pontos_tooltip: list[dict],
+        valores_cdi: list[float] | None = None,
     ) -> None:
         for widget in self._frame_grafico.winfo_children():
             widget.destroy()
@@ -301,13 +310,43 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
             plt.close(self._figura)
 
-        figura = Figure(figsize=(12, 7), dpi=100, facecolor=CORES["superficie"])
+        largura_px = max(400, self._frame_grafico.winfo_width() - 16)
+        altura_px = max(300, self._frame_grafico.winfo_height() - 16)
+        dpi = 100
+        figura = Figure(
+            figsize=(largura_px / dpi, altura_px / dpi),
+            dpi=dpi,
+            facecolor=CORES["superficie"],
+        )
         eixo = figura.add_subplot(111)
 
         indices = np.arange(len(valores))
-        linha, = eixo.plot(indices, valores, color=COR_GRAFICO, linewidth=2, marker="o", markersize=3)
+        linha, = eixo.plot(
+            indices,
+            valores,
+            color=COR_GRAFICO,
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="Acao (fechamento)",
+        )
+        if valores_cdi and len(valores_cdi) == len(valores):
+            eixo.plot(
+                indices,
+                valores_cdi,
+                color=COR_LINHA_CDI,
+                linewidth=2,
+                linestyle="--",
+                marker="s",
+                markersize=3,
+                label="100% CDI (mesmo valor no 1º dia)",
+            )
+            eixo.legend(loc="best", fontsize=9)
         eixo.set_title(titulo, fontsize=14, fontweight="bold")
-        eixo.set_ylabel("Preco de fechamento", fontsize=11)
+        rotulo_eixo = "Preco de fechamento"
+        if valores_cdi:
+            rotulo_eixo = "Preco da acao e equivalente em 100% CDI"
+        eixo.set_ylabel(rotulo_eixo, fontsize=11)
         eixo.set_xticks(indices)
         eixo.set_xticklabels(labels, rotation=25, ha="right", fontsize=8)
         eixo.grid(True, alpha=0.3)

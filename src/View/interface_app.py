@@ -19,7 +19,7 @@ from src.View.tabela_mercado_helper import (
     preencher_tabela as preencher_tabela_mercado,
 )
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import maximizar_janela
+from src.Tool.janela_helper import configurar_janela_maximizada
 from src.Tool.validadores import validar_quantidade_acoes
 from src.View.tema import CORES
 
@@ -50,7 +50,7 @@ class InterfaceApp(ctk.CTk):
         self._configurar_aparencia()
         self._montar_layout()
         # Abre maximizado (padrao do projeto e regra global do usuario).
-        self.after(0, lambda: maximizar_janela(self))
+        configurar_janela_maximizada(self)
         self._agendar_carga_inicial_painel()
 
     def _configurar_aparencia(self) -> None:
@@ -566,10 +566,11 @@ class InterfaceApp(ctk.CTk):
                 messagebox.showwarning("Comparar", msg_erro)
                 return
             self._abrir_janela_comparacao(dados, periodo)
-            self._label_status_comparar.configure(
-                text="Grafico aberto em nova janela. Feche-a ou clique em Comparar novamente para atualizar.",
-                text_color=CORES["sucesso"],
-            )
+            status = "Grafico aberto em nova janela. Feche-a ou clique em Comparar novamente para atualizar."
+            avisos = dados.get("avisos") or []
+            if avisos:
+                status += " Avisos: " + " | ".join(avisos)
+            self._label_status_comparar.configure(text=status, text_color=CORES["sucesso"])
 
         self._executar_em_thread(buscar, ao_concluir)
 

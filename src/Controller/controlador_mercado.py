@@ -113,5 +113,8 @@ class ControladorMercado:
 
         resultado = self._servico.comparar_acoes(normalizados, periodo, dt_inicio, dt_fim)
         if len(resultado["simbolos"]) < 2:
+            avisos = resultado.get("avisos") or []
+            if avisos:
+                return None, avisos[0]
             return None, "Dados insuficientes para comparar as acoes."
         return resultado, None
