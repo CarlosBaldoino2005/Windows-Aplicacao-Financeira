@@ -6,6 +6,9 @@ from src.Model.cripto_universo import (
     LIMITE_CRIPTO_PAINEL,
     montar_lista_cripto_monitoradas,
 )
+from src.Service.cripto_historico_fallback import (
+    buscar_historico_ultimo_intervalo_disponivel,
+)
 from src.Service.mercado_servico import _alinhar_series_comparacao
 from src.Service.provedores.cadeia_mercado import CadeiaMercado
 from src.Tool.registrador_log import RegistradorLog
@@ -59,7 +62,14 @@ class MercadoCriptoServico:
         data_inicio: datetime | None = None,
         data_fim: datetime | None = None,
     ) -> SerieHistorica | None:
-        return self._cadeia.buscar_historico(simbolo, periodo_chave, data_inicio, data_fim)
+        serie = self._cadeia.buscar_historico(simbolo, periodo_chave, data_inicio, data_fim)
+        if serie and serie.pontos:
+            return serie
+        if simbolo.endswith("-USD"):
+            return buscar_historico_ultimo_intervalo_disponivel(
+                simbolo, periodo_chave, data_inicio, data_fim
+            )
+        return None
 
     def comparar_criptos(
         self,

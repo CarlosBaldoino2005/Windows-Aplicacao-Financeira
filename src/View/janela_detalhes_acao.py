@@ -22,6 +22,7 @@ from src.View.tema import CORES
 NOMES_ABAS_ACAO = (
     "Empresa",
     "Indicadores",
+    "Dividendos",
     "Trimestres",
     "Anuais",
     "Demonstrativos",
@@ -232,13 +233,17 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         else:
             self._montar_aba_empresa(dados)
             self._montar_aba_indicadores(dados)
+            self._montar_aba_dividendos(dados)
             self._montar_aba_periodos(
                 self._frames_por_aba["Trimestres"], dados.trimestres, dados.moeda, "trimestre"
             )
             self._montar_aba_periodos(self._frames_por_aba["Anuais"], dados.anuais, dados.moeda, "ano")
             self._montar_aba_demonstrativos(dados)
             self._montar_aba_concorrentes(dados)
-        self._selecionar_aba(self._nomes_abas[0])
+        if not self._modo_cripto and dados.pagamentos_dividendos:
+            self._selecionar_aba("Dividendos")
+        else:
+            self._selecionar_aba(self._nomes_abas[0])
 
     def _montar_aba_ativo(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Ativo"], fg_color="transparent")
@@ -323,6 +328,77 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             wraplength=880,
             justify="left",
         ).pack(anchor="w", padx=4, pady=(0, 8))
+
+    def _montar_aba_dividendos(self, dados: DetalhesAcao) -> None:
+        scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Dividendos"], fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        ctk.CTkLabel(
+            scroll,
+            text=(
+                "Pagamentos de dividendos por acao registrados no Yahoo Finance "
+                "(valor creditado na data indicada)."
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=880,
+            justify="left",
+        ).pack(anchor="w", padx=4, pady=(0, 8))
+
+        pagamentos = dados.pagamentos_dividendos
+        if not pagamentos:
+            ctk.CTkLabel(
+                scroll,
+                text="Nenhum pagamento de dividendo encontrado para esta empresa.",
+                text_color=CORES["textoSecundario"],
+            ).pack(anchor="w", padx=8, pady=8)
+            return
+
+        ultimo = pagamentos[0]
+        destaque = ctk.CTkFrame(
+            scroll,
+            fg_color=CORES.get("destaqueDividendo", CORES.get("infoFundo", CORES["fundo"])),
+            corner_radius=8,
+        )
+        destaque.pack(fill="x", padx=4, pady=(0, 10))
+        ctk.CTkLabel(
+            destaque,
+            text="Ultimo dividendo pago",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=12, pady=(10, 2))
+        ctk.CTkLabel(
+            destaque,
+            text=(
+                f"{ultimo.data_pagamento} — "
+                f"{formatar_moeda(ultimo.valor_por_cota, dados.moeda)} por acao"
+            ),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=CORES["sucesso"],
+        ).pack(anchor="w", padx=12, pady=(0, 10))
+
+        total = sum(p.valor_por_cota for p in pagamentos)
+        ctk.CTkLabel(
+            scroll,
+            text=(
+                f"Historico: {len(pagamentos)} pagamentos — "
+                f"soma: {formatar_moeda(total, dados.moeda)} por acao"
+            ),
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=4, pady=(0, 8))
+
+        adicionar_cabecalho_tabela(scroll, ["Data do pagamento", "Valor por acao"])
+        for indice, item in enumerate(pagamentos):
+            adicionar_linha_zebrada(
+                scroll,
+                [
+                    item.data_pagamento,
+                    formatar_moeda(item.valor_por_cota, dados.moeda),
+                ],
+                indice,
+                cores_celulas=[CORES["texto"], CORES["sucesso"]],
+            )
 
     def _montar_aba_indicadores(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Indicadores"], fg_color="transparent")

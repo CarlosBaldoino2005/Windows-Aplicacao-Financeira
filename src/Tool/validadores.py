@@ -22,6 +22,9 @@ _ALIASES_CRIPTO: dict[str, str] = {
     "XRP": "XRP-USD",
     "CARDANO": "ADA-USD",
     "ADA": "ADA-USD",
+    "POLYGON": "POL-USD",
+    "MATIC": "MATIC-USD",
+    "POL": "POL-USD",
 }
 
 

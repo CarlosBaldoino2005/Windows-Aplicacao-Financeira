@@ -33,3 +33,4 @@ class SerieHistorica:
     simbolo: str
     periodo: str
     pontos: list[PontoHistorico]
+    aviso: str = ""

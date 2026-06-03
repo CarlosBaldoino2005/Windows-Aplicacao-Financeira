@@ -276,16 +276,26 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             valores_cdi = None
             if moeda == "BRL":
                 valores_cdi = CdiServico().montar_linha_preco_equivalente_cdi(pontos_tooltip)
+            codigo_grafico = serie.simbolo.replace(".SA", "").replace("-USD", "")
             self._desenhar_grafico(
                 [p.data_exibicao for p in serie.pontos],
                 [p.preco_fechamento for p in serie.pontos],
-                f"{serie.simbolo.replace('.SA', '')} — {serie.periodo}",
+                f"{codigo_grafico} — {serie.periodo}",
                 serie.simbolo,
                 moeda,
                 pontos_tooltip,
                 valores_cdi=valores_cdi,
             )
-            self._label_status.configure(text="Grafico atualizado.", text_color=CORES["sucesso"])
+            if getattr(serie, "aviso", ""):
+                self._label_status.configure(
+                    text=serie.aviso,
+                    text_color=CORES["aviso"],
+                )
+            else:
+                self._label_status.configure(
+                    text="Grafico atualizado.",
+                    text_color=CORES["sucesso"],
+                )
 
         self._executar_em_thread(buscar, ao_concluir)
 

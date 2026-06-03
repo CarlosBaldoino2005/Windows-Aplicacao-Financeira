@@ -8,6 +8,7 @@ import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.dividendos_helper import eh_pagadora_dividendos
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.placeholders_ui import (
     PLACEHOLDER_CODIGO_ACAO,
@@ -37,10 +38,12 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         pai: ctk.CTk,
         controlador: ControladorMercado,
         modo_cripto: bool = False,
+        modo_somente_dividendos: bool = False,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._modo_cripto = modo_cripto
+        self._modo_somente_dividendos = modo_somente_dividendos
         self._simbolos: list[str] = []
         self._janela_grafico: JanelaGraficoComparacao | None = None
 
@@ -245,8 +248,23 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             return simbolo.replace("-USD", "")
         return simbolo.replace(".SA", "")
 
+    def _validar_empresa_dividendos(self, simbolo: str) -> bool:
+        if not self._modo_somente_dividendos:
+            return True
+        if eh_pagadora_dividendos(simbolo):
+            return True
+        codigo = self._codigo_exibicao(simbolo)
+        messagebox.showwarning(
+            "Comparar",
+            f"{codigo} nao consta como pagadora de dividendos nas fontes consultadas.",
+            parent=self,
+        )
+        return False
+
     def _incluir_simbolo(self, simbolo: str) -> bool:
         if not simbolo:
+            return False
+        if not self._validar_empresa_dividendos(simbolo):
             return False
         if simbolo in self._simbolos:
             messagebox.showinfo(

@@ -1,6 +1,7 @@
 """Painel visual para resultado da comparacao entre dois pontos no grafico."""
 import customtkinter as ctk
 
+from src.Tool.dividendos_helper import analisar_dividendos_periodo
 from src.View.formatadores import formatar_moeda
 from src.View.tema import CORES
 
@@ -119,6 +120,15 @@ def calcular_comparacao_acao_unica(
         "resultado_total": resultado_total,
         "lucro": resultado_total >= 0,
     }
+
+    if not simbolo.endswith("-USD"):
+        resumo_div = analisar_dividendos_periodo(
+            simbolo,
+            str(p_ini["data"]),
+            str(p_fim["data"]),
+            moeda,
+        )
+        acao.update(resumo_div)
 
     payload = {
         "tipo": "completo",
@@ -377,6 +387,8 @@ class PainelComparacaoPeriodo:
 
             PainelComparacaoPeriodo._exibir_bloco_cdi(card, acao, moeda)
 
+        PainelComparacaoPeriodo._exibir_bloco_dividendos(card, acao, moeda)
+
         if acao.get("preco_inicio") is not None and acao.get("preco_fim") is not None:
             rotulo_preco = "Preco por acao" if acao.get("quantidade_cotas") else "Preco fechamento"
             if not somente_preco:
@@ -402,6 +414,82 @@ class PainelComparacaoPeriodo:
             vol_fim = acao.get("volume_fim")
             vol_fim_txt = f"{int(vol_fim):,}".replace(",", ".") if vol_fim is not None else "—"
             PainelComparacaoPeriodo._linha_metrica(card, "Volume", f"{vol_ini}  →  {vol_fim_txt}")
+
+    @staticmethod
+    def _exibir_bloco_dividendos(card: ctk.CTkFrame, acao: dict, moeda: str) -> None:
+        if acao.get("codigo", "").endswith("-USD"):
+            return
+        if not acao.get("texto_resumo") and acao.get("ultimo_dividendo_global_valor") is None:
+            return
+
+        bloco = ctk.CTkFrame(
+            card,
+            fg_color=CORES.get("destaqueDividendo", CORES.get("infoFundo", CORES["fundo"])),
+            corner_radius=8,
+        )
+        bloco.pack(fill="x", padx=10, pady=(8, 4))
+
+        ctk.CTkLabel(
+            bloco,
+            text="Dividendos no periodo",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=10, pady=(8, 4))
+
+        if acao.get("houve_dividendo_no_periodo"):
+            for item in acao.get("dividendos_no_periodo") or []:
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    item.data_pagamento,
+                    formatar_moeda(float(item.valor_por_cota), moeda) + " / acao",
+                    CORES["sucesso"],
+                )
+            total = float(acao.get("total_dividendos_periodo") or 0)
+            if total > 0:
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    "Total no periodo",
+                    formatar_moeda(total, moeda) + " por acao",
+                    CORES["sucesso"],
+                )
+                qtd = max(1, int(acao.get("quantidade_cotas") or 1))
+                if qtd > 1:
+                    total_carteira = round(total * qtd, 2)
+                    rotulo_qtd = f"Total no periodo ({qtd:,} acoes)".replace(",", ".")
+                    PainelComparacaoPeriodo._linha_metrica(
+                        bloco,
+                        rotulo_qtd,
+                        formatar_moeda(total_carteira, moeda),
+                        CORES["sucesso"],
+                    )
+        else:
+            data_ult = acao.get("ultimo_dividendo_data") or acao.get("ultimo_dividendo_global_data")
+            valor_ult = acao.get("ultimo_dividendo_valor")
+            if valor_ult is None:
+                valor_ult = acao.get("ultimo_dividendo_global_valor")
+            if data_ult and valor_ult is not None:
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    "Sem pagamento no periodo",
+                    "Nenhum dividendo neste intervalo",
+                    CORES["aviso"],
+                )
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    "Ultimo dividendo pago",
+                    f"{data_ult} — {formatar_moeda(float(valor_ult), moeda)} por acao",
+                    CORES["texto"],
+                )
+            else:
+                texto = acao.get("texto_resumo") or "Dividendos indisponiveis."
+                ctk.CTkLabel(
+                    bloco,
+                    text=texto,
+                    font=ctk.CTkFont(size=11),
+                    text_color=CORES["textoSecundario"],
+                    wraplength=420,
+                    justify="left",
+                ).pack(anchor="w", padx=10, pady=(0, 8))
 
     @staticmethod
     def _exibir_faixa_cdi_periodo(container: ctk.CTkFrame, dados: dict) -> None:

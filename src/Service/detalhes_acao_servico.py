@@ -9,6 +9,7 @@ from src.Service.provedores.cadeia_mercado import CadeiaMercado
 from src.Service.provedores.provedor_brapi import ProvedorBrapi
 from src.Service.provedores.provedor_yahoo_chart import ProvedorYahooChart
 from src.Service.provedores.util_provedor import eh_acao_b3
+from src.Tool.dividendos_helper import extrair_pagamentos_dividendos
 from src.Tool.detalhes_financeiros_helper import (
     LINHAS_BALANCO,
     LINHAS_DRE,
@@ -62,6 +63,7 @@ class DetalhesAcaoServico:
 
         detalhes = self._montar_de_info_yahoo(simbolo, info)
         self._preencher_demonstrativos_yfinance(ticker, detalhes)
+        self._preencher_dividendos_pagos(simbolo, detalhes)
         detalhes.concorrentes = self._buscar_concorrentes(
             simbolo,
             detalhes.codigo,
@@ -75,10 +77,12 @@ class DetalhesAcaoServico:
         if eh_acao_b3(simbolo):
             detalhes = self._montar_de_brapi(simbolo)
             if detalhes:
+                self._preencher_dividendos_pagos(simbolo, detalhes)
                 return detalhes, "Brapi"
 
         detalhes = self._montar_de_yahoo_chart(simbolo)
         if detalhes:
+            self._preencher_dividendos_pagos(simbolo, detalhes)
             return detalhes, "Yahoo Chart API"
 
         return None, ""
@@ -229,6 +233,24 @@ class DetalhesAcaoServico:
                 texto = str(valor)
             indicadores.append((rotulo, texto))
         return indicadores
+
+    def _preencher_dividendos_pagos(self, simbolo: str, detalhes: DetalhesAcao) -> None:
+        if simbolo.endswith("-USD"):
+            return
+        detalhes.pagamentos_dividendos = extrair_pagamentos_dividendos(simbolo)
+        if detalhes.pagamentos_dividendos:
+            ultimo = detalhes.pagamentos_dividendos[0]
+            detalhes.indicadores.insert(
+                0,
+                (
+                    "Ultimo dividendo pago",
+                    f"{ultimo.data_pagamento} — {formatar_moeda(ultimo.valor_por_cota, detalhes.moeda)}",
+                ),
+            )
+        else:
+            detalhes.avisos.append(
+                "Historico de dividendos pagos nao disponivel na fonte para esta acao."
+            )
 
     def _preencher_demonstrativos_yfinance(self, ticker: yf.Ticker, detalhes: DetalhesAcao) -> None:
         try:

@@ -116,6 +116,14 @@ fonte_grid = medio
 - **fonte_grid**: `pequeno`, `medio` ou `grande` — tamanho da fonte nas grids de cotacoes (painel, favoritos, cripto e tabelas de Mais detalhes); alteravel no combo **Fonte grid**.
 - **quantidade_cripto**: maximo de linhas no painel de criptomoedas (1 a 80).
 
+## Empresa + dividendos
+
+Botao **Empresa + dividendos** na tela principal abre um painel com a mesma estrutura das acoes (Em alta, Em queda, Todas, pesquisa, favoritos, comparar e noticias), listando **somente empresas que pagam dividendos** (lista curada B3/EUA + validacao no Yahoo Finance).
+
+Em **Mais detalhes** do grafico, a aba **Dividendos** mostra data e valor por acao de cada pagamento registrado na fonte.
+
+Favoritos do painel: `dados/favoritos_dividendos.json` (ignorado pelo Git).
+
 Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No grafico, o valor e gravado ao clicar em **Atualizar grafico** ou ao fechar a janela. A troca de tema e salva no INI ao selecionar **Claro** ou **Escuro**.
 
 ## Logs
