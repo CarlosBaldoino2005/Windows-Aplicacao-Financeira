@@ -23,6 +23,11 @@ def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
     return ConfigPainelIni().carregar_opcoes_fonte_grid()
 
 
+def definir_rotulo_coluna_variacao(tabela: ttk.Treeview, rotulo: str) -> None:
+    """Altera o cabecalho da coluna de variacao (ex.: periodo selecionado)."""
+    tabela.heading("variacao", text=rotulo)
+
+
 def criar_card_tabela(
     pai: ctk.CTkFrame,
     titulo: str,

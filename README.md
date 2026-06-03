@@ -124,6 +124,12 @@ Em **Mais detalhes** do grafico, a aba **Dividendos** mostra data e valor por ac
 
 Favoritos do painel: `dados/favoritos_dividendos.json` (ignorado pelo Git).
 
+## Acoes por periodo
+
+Botao **Acoes por periodo** abre um painel com a mesma estrutura (Em alta, Em queda, Todas, pesquisa, favoritos, comparar e noticias), mas a variacao e calculada no **periodo selecionado** (Dia, Semana, Mes, Trimestre, Semestre, Ano ou Personalizado com datas), e nao apenas no dia atual.
+
+Use **Atualizar painel** apos mudar o periodo. O carregamento pode levar mais tempo porque consulta o historico de cada acao.
+
 Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No grafico, o valor e gravado ao clicar em **Atualizar grafico** ou ao fechar a janela. A troca de tema e salva no INI ao selecionar **Claro** ou **Escuro**.
 
 ## Logs

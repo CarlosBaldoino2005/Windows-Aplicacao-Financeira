@@ -5,6 +5,7 @@ from src.Service.busca_acoes_servico import BuscaAcoesServico
 from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.favoritos_servico import FavoritosServico
 from src.Service.mercado_servico import MercadoServico
+from src.Service.painel_periodo_servico import PainelPeriodoServico
 from src.Service.noticias_mercado_servico import NoticiasMercadoServico
 from src.Service.traducao_noticias_servico import TraducaoNoticiasServico
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
@@ -21,6 +22,7 @@ class ControladorMercado:
         self._detalhes = DetalhesAcaoServico()
         self._noticias = NoticiasMercadoServico()
         self._traducao_noticias = TraducaoNoticiasServico()
+        self._painel_periodo = PainelPeriodoServico(self._servico)
 
     def pesquisar_acoes(self, termo: str) -> tuple[list, str | None]:
         return self._busca.buscar(termo)
@@ -46,6 +48,34 @@ class ControladorMercado:
             "todas": self._servico.listar_todas_monitoradas(quantidade),
             "quantidade": quantidade,
         }
+
+    def obter_painel_periodo(
+        self,
+        quantidade: int,
+        periodo: str,
+        data_inicio_texto: str | None = None,
+        data_fim_texto: str | None = None,
+    ) -> tuple[dict | None, str | None]:
+        """Painel alta/queda/todas com variacao no periodo (nao apenas no dia)."""
+        dt_inicio = None
+        dt_fim = None
+        if periodo == "personalizado":
+            dt_inicio, err_i = validar_data_ptbr(data_inicio_texto or "")
+            if err_i:
+                return None, err_i
+            dt_fim, err_f = validar_data_ptbr(data_fim_texto or "")
+            if err_f:
+                return None, err_f
+
+        dados = self._painel_periodo.obter_painel(
+            quantidade, periodo, dt_inicio, dt_fim
+        )
+        if dados["total_com_dados"] == 0:
+            return None, (
+                f"Nenhuma acao com historico no periodo "
+                f"({dados['periodo_rotulo']}). Tente outro intervalo."
+            )
+        return dados, None
 
     def listar_simbolos_favoritos(self) -> list[str]:
         return self._favoritos.listar()

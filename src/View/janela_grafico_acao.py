@@ -20,26 +20,35 @@ from src.View.grafico_helper import (
     configurar_tooltip_acao,
 )
 from src.View.janela_detalhes_acao import JanelaDetalhesAcao
-from src.View.painel_comparacao_periodo import PainelComparacaoPeriodo, payload_instrucao
+from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
+from src.View.grafico_helper import _publicar_payload_com_cdi
+from src.View.painel_comparacao_periodo import (
+    PainelComparacaoPeriodo,
+    calcular_comparacao_acao_unica,
+    payload_instrucao,
+)
 from src.View.tema import CORES
 
-PERIODOS = [
-    ("dia", "Dia"),
-    ("semana", "Semana"),
-    ("mes", "Mes"),
-    ("trimestre", "Trimestre"),
-    ("semestre", "Semestre"),
-    ("ano", "Ano"),
-    ("personalizado", "Personalizado"),
-]
+PERIODOS = PERIODOS_MERCADO
 
 class JanelaGraficoAcao(ctk.CTkToplevel):
     """Tela ampla com periodo, grafico, tooltip e selecao de intervalo."""
 
-    def __init__(self, pai: ctk.CTk, controlador: ControladorMercado, simbolo: str) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTk,
+        controlador: ControladorMercado,
+        simbolo: str,
+        periodo_chave: str | None = None,
+        data_inicio: str | None = None,
+        data_fim: str | None = None,
+    ) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._simbolo = simbolo
+        self._periodo_inicial = periodo_chave
+        self._data_inicio_inicial = (data_inicio or "").strip()
+        self._data_fim_inicial = (data_fim or "").strip()
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._janela_detalhes: JanelaDetalhesAcao | None = None
@@ -51,6 +60,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self.minsize(900, 600)
 
         self._montar_interface()
+        self._aplicar_periodo_inicial()
         configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
@@ -96,9 +106,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Passe o mouse para detalhes. Linha laranja tracejada: rendimento em 100% CDI "
-                "(mesmo valor do 1º dia). Informe quantas acoes e clique em 2 pontos para simular "
-                "valor pago, valor final, lucro ou prejuizo."
+                "Ao carregar, o resumo do periodo escolhido aparece abaixo (preco, lucro, dividendos e CDI). "
+                "Passe o mouse no grafico para detalhes. Clique em 2 pontos para comparar outro intervalo."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -173,12 +182,30 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
 
+    def _aplicar_periodo_inicial(self) -> None:
+        if self._periodo_inicial:
+            self._combo_periodo.set(rotulo_periodo_por_chave(self._periodo_inicial))
+            self._alternar_datas()
+        if self._data_inicio_inicial:
+            self._entrada_inicio.delete(0, "end")
+            self._entrada_inicio.insert(0, self._data_inicio_inicial)
+        if self._data_fim_inicial:
+            self._entrada_fim.delete(0, "end")
+            self._entrada_fim.insert(0, self._data_fim_inicial)
+        rotulo = self._combo_periodo.get()
+        self._frame_painel_periodo.configure(label_text=f"Resumo do periodo: {rotulo}")
+
     def _periodo_chave(self) -> str:
         rotulo = self._combo_periodo.get()
         for chave, nome in PERIODOS:
             if nome == rotulo:
                 return chave
         return "mes"
+
+    def _atualizar_rotulo_painel_periodo(self) -> None:
+        self._frame_painel_periodo.configure(
+            label_text=f"Resumo do periodo: {self._combo_periodo.get()}"
+        )
 
     def _abrir_mais_detalhes(self) -> None:
         if self._janela_detalhes is not None:
@@ -218,6 +245,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             self._frame_datas.pack(fill="x", pady=(0, 8))
         else:
             self._frame_datas.pack_forget()
+        self._atualizar_rotulo_painel_periodo()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         def trabalho():
@@ -375,7 +403,37 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             atualizar_painel,
             obter_quantidade_cotas=self._obter_quantidade_cotas_para_grafico,
         )
+        self._exibir_resumo_periodo_do_grafico(
+            canvas,
+            pontos_tooltip,
+            simbolo,
+            moeda,
+            atualizar_painel,
+        )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+
+    def _exibir_resumo_periodo_do_grafico(
+        self,
+        canvas: FigureCanvasTkAgg,
+        pontos: list[dict],
+        simbolo: str,
+        moeda: str,
+        atualizar_painel,
+    ) -> None:
+        """Preenche o painel com o resumo do periodo inteiro exibido no grafico."""
+        if len(pontos) < 2:
+            return
+        self._atualizar_rotulo_painel_periodo()
+        quantidade = self._obter_quantidade_cotas_para_grafico()
+        payload = calcular_comparacao_acao_unica(
+            pontos,
+            simbolo,
+            moeda,
+            0,
+            len(pontos) - 1,
+            quantidade,
+        )
+        _publicar_payload_com_cdi(canvas, payload, atualizar_painel)

@@ -15,6 +15,7 @@ from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_noticias_mercado import JanelaNoticiasMercado
 from src.View.janela_hub_criptomoedas import JanelaHubCriptomoedas
 from src.View.janela_hub_empresas_dividendos import JanelaHubEmpresasDividendos
+from src.View.janela_hub_painel_periodo import JanelaHubPainelPeriodo
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
 from src.View.grid_fonte_helper import criar_combo_fonte_grid
@@ -47,6 +48,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_cripto: JanelaHubCriptomoedas | None = None
         self._janela_dividendos: JanelaHubEmpresasDividendos | None = None
+        self._janela_painel_periodo: JanelaHubPainelPeriodo | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
@@ -221,6 +223,16 @@ class InterfaceApp(ctk.CTk):
             linha_botoes,
             text="Empresa + dividendos",
             command=self._abrir_hub_empresas_dividendos,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=200,
+            height=36,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            linha_botoes,
+            text="Acoes por periodo",
+            command=self._abrir_hub_painel_periodo,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=200,
@@ -454,6 +466,19 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_dividendos = JanelaHubEmpresasDividendos(self)
+
+    def _abrir_hub_painel_periodo(self) -> None:
+        """Abre painel em alta / queda / todas com variacao no periodo escolhido."""
+        if self._janela_painel_periodo is not None:
+            try:
+                if self._janela_painel_periodo.winfo_exists():
+                    self._janela_painel_periodo.focus_force()
+                    self._janela_painel_periodo.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_painel_periodo = JanelaHubPainelPeriodo(self)
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         def trabalho():
