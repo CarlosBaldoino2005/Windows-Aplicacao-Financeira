@@ -9,8 +9,9 @@ import customtkinter as ctk
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.cotacao import CotacaoResumo
 from src.Tool.janela_helper import configurar_janela_maximizada
-from src.Tool.validadores import normalizar_simbolo
+from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.formatadores import formatar_moeda, formatar_variacao
+from src.View.placeholders_ui import PLACEHOLDER_BUSCA_ACAO, PLACEHOLDER_BUSCA_CRIPTO
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.tema import CORES
 
@@ -18,14 +19,20 @@ from src.View.tema import CORES
 class JanelaPesquisaAcao(ctk.CTkToplevel):
     """Tela de pesquisa com informacoes da acao; grafico abre em janela separada."""
 
-    def __init__(self, pai: ctk.CTk, controlador: ControladorMercado) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTk,
+        controlador: ControladorMercado,
+        modo_cripto: bool = False,
+    ) -> None:
         super().__init__(pai)
         self._controlador = controlador
+        self._modo_cripto = modo_cripto
         self._simbolo_atual: str | None = None
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._labels_info: dict[str, ctk.CTkLabel] = {}
 
-        self.title("Pesquisar acao")
+        self.title("Pesquisar criptomoeda" if modo_cripto else "Pesquisar acao")
         self.configure(fg_color=CORES["fundo"])
         self.minsize(720, 520)
 
@@ -49,14 +56,18 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             cabecalho,
-            text="Pesquisar acao",
+            text="Pesquisar criptomoeda" if self._modo_cripto else "Pesquisar acao",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
 
         ctk.CTkLabel(
             cabecalho,
-            text="Busque por nome ou codigo, selecione a acao e abra o grafico em outra tela.",
+            text=(
+                "Busque por nome ou codigo (ex.: BTC, Bitcoin), selecione e abra o grafico."
+                if self._modo_cripto
+                else "Busque por nome ou codigo, selecione a acao e abra o grafico em outra tela."
+            ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=16, pady=(0, 8))
@@ -66,7 +77,11 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
 
         ctk.CTkLabel(linha_busca, text="Codigo ou nome").pack(side="left", padx=(0, 8))
         self._entrada_busca = ctk.CTkEntry(
-            linha_busca, width=320, placeholder_text="Ex.: PETR4, Vale, Apple..."
+            linha_busca,
+            width=320,
+            placeholder_text=(
+                PLACEHOLDER_BUSCA_CRIPTO if self._modo_cripto else PLACEHOLDER_BUSCA_ACAO
+            ),
         )
         self._entrada_busca.pack(side="left", padx=(0, 8))
         self._entrada_busca.bind("<Return>", lambda _e: self._pesquisar())
@@ -223,7 +238,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             linha = ctk.CTkFrame(self._frame_resultados, fg_color=CORES["superficie"], corner_radius=8)
             linha.pack(fill="x", padx=4, pady=3)
 
-            codigo = item.simbolo.replace(".SA", "")
+            codigo = self._codigo_exibicao(item.simbolo)
             texto = f"{codigo}  —  {item.nome}  ({item.bolsa})"
             ctk.CTkLabel(
                 linha,
@@ -242,28 +257,41 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
                 hover_color=CORES["primariaHover"],
             ).pack(side="right", padx=8, pady=4)
 
+    def _normalizar_entrada(self, termo: str):
+        if self._modo_cripto:
+            return normalizar_simbolo_cripto(termo)
+        return normalizar_simbolo(termo)
+
+    def _codigo_exibicao(self, simbolo: str) -> str:
+        if self._modo_cripto:
+            return simbolo.replace("-USD", "")
+        return simbolo.replace(".SA", "")
+
     def _consultar_direto(self) -> None:
         termo = self._entrada_busca.get().strip()
         if not termo:
-            messagebox.showwarning("Consultar", "Digite o codigo da acao.", parent=self)
+            aviso = "Digite o codigo da criptomoeda." if self._modo_cripto else "Digite o codigo da acao."
+            messagebox.showwarning("Consultar", aviso, parent=self)
             return
-        simbolo, erro = normalizar_simbolo(termo)
+        simbolo, erro = self._normalizar_entrada(termo)
         if erro:
             messagebox.showwarning("Consultar", erro, parent=self)
             return
         self._selecionar_acao(simbolo)
 
     def _selecionar_acao(self, simbolo: str) -> None:
-        simbolo_ok, erro = normalizar_simbolo(simbolo)
+        simbolo_ok, erro = self._normalizar_entrada(simbolo)
         if erro:
-            messagebox.showwarning("Acao", erro, parent=self)
+            titulo = "Cripto" if self._modo_cripto else "Acao"
+            messagebox.showwarning(titulo, erro, parent=self)
             return
 
         self._simbolo_atual = simbolo_ok
-        codigo = simbolo_ok.replace(".SA", "")
+        codigo = self._codigo_exibicao(simbolo_ok)
         self._entrada_busca.delete(0, "end")
         self._entrada_busca.insert(0, codigo)
-        self.title(f"Pesquisar acao — {codigo}")
+        titulo_janela = "Pesquisar criptomoeda" if self._modo_cripto else "Pesquisar acao"
+        self.title(f"{titulo_janela} — {codigo}")
         self._label_status.configure(text="Carregando cotacao...")
 
         def buscar():
@@ -288,7 +316,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
         self._executar_em_thread(buscar, ao_concluir)
 
     def _exibir_info(self, cotacao: CotacaoResumo) -> None:
-        codigo = cotacao.simbolo.replace(".SA", "")
+        codigo = self._codigo_exibicao(cotacao.simbolo)
         volume_txt = "—"
         if cotacao.volume is not None:
             volume_txt = f"{cotacao.volume:,}".replace(",", ".")

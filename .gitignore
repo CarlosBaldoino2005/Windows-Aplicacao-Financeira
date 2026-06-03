@@ -14,6 +14,7 @@ __pycache__/
 *.pyc
 log/
 dados/favoritos.json
+dados/favoritos_cripto.json
 dados/painel.ini
 *.log
 dist/

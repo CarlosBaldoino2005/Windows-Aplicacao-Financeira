@@ -8,7 +8,13 @@ import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.janela_helper import configurar_janela_maximizada
-from src.Tool.validadores import normalizar_simbolo
+from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
+from src.View.placeholders_ui import (
+    PLACEHOLDER_CODIGO_ACAO,
+    PLACEHOLDER_CODIGO_CRIPTO,
+    PLACEHOLDER_COMPARAR_BUSCA_ACAO,
+    PLACEHOLDER_COMPARAR_BUSCA_CRIPTO,
+)
 from src.View.janela_grafico_comparacao import JanelaGraficoComparacao
 from src.View.tema import CORES
 
@@ -26,13 +32,19 @@ PERIODOS = [
 class JanelaCompararAcoes(ctk.CTkToplevel):
     """Seleciona acoes e abre o grafico comparativo em tela cheia."""
 
-    def __init__(self, pai: ctk.CTk, controlador: ControladorMercado) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTk,
+        controlador: ControladorMercado,
+        modo_cripto: bool = False,
+    ) -> None:
         super().__init__(pai)
         self._controlador = controlador
+        self._modo_cripto = modo_cripto
         self._simbolos: list[str] = []
         self._janela_grafico: JanelaGraficoComparacao | None = None
 
-        self.title("Comparar acoes")
+        self.title("Comparar criptomoedas" if modo_cripto else "Comparar acoes")
         self.configure(fg_color=CORES["fundo"])
         self.minsize(900, 620)
 
@@ -56,7 +68,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             cabecalho,
-            text="Comparar acoes",
+            text="Comparar criptomoedas" if self._modo_cripto else "Comparar acoes",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
@@ -64,8 +76,12 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Adicione de 2 a 6 acoes, escolha o periodo e abra o grafico com indice base 100 "
-                "e linha de referencia do CDI."
+                "Adicione de 2 a 6 criptomoedas, escolha o periodo e abra o grafico comparativo."
+                if self._modo_cripto
+                else (
+                    "Adicione de 2 a 6 acoes, escolha o periodo e abra o grafico com indice base 100 "
+                    "e linha de referencia do CDI."
+                )
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -79,9 +95,16 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         linha_busca = ctk.CTkFrame(form, fg_color="transparent")
         linha_busca.pack(fill="x", padx=12, pady=(12, 4))
 
-        ctk.CTkLabel(linha_busca, text="Pesquisar acao").pack(side="left", padx=(0, 8))
+        rotulo_busca = "Pesquisar cripto" if self._modo_cripto else "Pesquisar acao"
+        ctk.CTkLabel(linha_busca, text=rotulo_busca).pack(side="left", padx=(0, 8))
         self._entrada_busca = ctk.CTkEntry(
-            linha_busca, width=280, placeholder_text="Nome ou codigo: Vale, PETR4, Apple..."
+            linha_busca,
+            width=280,
+            placeholder_text=(
+                PLACEHOLDER_COMPARAR_BUSCA_CRIPTO
+                if self._modo_cripto
+                else PLACEHOLDER_COMPARAR_BUSCA_ACAO
+            ),
         )
         self._entrada_busca.pack(side="left", padx=(0, 8))
         self._entrada_busca.bind("<Return>", lambda _e: self._pesquisar_acoes())
@@ -103,7 +126,13 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         linha_codigo.pack(fill="x", padx=12, pady=(4, 8))
 
         ctk.CTkLabel(linha_codigo, text="Ou digite o codigo").pack(side="left", padx=(0, 8))
-        self._entrada_codigo = ctk.CTkEntry(linha_codigo, width=120, placeholder_text="VALE3")
+        self._entrada_codigo = ctk.CTkEntry(
+            linha_codigo,
+            width=120,
+            placeholder_text=(
+                PLACEHOLDER_CODIGO_CRIPTO if self._modo_cripto else PLACEHOLDER_CODIGO_ACAO
+            ),
+        )
         self._entrada_codigo.pack(side="left", padx=(0, 8))
         self._entrada_codigo.bind("<Return>", lambda _e: self._adicionar_por_codigo())
 
@@ -116,7 +145,11 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
 
         self._label_chips = ctk.CTkLabel(
             form,
-            text="Acoes selecionadas: (nenhuma)",
+            text=(
+                "Criptos selecionadas: (nenhuma)"
+                if self._modo_cripto
+                else "Acoes selecionadas: (nenhuma)"
+            ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=860,
@@ -207,25 +240,47 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
 
         threading.Thread(target=trabalho, daemon=True).start()
 
+    def _codigo_exibicao(self, simbolo: str) -> str:
+        if self._modo_cripto:
+            return simbolo.replace("-USD", "")
+        return simbolo.replace(".SA", "")
+
     def _incluir_simbolo(self, simbolo: str) -> bool:
         if not simbolo:
             return False
         if simbolo in self._simbolos:
-            messagebox.showinfo("Comparar", f"{simbolo.replace('.SA', '')} ja esta na lista.", parent=self)
+            messagebox.showinfo(
+                "Comparar",
+                f"{self._codigo_exibicao(simbolo)} ja esta na lista.",
+                parent=self,
+            )
             return False
         if len(self._simbolos) >= 6:
-            messagebox.showwarning("Comparar", "Maximo de 6 acoes por comparacao.", parent=self)
+            limite_msg = (
+                "Maximo de 6 criptomoedas por comparacao."
+                if self._modo_cripto
+                else "Maximo de 6 acoes por comparacao."
+            )
+            messagebox.showwarning("Comparar", limite_msg, parent=self)
             return False
         self._simbolos.append(simbolo)
         self._atualizar_chips()
         return True
 
     def _atualizar_chips(self) -> None:
+        rotulo_vazio = (
+            "Criptos selecionadas: (nenhuma)"
+            if self._modo_cripto
+            else "Acoes selecionadas: (nenhuma)"
+        )
+        rotulo_lista = (
+            "Criptos selecionadas" if self._modo_cripto else "Acoes selecionadas"
+        )
         if not self._simbolos:
-            self._label_chips.configure(text="Acoes selecionadas: (nenhuma)")
+            self._label_chips.configure(text=rotulo_vazio)
         else:
-            texto = ", ".join(s.replace(".SA", "") for s in self._simbolos)
-            self._label_chips.configure(text=f"Acoes selecionadas: {texto}")
+            texto = ", ".join(self._codigo_exibicao(s) for s in self._simbolos)
+            self._label_chips.configure(text=f"{rotulo_lista}: {texto}")
 
     def _limpar_lista(self) -> None:
         self._simbolos.clear()
@@ -249,7 +304,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             linha = ctk.CTkFrame(self._frame_resultados_busca, fg_color=CORES["superficie"], corner_radius=8)
             linha.pack(fill="x", padx=4, pady=3)
 
-            codigo = item.simbolo.replace(".SA", "")
+            codigo = self._codigo_exibicao(item.simbolo)
             texto = f"{codigo}  —  {item.nome}  ({item.bolsa})"
             ctk.CTkLabel(
                 linha,
@@ -271,17 +326,27 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
     def _adicionar_da_busca(self, simbolo: str) -> None:
         if self._incluir_simbolo(simbolo):
             self._label_status.configure(
-                text=f"{simbolo.replace('.SA', '')} adicionada a lista.",
+                text=f"{self._codigo_exibicao(simbolo)} adicionada a lista.",
                 text_color=CORES["sucesso"],
             )
 
     def _pesquisar_acoes(self) -> None:
         termo = self._entrada_busca.get().strip()
         if not termo:
-            messagebox.showwarning("Buscar", "Digite o nome ou codigo da acao.", parent=self)
+            aviso = (
+                "Digite o nome ou codigo da criptomoeda (ex.: Bitcoin ou ETH)."
+                if self._modo_cripto
+                else "Digite o nome ou codigo da acao."
+            )
+            messagebox.showwarning("Buscar", aviso, parent=self)
             return
 
-        self._label_status.configure(text="Buscando acoes...", text_color=CORES["textoSecundario"])
+        status = (
+            "Buscando criptomoedas..."
+            if self._modo_cripto
+            else "Buscando acoes..."
+        )
+        self._label_status.configure(text=status, text_color=CORES["textoSecundario"])
 
         def buscar():
             return self._controlador.pesquisar_acoes(termo)
@@ -304,9 +369,14 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
 
         self._executar_em_thread(buscar, ao_concluir)
 
+    def _normalizar_entrada(self, termo: str):
+        if self._modo_cripto:
+            return normalizar_simbolo_cripto(termo)
+        return normalizar_simbolo(termo)
+
     def _adicionar_por_codigo(self) -> None:
         texto = self._entrada_codigo.get().strip()
-        simbolo, erro = normalizar_simbolo(texto)
+        simbolo, erro = self._normalizar_entrada(texto)
         if erro:
             messagebox.showwarning("Comparar", erro, parent=self)
             return
@@ -315,7 +385,12 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
 
     def _executar_comparacao(self) -> None:
         if len(self._simbolos) < 2:
-            messagebox.showwarning("Comparar", "Adicione pelo menos duas acoes.", parent=self)
+            aviso = (
+                "Adicione pelo menos duas criptomoedas."
+                if self._modo_cripto
+                else "Adicione pelo menos duas acoes."
+            )
+            messagebox.showwarning("Comparar", aviso, parent=self)
             return
 
         periodo = self._periodo_chave()

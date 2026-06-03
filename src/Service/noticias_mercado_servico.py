@@ -48,9 +48,14 @@ _TERMOS_BUSCA_EN: dict[str, str] = {
 class NoticiasMercadoServico:
     """Agrega e ordena noticias das principais referencias de mercado."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        fontes: list[tuple[str, str]] | None = None,
+        busca=None,
+    ) -> None:
         self._log = RegistradorLog()
-        self._busca_acoes = BuscaAcoesServico()
+        self._fontes = fontes or _FONTES_MERCADO
+        self._busca_acoes = busca or BuscaAcoesServico()
 
     def listar_principais(self) -> tuple[list[NoticiaMercado], str | None]:
         """Retorna noticias recentes deduplicadas ou mensagem de erro."""
@@ -58,7 +63,7 @@ class NoticiasMercadoServico:
         vistos_titulos: set[str] = set()
         coletadas: list[NoticiaMercado] = []
 
-        for simbolo, regiao in _FONTES_MERCADO:
+        for simbolo, regiao in self._fontes:
             try:
                 brutas = yf.Ticker(simbolo).news or []
             except Exception as exc:

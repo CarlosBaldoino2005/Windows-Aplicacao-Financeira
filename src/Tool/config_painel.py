@@ -5,13 +5,17 @@ from configparser import ConfigParser
 from pathlib import Path
 
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
+from src.Model.cripto_universo import QUANTIDADE_PADRAO_CRIPTO
 from src.Tool.registrador_log import RegistradorLog
+from src.Model.opcoes_fonte_grid import FONTE_GRID_PADRAO, OpcoesFonteGrid
 from src.Model.opcoes_fotos_noticias import FOTOS_PADRAO, OpcoesFotosNoticias
 from src.Tool.validadores import (
+    validar_fonte_grid,
     validar_fotos_noticias,
     validar_modo_aparencia,
     validar_quantidade_acoes,
     validar_quantidade_cotas,
+    validar_quantidade_cripto,
 )
 from src.View.tema import MODO_PADRAO
 
@@ -20,6 +24,8 @@ CHAVE_QUANTIDADE_ACOES = "quantidade_acoes"
 CHAVE_QUANTIDADE_COTAS_GRAFICO = "quantidade_cotas_grafico"
 CHAVE_MODO_APARENCIA = "modo_aparencia"
 CHAVE_FOTOS_NOTICIAS = "fotos_noticias"
+CHAVE_FONTE_GRID = "fonte_grid"
+CHAVE_QUANTIDADE_CRIPTO = "quantidade_cripto"
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 NOME_ARQUIVO = "painel.ini"
 
@@ -50,6 +56,28 @@ class ConfigPainelIni:
     def padrao_fotos_noticias(self) -> str:
         return FOTOS_PADRAO
 
+    def padrao_fonte_grid(self) -> str:
+        return FONTE_GRID_PADRAO
+
+    def padrao_quantidade_cripto(self) -> int:
+        return QUANTIDADE_PADRAO_CRIPTO
+
+    def carregar_quantidade_cripto(self) -> int:
+        """Quantidade de criptos nas abas Em alta, Em queda e Todas."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_QUANTIDADE_CRIPTO in secao:
+            return self._ler_quantidade_cripto(secao.get(CHAVE_QUANTIDADE_CRIPTO))
+        valor = self.padrao_quantidade_cripto()
+        self.salvar_quantidade_cripto(valor)
+        return valor
+
+    def salvar_quantidade_cripto(self, quantidade: int) -> None:
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_QUANTIDADE_CRIPTO] = str(quantidade)
+        self._gravar(parser)
+
     def carregar_fotos_noticias(self) -> str:
         """Tamanho das miniaturas nas noticias: nenhum, pequeno, medio ou grande."""
         secao = self._ler_ou_criar_secao()
@@ -69,6 +97,27 @@ class ConfigPainelIni:
         if SECAO_PAINEL not in parser:
             parser[SECAO_PAINEL] = {}
         parser[SECAO_PAINEL][CHAVE_FOTOS_NOTICIAS] = modo_ok
+        self._gravar(parser)
+
+    def carregar_fonte_grid(self) -> str:
+        """Tamanho da fonte nas grids: pequeno, medio ou grande."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_FONTE_GRID in secao:
+            modo, _ = validar_fonte_grid(secao.get(CHAVE_FONTE_GRID, ""))
+            return modo
+        modo = self.padrao_fonte_grid()
+        self.salvar_fonte_grid(modo)
+        return modo
+
+    def carregar_opcoes_fonte_grid(self) -> OpcoesFonteGrid:
+        return OpcoesFonteGrid.a_partir_modo(self.carregar_fonte_grid())
+
+    def salvar_fonte_grid(self, modo: str) -> None:
+        modo_ok, _ = validar_fonte_grid(modo)
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_FONTE_GRID] = modo_ok
         self._gravar(parser)
 
     def carregar_modo_aparencia(self) -> str:
@@ -140,6 +189,7 @@ class ConfigPainelIni:
             self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
             self.salvar_modo_aparencia(self.padrao_modo_aparencia())
             self.salvar_fotos_noticias(self.padrao_fotos_noticias())
+            self.salvar_fonte_grid(self.padrao_fonte_grid())
 
         parser = self._ler_parser()
         if SECAO_PAINEL not in parser:
@@ -147,6 +197,7 @@ class ConfigPainelIni:
             self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
             self.salvar_modo_aparencia(self.padrao_modo_aparencia())
             self.salvar_fotos_noticias(self.padrao_fotos_noticias())
+            self.salvar_fonte_grid(self.padrao_fonte_grid())
             parser = self._ler_parser()
 
         return dict(parser[SECAO_PAINEL])
@@ -172,6 +223,12 @@ class ConfigPainelIni:
         valor, erro = validar_quantidade_acoes(texto)
         if erro or valor is None:
             return self.padrao_painel()
+        return valor
+
+    def _ler_quantidade_cripto(self, texto: str) -> int:
+        valor, erro = validar_quantidade_cripto(texto)
+        if erro or valor is None:
+            return self.padrao_quantidade_cripto()
         return valor
 
     def _ler_quantidade_cotas(self, texto: str) -> int:

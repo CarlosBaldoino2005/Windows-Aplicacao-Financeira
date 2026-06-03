@@ -25,16 +25,24 @@ _FILTROS = ("Todas", "Brasil", "EUA")
 class JanelaNoticiasMercado(ctk.CTkToplevel):
     """Lista noticias agregadas de referencias Brasil e EUA."""
 
-    def __init__(self, pai: ctk.CTk, controlador: ControladorMercado) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTk,
+        controlador: ControladorMercado,
+        modo_cripto: bool = False,
+    ) -> None:
         super().__init__(pai)
         self._controlador = controlador
+        self._modo_cripto = modo_cripto
         self._noticias: list[NoticiaMercado] = []
         self._filtro_atual = "Todas"
         self._janela_pesquisa: JanelaPesquisaNoticias | None = None
         self._idioma: ControladorExibicaoNoticiasIdioma | None = None
         self._config_painel = ConfigPainelIni()
 
-        self.title("Noticias do mercado")
+        self.title(
+            "Noticias de criptomoedas" if modo_cripto else "Noticias do mercado"
+        )
         self.configure(fg_color=CORES["fundo"])
         self.minsize(880, 600)
 
@@ -153,7 +161,9 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             except Exception:
                 pass
 
-        self._janela_pesquisa = JanelaPesquisaNoticias(self, self._controlador)
+        self._janela_pesquisa = JanelaPesquisaNoticias(
+            self, self._controlador, modo_cripto=self._modo_cripto
+        )
 
     def _ao_mudar_filtro(self, valor: str) -> None:
         self._filtro_atual = valor

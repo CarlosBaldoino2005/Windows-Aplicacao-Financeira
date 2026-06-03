@@ -17,21 +17,33 @@ from src.View.noticias_idioma_helper import (
     criar_listbox_idioma,
 )
 from src.View.noticias_lista_helper import exibir_mensagem_lista
+from src.View.placeholders_ui import (
+    PLACEHOLDER_NOTICIAS_BUSCA_ACAO,
+    PLACEHOLDER_NOTICIAS_BUSCA_CRIPTO,
+)
 from src.View.tema import CORES
 
 
 class JanelaPesquisaNoticias(ctk.CTkToplevel):
     """Busca noticias relacionadas a um termo digitado pelo usuario."""
 
-    def __init__(self, pai: ctk.CTkToplevel, controlador: ControladorMercado) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTkToplevel,
+        controlador: ControladorMercado,
+        modo_cripto: bool = False,
+    ) -> None:
         super().__init__(pai)
         self._controlador = controlador
+        self._modo_cripto = modo_cripto
         self._noticias: list[NoticiaMercado] = []
         self._termo_atual = ""
         self._idioma: ControladorExibicaoNoticiasIdioma | None = None
         self._config_painel = ConfigPainelIni()
 
-        self.title("Pesquisar noticias")
+        self.title(
+            "Pesquisar noticias de cripto" if modo_cripto else "Pesquisar noticias"
+        )
         self.configure(fg_color=CORES["fundo"])
         self.minsize(880, 600)
 
@@ -71,7 +83,11 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
         self._entrada_busca = ctk.CTkEntry(
             linha_busca,
             width=360,
-            placeholder_text="Ex.: PETR4, Petrobras, inflacao, Fed, ouro...",
+            placeholder_text=(
+                PLACEHOLDER_NOTICIAS_BUSCA_CRIPTO
+                if self._modo_cripto
+                else PLACEHOLDER_NOTICIAS_BUSCA_ACAO
+            ),
         )
         self._entrada_busca.pack(side="left", padx=(0, 8))
         self._entrada_busca.bind("<Return>", lambda _e: self._executar_pesquisa())

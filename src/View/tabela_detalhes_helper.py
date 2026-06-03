@@ -3,11 +3,24 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
+from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
+from src.Tool.config_painel import ConfigPainelIni
 from src.View.tema import CORES
 
 
-def adicionar_cabecalho_tabela(pai: ctk.CTkFrame, colunas: list[str]) -> None:
+def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
+    if opcoes is not None:
+        return opcoes
+    return ConfigPainelIni().carregar_opcoes_fonte_grid()
+
+
+def adicionar_cabecalho_tabela(
+    pai: ctk.CTkFrame,
+    colunas: list[str],
+    opcoes_fonte: OpcoesFonteGrid | None = None,
+) -> None:
     """Cabecalho neutro (sem zebrado), no padrao global de grids."""
+    opcoes = _resolver_opcoes(opcoes_fonte)
     linha = ctk.CTkFrame(pai, fg_color=CORES["primaria"], corner_radius=6)
     linha.pack(fill="x", padx=2, pady=(2, 0))
 
@@ -16,9 +29,9 @@ def adicionar_cabecalho_tabela(pai: ctk.CTkFrame, colunas: list[str]) -> None:
         ctk.CTkLabel(
             linha,
             text=texto,
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=opcoes.fonte_cabecalho_ctk, weight="bold"),
             text_color=CORES["textoInverso"],
-        ).grid(row=0, column=indice, padx=8, pady=6, sticky="w")
+        ).grid(row=0, column=indice, padx=8, pady=opcoes.padding_celula_y, sticky="w")
 
 
 def adicionar_linha_zebrada(
@@ -26,11 +39,15 @@ def adicionar_linha_zebrada(
     valores: list[str],
     indice_linha: int,
     cores_celulas: list[str] | None = None,
-    largura_wrap: int = 160,
+    largura_wrap: int | None = None,
+    opcoes_fonte: OpcoesFonteGrid | None = None,
 ) -> ctk.CTkFrame:
     """Linha alternada branco/cinza; hover deixa fundo azul e texto branco."""
+    opcoes = _resolver_opcoes(opcoes_fonte)
+    wrap = largura_wrap if largura_wrap is not None else opcoes.largura_wrap
     fundo_base = CORES["zebraClara"] if indice_linha % 2 == 0 else CORES["zebraEscura"]
-    linha = ctk.CTkFrame(pai, fg_color=fundo_base, corner_radius=4, height=36)
+    altura_min = opcoes.altura_linha - 4
+    linha = ctk.CTkFrame(pai, fg_color=fundo_base, corner_radius=4, height=altura_min)
     linha.pack(fill="x", padx=2, pady=1)
 
     rotulos: list[ctk.CTkLabel] = []
@@ -43,12 +60,12 @@ def adicionar_linha_zebrada(
         rotulo = ctk.CTkLabel(
             linha,
             text=texto,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(size=opcoes.fonte_celula),
             text_color=cor_texto,
-            wraplength=largura_wrap,
+            wraplength=wrap,
             justify="left",
         )
-        rotulo.grid(row=0, column=indice, padx=8, pady=6, sticky="w")
+        rotulo.grid(row=0, column=indice, padx=8, pady=opcoes.padding_celula_y, sticky="w")
         rotulos.append(rotulo)
 
     _configurar_hover_linha(linha, rotulos, fundo_base, cores_base)

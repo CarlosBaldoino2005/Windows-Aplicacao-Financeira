@@ -63,3 +63,4 @@ class DetalhesAcao:
     fluxo_caixa: list[LinhaDemonstrativo] = field(default_factory=list)
     concorrentes: list[ConcorrenteResumo] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)
+    eh_cripto: bool = False

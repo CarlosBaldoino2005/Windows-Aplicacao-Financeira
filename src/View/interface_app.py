@@ -13,11 +13,14 @@ from src.Model.cotacao import CotacaoResumo
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_noticias_mercado import JanelaNoticiasMercado
+from src.View.janela_hub_criptomoedas import JanelaHubCriptomoedas
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
+from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     preencher_tabela as preencher_tabela_mercado,
+    reaplicar_fonte_em_tabelas,
 )
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
@@ -41,6 +44,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_favoritas: JanelaFavoritas | None = None
         self._janela_comparar: JanelaCompararAcoes | None = None
         self._janela_noticias: JanelaNoticiasMercado | None = None
+        self._janela_cripto: JanelaHubCriptomoedas | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
@@ -199,6 +203,16 @@ class InterfaceApp(ctk.CTk):
             hover_color=CORES["primariaHover"],
             width=200,
             height=36,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            linha_botoes,
+            text="Criptomoedas",
+            command=self._abrir_hub_criptomoedas,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=200,
+            height=36,
         ).pack(side="left")
 
         barra = ctk.CTkFrame(card_acao, fg_color="transparent")
@@ -220,6 +234,8 @@ class InterfaceApp(ctk.CTk):
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
         ).pack(side="right")
+
+        criar_combo_fonte_grid(barra, self._config_painel, self._ao_mudar_fonte_grid)
 
         ctk.CTkLabel(barra, text="Qtd. acoes").pack(side="right", padx=(8, 4))
         self._entrada_quantidade_acoes = ctk.CTkEntry(barra, width=50, justify="center")
@@ -321,6 +337,15 @@ class InterfaceApp(ctk.CTk):
     ) -> None:
         preencher_tabela_mercado(tabela, itens, mensagem_vazio)
 
+    def _ao_mudar_fonte_grid(self) -> None:
+        """Reaplica tamanho da fonte nas tres abas do painel (valor salvo no INI)."""
+        tabelas = [
+            getattr(self, "_tabela_alta", None),
+            getattr(self, "_tabela_queda", None),
+            getattr(self, "_tabela_todas", None),
+        ]
+        reaplicar_fonte_em_tabelas(t for t in tabelas if t is not None)
+
     def _ao_duplo_clique_tabela(self, evento) -> None:
         widget = evento.widget
         selecao = widget.selection()
@@ -391,6 +416,19 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_noticias = JanelaNoticiasMercado(self, self._controlador)
+
+    def _abrir_hub_criptomoedas(self) -> None:
+        """Abre (ou foca) o painel dedicado de criptomoedas."""
+        if self._janela_cripto is not None:
+            try:
+                if self._janela_cripto.winfo_exists():
+                    self._janela_cripto.focus_force()
+                    self._janela_cripto.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_cripto = JanelaHubCriptomoedas(self)
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         def trabalho():

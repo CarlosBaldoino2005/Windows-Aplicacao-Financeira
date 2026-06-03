@@ -9,23 +9,42 @@ import customtkinter as ctk
 from tkinter import ttk
 
 from src.Controller.controlador_mercado import ControladorMercado
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
-from src.Tool.validadores import normalizar_simbolo
+from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
+from src.View.placeholders_ui import (
+    PLACEHOLDER_BUSCA_ACAO,
+    PLACEHOLDER_BUSCA_CRIPTO,
+    PLACEHOLDER_CODIGO_ACAO,
+    PLACEHOLDER_CODIGO_CRIPTO,
+)
+from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.janela_grafico_acao import JanelaGraficoAcao
-from src.View.tabela_mercado_helper import criar_card_tabela, preencher_tabela
+from src.View.tabela_mercado_helper import (
+    criar_card_tabela,
+    preencher_tabela,
+    reaplicar_fonte_em_tabelas,
+)
 from src.View.tema import CORES
 
 
 class JanelaFavoritas(ctk.CTkToplevel):
     """Lista favoritas salvas em disco com cotacoes atualizadas."""
 
-    def __init__(self, pai: ctk.CTk, controlador: ControladorMercado) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTk,
+        controlador: ControladorMercado,
+        modo_cripto: bool = False,
+    ) -> None:
         super().__init__(pai)
         self._controlador = controlador
+        self._modo_cripto = modo_cripto
+        self._config_painel = ConfigPainelIni()
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._tabela: ttk.Treeview | None = None
 
-        self.title("Acoes favoritas")
+        self.title("Criptos favoritas" if modo_cripto else "Acoes favoritas")
         self.configure(fg_color=CORES["fundo"])
         self.minsize(820, 560)
 
@@ -50,14 +69,18 @@ class JanelaFavoritas(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             cabecalho,
-            text="Acoes favoritas",
+            text="Criptos favoritas" if self._modo_cripto else "Acoes favoritas",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
 
         ctk.CTkLabel(
             cabecalho,
-            text="Adicione acoes que deseja acompanhar. A lista fica salva neste computador.",
+            text=(
+                "Adicione criptomoedas que deseja acompanhar. A lista fica salva neste computador."
+                if self._modo_cripto
+                else "Adicione acoes que deseja acompanhar. A lista fica salva neste computador."
+            ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=16, pady=(0, 8))
@@ -67,7 +90,11 @@ class JanelaFavoritas(ctk.CTkToplevel):
 
         ctk.CTkLabel(linha_add, text="Codigo ou nome").pack(side="left", padx=(0, 8))
         self._entrada_busca = ctk.CTkEntry(
-            linha_add, width=260, placeholder_text="Ex.: PETR4, Vale, Apple..."
+            linha_add,
+            width=260,
+            placeholder_text=(
+                PLACEHOLDER_BUSCA_CRIPTO if self._modo_cripto else PLACEHOLDER_BUSCA_ACAO
+            ),
         )
         self._entrada_busca.pack(side="left", padx=(0, 8))
         self._entrada_busca.bind("<Return>", lambda _e: self._pesquisar())
@@ -81,7 +108,13 @@ class JanelaFavoritas(ctk.CTkToplevel):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkLabel(linha_add, text="ou codigo").pack(side="left", padx=(8, 8))
-        self._entrada_codigo = ctk.CTkEntry(linha_add, width=100, placeholder_text="VALE3")
+        self._entrada_codigo = ctk.CTkEntry(
+            linha_add,
+            width=100,
+            placeholder_text=(
+                PLACEHOLDER_CODIGO_CRIPTO if self._modo_cripto else PLACEHOLDER_CODIGO_ACAO
+            ),
+        )
         self._entrada_codigo.pack(side="left", padx=(0, 8))
         self._entrada_codigo.bind("<Return>", lambda _e: self._adicionar_codigo())
 
@@ -122,12 +155,18 @@ class JanelaFavoritas(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
         ).pack(side="right")
 
+        criar_combo_fonte_grid(barra, self._config_painel, self._ao_mudar_fonte_grid)
+
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(fill="both", expand=True, padx=16, pady=(0, 8))
 
         self._tabela = criar_card_tabela(
             container,
-            "Suas acoes favoritas (duplo clique abre o grafico)",
+            (
+                "Suas criptos favoritas (duplo clique abre o grafico)"
+                if self._modo_cripto
+                else "Suas acoes favoritas (duplo clique abre o grafico)"
+            ),
             altura=14,
             ao_duplo_clique=self._ao_duplo_clique,
             expandir=True,
@@ -160,10 +199,20 @@ class JanelaFavoritas(ctk.CTkToplevel):
     def _pesquisar(self) -> None:
         termo = self._entrada_busca.get().strip()
         if not termo:
-            messagebox.showwarning("Buscar", "Digite o nome ou codigo da acao.", parent=self)
+            aviso = (
+                "Digite o nome ou codigo da criptomoeda (ex.: Bitcoin ou SOL)."
+                if self._modo_cripto
+                else "Digite o nome ou codigo da acao."
+            )
+            messagebox.showwarning("Buscar", aviso, parent=self)
             return
 
-        self._label_status.configure(text="Buscando acoes...")
+        status = (
+            "Buscando criptomoedas..."
+            if self._modo_cripto
+            else "Buscando acoes..."
+        )
+        self._label_status.configure(text=status)
 
         def buscar():
             return self._controlador.pesquisar_acoes(termo)
@@ -200,7 +249,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
             linha = ctk.CTkFrame(self._frame_resultados, fg_color=CORES["superficie"], corner_radius=8)
             linha.pack(fill="x", padx=4, pady=3)
 
-            codigo = item.simbolo.replace(".SA", "")
+            codigo = self._codigo_exibicao(item.simbolo)
             texto = f"{codigo}  —  {item.nome}  ({item.bolsa})"
             ctk.CTkLabel(
                 linha,
@@ -219,12 +268,27 @@ class JanelaFavoritas(ctk.CTkToplevel):
                 hover_color=CORES["primariaHover"],
             ).pack(side="right", padx=8, pady=4)
 
+    def _normalizar_entrada(self, termo: str):
+        if self._modo_cripto:
+            return normalizar_simbolo_cripto(termo)
+        return normalizar_simbolo(termo)
+
+    def _codigo_exibicao(self, simbolo: str) -> str:
+        if self._modo_cripto:
+            return simbolo.replace("-USD", "")
+        return simbolo.replace(".SA", "")
+
     def _adicionar_codigo(self) -> None:
         termo = self._entrada_codigo.get().strip() or self._entrada_busca.get().strip()
         if not termo:
-            messagebox.showwarning("Adicionar", "Informe o codigo da acao.", parent=self)
+            aviso = (
+                "Informe o codigo da criptomoeda (ex.: BTC ou Bitcoin)."
+                if self._modo_cripto
+                else "Informe o codigo da acao."
+            )
+            messagebox.showwarning("Adicionar", aviso, parent=self)
             return
-        simbolo, erro = normalizar_simbolo(termo)
+        simbolo, erro = self._normalizar_entrada(termo)
         if erro:
             messagebox.showwarning("Adicionar", erro, parent=self)
             return
@@ -236,7 +300,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
             messagebox.showwarning("Favoritos", msg or "Nao foi possivel adicionar.", parent=self)
             return
 
-        codigo = simbolo.replace(".SA", "")
+        codigo = self._codigo_exibicao(simbolo)
         self._entrada_codigo.delete(0, "end")
         self._label_status.configure(
             text=f"{codigo} adicionada aos favoritos.",
@@ -249,7 +313,12 @@ class JanelaFavoritas(ctk.CTkToplevel):
             return
         selecao = self._tabela.selection()
         if not selecao:
-            messagebox.showinfo("Remover", "Selecione uma acao na lista.", parent=self)
+            aviso = (
+                "Selecione uma criptomoeda na lista."
+                if self._modo_cripto
+                else "Selecione uma acao na lista."
+            )
+            messagebox.showinfo("Remover", aviso, parent=self)
             return
 
         simbolo = selecao[0]
@@ -259,10 +328,14 @@ class JanelaFavoritas(ctk.CTkToplevel):
             return
 
         self._label_status.configure(
-            text=f"{simbolo.replace('.SA', '')} removida dos favoritos.",
+            text=f"{self._codigo_exibicao(simbolo)} removida dos favoritos.",
             text_color=CORES["sucesso"],
         )
         self._atualizar_grid()
+
+    def _ao_mudar_fonte_grid(self) -> None:
+        if self._tabela is not None:
+            reaplicar_fonte_em_tabelas([self._tabela])
 
     def _atualizar_grid(self) -> None:
         if not self._tabela:
@@ -272,7 +345,11 @@ class JanelaFavoritas(ctk.CTkToplevel):
         if not simbolos:
             preencher_tabela(self._tabela, [])
             self._label_status.configure(
-                text="Nenhuma acao favorita. Use Buscar ou Adicionar acima.",
+                text=(
+                    "Nenhuma cripto favorita. Use Buscar ou Adicionar acima."
+                    if self._modo_cripto
+                    else "Nenhuma acao favorita. Use Buscar ou Adicionar acima."
+                ),
                 text_color=CORES["textoSecundario"],
             )
             return

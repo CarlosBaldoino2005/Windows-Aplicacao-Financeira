@@ -6,7 +6,7 @@ import webbrowser
 
 import customtkinter as ctk
 
-from src.Controller.controlador_mercado import ControladorMercado
+from typing import Any
 from src.Model.detalhes_acao import DetalhesAcao, LinhaDemonstrativo, PeriodoResultado
 from src.Tool.janela_helper import configurar_janela_maximizada
 from src.View.formatadores import (
@@ -19,7 +19,7 @@ from src.View.formatadores import (
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
 from src.View.tema import CORES
 
-NOMES_ABAS = (
+NOMES_ABAS_ACAO = (
     "Empresa",
     "Indicadores",
     "Trimestres",
@@ -28,18 +28,26 @@ NOMES_ABAS = (
     "Concorrentes",
 )
 
+NOMES_ABAS_CRIPTO = (
+    "Ativo",
+    "Indicadores",
+    "Outras criptos",
+)
+
 
 class JanelaDetalhesAcao(ctk.CTkToplevel):
     """Tela ampla com abas: empresa, indicadores, resultados e concorrentes."""
 
-    def __init__(self, pai: ctk.CTk, controlador: ControladorMercado, simbolo: str) -> None:
+    def __init__(self, pai: ctk.CTk, controlador: Any, simbolo: str) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._simbolo = simbolo
+        self._modo_cripto = simbolo.endswith("-USD")
+        self._nomes_abas = NOMES_ABAS_CRIPTO if self._modo_cripto else NOMES_ABAS_ACAO
         self._frames_por_aba: dict[str, ctk.CTkFrame] = {}
         self._botoes_aba: dict[str, ctk.CTkButton] = {}
 
-        codigo = simbolo.replace(".SA", "")
+        codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Mais detalhes — {codigo}")
         self.configure(fg_color=CORES["fundo"])
         self.minsize(960, 640)
@@ -67,7 +75,11 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
 
         self._label_status = ctk.CTkLabel(
             cabecalho,
-            text="Buscando dados no Yahoo Finance (pode levar alguns segundos).",
+            text=(
+                "Buscando dados da criptomoeda no Yahoo Finance (pode levar alguns segundos)."
+                if self._modo_cripto
+                else "Buscando dados no Yahoo Finance (pode levar alguns segundos)."
+            ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         )
@@ -82,7 +94,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._painel_conteudo = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._painel_conteudo.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 8))
 
-        for nome in NOMES_ABAS:
+        for nome in self._nomes_abas:
             frame = ctk.CTkFrame(self._painel_conteudo, fg_color="transparent")
             self._frames_por_aba[nome] = frame
 
@@ -108,7 +120,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         grade = ctk.CTkFrame(pai, fg_color=CORES["borda"], corner_radius=10)
         grade.pack(fill="x", padx=0, pady=(0, 8))
 
-        for coluna, nome in enumerate(NOMES_ABAS):
+        for coluna, nome in enumerate(self._nomes_abas):
             grade.columnconfigure(coluna, weight=1)
             botao = ctk.CTkButton(
                 grade,
@@ -126,7 +138,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             botao.grid(row=0, column=coluna, padx=4, pady=4, sticky="ew")
             self._botoes_aba[nome] = botao
 
-        self._selecionar_aba("Empresa")
+        self._selecionar_aba(self._nomes_abas[0])
 
     def _selecionar_aba(self, nome: str) -> None:
         for rotulo, botao in self._botoes_aba.items():
@@ -213,15 +225,62 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
 
         self._label_carregando.place_forget()
 
-        self._montar_aba_empresa(dados)
-        self._montar_aba_indicadores(dados)
-        self._montar_aba_periodos(
-            self._frames_por_aba["Trimestres"], dados.trimestres, dados.moeda, "trimestre"
-        )
-        self._montar_aba_periodos(self._frames_por_aba["Anuais"], dados.anuais, dados.moeda, "ano")
-        self._montar_aba_demonstrativos(dados)
-        self._montar_aba_concorrentes(dados)
-        self._selecionar_aba("Empresa")
+        if dados.eh_cripto or self._modo_cripto:
+            self._montar_aba_ativo(dados)
+            self._montar_aba_indicadores(dados)
+            self._montar_aba_outras_criptos(dados)
+        else:
+            self._montar_aba_empresa(dados)
+            self._montar_aba_indicadores(dados)
+            self._montar_aba_periodos(
+                self._frames_por_aba["Trimestres"], dados.trimestres, dados.moeda, "trimestre"
+            )
+            self._montar_aba_periodos(self._frames_por_aba["Anuais"], dados.anuais, dados.moeda, "ano")
+            self._montar_aba_demonstrativos(dados)
+            self._montar_aba_concorrentes(dados)
+        self._selecionar_aba(self._nomes_abas[0])
+
+    def _montar_aba_ativo(self, dados: DetalhesAcao) -> None:
+        scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Ativo"], fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        campos = [
+            ("Nome", dados.nome_empresa),
+            ("Codigo", dados.codigo),
+            ("Par Yahoo", dados.simbolo),
+            ("Categoria", dados.setor),
+            ("Tipo", dados.industria),
+            ("Site", dados.site),
+        ]
+        for rotulo, valor in campos:
+            self._linha_info(scroll, rotulo, formatar_texto_opcional(valor))
+
+        if dados.site:
+            ctk.CTkButton(
+                scroll,
+                text="Abrir site do projeto",
+                command=lambda url=dados.site: webbrowser.open(url),
+                fg_color=CORES["primaria"],
+                hover_color=CORES["primariaHover"],
+                width=200,
+            ).pack(anchor="w", padx=4, pady=(4, 12))
+
+        ctk.CTkLabel(
+            scroll,
+            text="Sobre o ativo",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=4, pady=(8, 4))
+
+        texto_desc = dados.descricao or "Descricao nao disponivel para esta criptomoeda."
+        ctk.CTkLabel(
+            scroll,
+            text=texto_desc,
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["texto"],
+            wraplength=880,
+            justify="left",
+        ).pack(anchor="w", padx=4, pady=(0, 8))
 
     def _montar_aba_empresa(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Empresa"], fg_color="transparent")
@@ -372,6 +431,57 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         for indice, linha in enumerate(linhas):
             valores = [formatar_numero_grande(linha.valores.get(p), moeda) for p in periodos]
             adicionar_linha_zebrada(pai, [linha.rotulo] + valores, indice, largura_wrap=200)
+
+    def _montar_aba_outras_criptos(self, dados: DetalhesAcao) -> None:
+        scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Outras criptos"], fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        ctk.CTkLabel(
+            scroll,
+            text=(
+                "Outras criptomoedas monitoradas no painel, com cotacao atual do Yahoo Finance."
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=880,
+            justify="left",
+        ).pack(anchor="w", padx=4, pady=(0, 8))
+
+        if not dados.concorrentes:
+            ctk.CTkLabel(
+                scroll,
+                text="Nenhuma outra cripto listada no momento.",
+                text_color=CORES["textoSecundario"],
+            ).pack(anchor="w", padx=8)
+            return
+
+        cabecalhos = ["Codigo", "Nome", "Preco", "Variacao dia"]
+        adicionar_cabecalho_tabela(scroll, cabecalhos)
+
+        for indice, item in enumerate(dados.concorrentes):
+            variacao = (
+                formatar_variacao(
+                    (item.preco_atual or 0) * ((item.variacao_dia_pct or 0) / 100),
+                    item.variacao_dia_pct or 0,
+                    item.moeda,
+                )
+                if item.preco_atual is not None and item.variacao_dia_pct is not None
+                else "—"
+            )
+            cor_var = CORES["texto"]
+            if item.variacao_dia_pct is not None:
+                cor_var = CORES["sucesso"] if item.variacao_dia_pct >= 0 else CORES["erro"]
+            adicionar_linha_zebrada(
+                scroll,
+                [
+                    item.codigo,
+                    item.nome,
+                    formatar_moeda(item.preco_atual, item.moeda),
+                    variacao,
+                ],
+                indice,
+                cores_celulas=[CORES["texto"], CORES["texto"], CORES["texto"], cor_var],
+            )
 
     def _montar_aba_concorrentes(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Concorrentes"], fg_color="transparent")

@@ -7,10 +7,11 @@ Toda a interface e logica estao em Python (CustomTkinter + Matplotlib). Nao e ne
 ## Funcionalidades
 
 - **Painel**: abas **Em alta**, **Em queda** e **Todas**; configuracoes em `dados/painel.ini` (quantidades e tema claro/escuro).
-- **Pesquisar acao**, **Acoes favoritas**, **Comparar acoes** e **Noticias do mercado**: botoes na tela principal abrem janelas dedicadas; favoritos gravados em `dados/favoritos.json` (ate 40 acoes).
+- **Pesquisar acao**, **Acoes favoritas**, **Comparar acoes**, **Noticias do mercado** e **Criptomoedas**: botoes na tela principal; favoritos de acoes em `dados/favoritos.json` e de criptos em `dados/favoritos_cripto.json` (ate 40 cada).
 - **Grafico da acao**: abre em janela dedicada (periodo dia/mes/ano etc.); duplo clique no painel ou nos favoritos; **linha laranja tracejada** com evolucao em 100% CDI no grafico (acoes em reais); selecao de dois pontos com quantidade mostra valor pago, valor final, lucro/prejuizo e comparacao CDI no painel; botao **Mais detalhes** com perfil da empresa, indicadores, DRE/balanco/fluxo e concorrentes (yfinance).
 - **Comparar acoes** (`janela_comparar_acoes.py`): ate 6 tickers, periodo configuravel; grafico em nova janela com indice base 100, linha **100% CDI** e desempenho relativo.
 - **Noticias do mercado** (`janela_noticias_mercado.py`): manchetes Brasil e EUA via Yahoo Finance; **Pesquisar** abre tela para buscar por acao, empresa ou assunto; listbox **Original** / **Portugues (traduzido)** em ambas as telas (`deep-translator`).
+- **Criptomoedas** (`janela_hub_criptomoedas.py`): painel com abas Em alta / Em queda / Todas, pesquisa, favoritos, comparacao, graficos e noticias (pares `BTC-USD`, `ETH-USD`, etc. no Yahoo Finance).
 
 ## Requisitos
 
@@ -105,12 +106,15 @@ quantidade_acoes = 10
 quantidade_cotas_grafico = 100
 modo_aparencia = claro
 fotos_noticias = medio
+fonte_grid = medio
 ```
 
 - **quantidade_acoes**: maximo de linhas nas abas Em alta, Em queda e Todas (1 a 100).
 - **quantidade_cotas_grafico**: quantidade padrao na janela do grafico para simular compra (1 a 9.999.999).
 - **modo_aparencia**: `claro` ou `escuro` (tambem alteravel no canto superior direito da tela principal).
 - **fotos_noticias**: `nenhum`, `pequeno`, `medio` ou `grande` — tamanho das miniaturas nas telas de noticias (tambem alteravel no combo **Fotos**).
+- **fonte_grid**: `pequeno`, `medio` ou `grande` — tamanho da fonte nas grids de cotacoes (painel, favoritos, cripto e tabelas de Mais detalhes); alteravel no combo **Fonte grid**.
+- **quantidade_cripto**: maximo de linhas no painel de criptomoedas (1 a 80).
 
 Ao clicar em **Atualizar cotacoes**, a quantidade do painel e gravada no INI. No grafico, o valor e gravado ao clicar em **Atualizar grafico** ou ao fechar a janela. A troca de tema e salva no INI ao selecionar **Claro** ou **Escuro**.
 
