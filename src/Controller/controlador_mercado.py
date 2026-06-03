@@ -5,6 +5,8 @@ from src.Service.busca_acoes_servico import BuscaAcoesServico
 from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.favoritos_servico import FavoritosServico
 from src.Service.mercado_servico import MercadoServico
+from src.Service.noticias_mercado_servico import NoticiasMercadoServico
+from src.Service.traducao_noticias_servico import TraducaoNoticiasServico
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
 from src.Tool.validadores import normalizar_simbolo, validar_data_ptbr, validar_lista_simbolos
 
@@ -17,9 +19,25 @@ class ControladorMercado:
         self._busca = BuscaAcoesServico()
         self._favoritos = FavoritosServico()
         self._detalhes = DetalhesAcaoServico()
+        self._noticias = NoticiasMercadoServico()
+        self._traducao_noticias = TraducaoNoticiasServico()
 
     def pesquisar_acoes(self, termo: str) -> tuple[list, str | None]:
         return self._busca.buscar(termo)
+
+    def obter_noticias_mercado(self) -> tuple[list, str | None]:
+        """Lista principais noticias de mercado (Brasil e EUA)."""
+        return self._noticias.listar_principais()
+
+    def pesquisar_noticias(self, termo: str) -> tuple[list, str | None]:
+        """Busca noticias por acao, empresa ou palavra-chave."""
+        return self._noticias.pesquisar(termo)
+
+    def traduzir_noticias_para_portugues(
+        self, noticias: list
+    ) -> tuple[dict[str, tuple[str, str]], str | None]:
+        """Traduz titulo e resumo das noticias para exibicao em portugues."""
+        return self._traducao_noticias.traduzir_lote(noticias)
 
     def obter_painel(self, quantidade: int = QUANTIDADE_PADRAO_PAINEL) -> dict:
         return {

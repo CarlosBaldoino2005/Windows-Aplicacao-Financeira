@@ -6,7 +6,9 @@ from pathlib import Path
 
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
 from src.Tool.registrador_log import RegistradorLog
+from src.Model.opcoes_fotos_noticias import FOTOS_PADRAO, OpcoesFotosNoticias
 from src.Tool.validadores import (
+    validar_fotos_noticias,
     validar_modo_aparencia,
     validar_quantidade_acoes,
     validar_quantidade_cotas,
@@ -17,6 +19,7 @@ SECAO_PAINEL = "PAINEL"
 CHAVE_QUANTIDADE_ACOES = "quantidade_acoes"
 CHAVE_QUANTIDADE_COTAS_GRAFICO = "quantidade_cotas_grafico"
 CHAVE_MODO_APARENCIA = "modo_aparencia"
+CHAVE_FOTOS_NOTICIAS = "fotos_noticias"
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 NOME_ARQUIVO = "painel.ini"
 
@@ -43,6 +46,30 @@ class ConfigPainelIni:
 
     def padrao_modo_aparencia(self) -> str:
         return MODO_PADRAO
+
+    def padrao_fotos_noticias(self) -> str:
+        return FOTOS_PADRAO
+
+    def carregar_fotos_noticias(self) -> str:
+        """Tamanho das miniaturas nas noticias: nenhum, pequeno, medio ou grande."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_FOTOS_NOTICIAS in secao:
+            modo, _ = validar_fotos_noticias(secao.get(CHAVE_FOTOS_NOTICIAS, ""))
+            return modo
+        modo = self.padrao_fotos_noticias()
+        self.salvar_fotos_noticias(modo)
+        return modo
+
+    def carregar_opcoes_fotos_noticias(self) -> OpcoesFotosNoticias:
+        return OpcoesFotosNoticias.a_partir_modo(self.carregar_fotos_noticias())
+
+    def salvar_fotos_noticias(self, modo: str) -> None:
+        modo_ok, _ = validar_fotos_noticias(modo)
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_FOTOS_NOTICIAS] = modo_ok
+        self._gravar(parser)
 
     def carregar_modo_aparencia(self) -> str:
         """Modo visual: claro ou escuro."""
@@ -112,12 +139,14 @@ class ConfigPainelIni:
             self.salvar(self.padrao_painel())
             self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
             self.salvar_modo_aparencia(self.padrao_modo_aparencia())
+            self.salvar_fotos_noticias(self.padrao_fotos_noticias())
 
         parser = self._ler_parser()
         if SECAO_PAINEL not in parser:
             self.salvar(self.padrao_painel())
             self.salvar_quantidade_cotas_grafico(self.padrao_cotas_grafico())
             self.salvar_modo_aparencia(self.padrao_modo_aparencia())
+            self.salvar_fotos_noticias(self.padrao_fotos_noticias())
             parser = self._ler_parser()
 
         return dict(parser[SECAO_PAINEL])

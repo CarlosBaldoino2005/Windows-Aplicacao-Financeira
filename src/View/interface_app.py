@@ -12,6 +12,7 @@ from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.cotacao import CotacaoResumo
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
+from src.View.janela_noticias_mercado import JanelaNoticiasMercado
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
 from src.View.tabela_mercado_helper import (
@@ -39,6 +40,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_pesquisa: JanelaPesquisaAcao | None = None
         self._janela_favoritas: JanelaFavoritas | None = None
         self._janela_comparar: JanelaCompararAcoes | None = None
+        self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
@@ -151,7 +153,7 @@ class InterfaceApp(ctk.CTk):
 
         ctk.CTkLabel(
             card_acao,
-            text="Pesquise uma acao, gerencie favoritas ou compare o desempenho de varias acoes no mesmo periodo.",
+            text="Pesquise acoes, favoritos, comparacao e noticias do mercado em telas dedicadas.",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -183,6 +185,16 @@ class InterfaceApp(ctk.CTk):
             linha_botoes,
             text="Comparar acoes",
             command=self._abrir_janela_comparar_acoes,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=200,
+            height=36,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            linha_botoes,
+            text="Noticias do mercado",
+            command=self._abrir_janela_noticias,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=200,
@@ -366,6 +378,19 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_comparar = JanelaCompararAcoes(self, self._controlador)
+
+    def _abrir_janela_noticias(self) -> None:
+        """Abre (ou foca) a tela de noticias do mercado."""
+        if self._janela_noticias is not None:
+            try:
+                if self._janela_noticias.winfo_exists():
+                    self._janela_noticias.focus_force()
+                    self._janela_noticias.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_noticias = JanelaNoticiasMercado(self, self._controlador)
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         def trabalho():

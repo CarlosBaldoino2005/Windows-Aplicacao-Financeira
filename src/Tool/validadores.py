@@ -41,6 +41,40 @@ def validar_data_ptbr(texto: str) -> tuple[datetime | None, str | None]:
     return data, None
 
 
+def validar_fotos_noticias(texto: str) -> tuple[str, str | None]:
+    """Valida tamanho das fotos nas noticias: nenhum, pequeno, medio ou grande."""
+    from src.Model.opcoes_fotos_noticias import (
+        FOTOS_GRANDE,
+        FOTOS_MEDIO,
+        FOTOS_NENHUM,
+        FOTOS_PADRAO,
+        FOTOS_PEQUENO,
+    )
+
+    if not texto or not str(texto).strip():
+        return FOTOS_PADRAO, None
+
+    limpo = str(texto).strip().lower()
+    mapa = {
+        "nenhum": FOTOS_NENHUM,
+        "nao": FOTOS_NENHUM,
+        "não": FOTOS_NENHUM,
+        "off": FOTOS_NENHUM,
+        "pequeno": FOTOS_PEQUENO,
+        "pequena": FOTOS_PEQUENO,
+        "medio": FOTOS_MEDIO,
+        "médio": FOTOS_MEDIO,
+        "media": FOTOS_MEDIO,
+        "grande": FOTOS_GRANDE,
+    }
+    if limpo in mapa:
+        return mapa[limpo], None
+    return (
+        FOTOS_PADRAO,
+        "Valor invalido para fotos_noticias. Use: nenhum, pequeno, medio ou grande.",
+    )
+
+
 def validar_modo_aparencia(texto: str) -> tuple[str, str | None]:
     """Valida modo claro ou escuro para o INI."""
     from src.View.tema import normalizar_modo_aparencia
