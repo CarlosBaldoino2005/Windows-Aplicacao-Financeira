@@ -1,0 +1,111 @@
+"""Validadores reutilizaveis para entradas da API e da interface."""
+import re
+from datetime import datetime
+
+from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
+
+
+_FORMATO_DATA = "%d/%m/%Y"
+_PADRAO_SIMBOLO = re.compile(r"^[A-Za-z0-9.\-^]{1,20}$")
+
+
+def normalizar_simbolo(simbolo: str) -> tuple[str | None, str | None]:
+    """
+    Valida e normaliza ticker (ex.: PETR4 -> PETR4.SA para B3).
+    Retorna (simbolo_ok, mensagem_erro).
+    """
+    if not simbolo or not simbolo.strip():
+        return None, "Informe o codigo da acao (ex.: PETR4 ou AAPL)."
+
+    limpo = simbolo.strip().upper()
+    if not _PADRAO_SIMBOLO.match(limpo):
+        return None, "Codigo invalido. Use apenas letras, numeros e ponto."
+
+    # Acoes brasileiras sem sufixo recebem .SA automaticamente.
+    if "." not in limpo and re.match(r"^[A-Z]{4}\d{1,2}$", limpo):
+        limpo = f"{limpo}.SA"
+
+    return limpo, None
+
+
+def validar_data_ptbr(texto: str) -> tuple[datetime | None, str | None]:
+    """Valida data no formato dd/mm/aaaa."""
+    if not texto or not texto.strip():
+        return None, "Informe a data no formato dd/mm/aaaa."
+
+    try:
+        data = datetime.strptime(texto.strip(), _FORMATO_DATA)
+    except ValueError:
+        return None, "Data invalida. Use o formato dd/mm/aaaa (ex.: 02/06/2026)."
+
+    return data, None
+
+
+def validar_lista_simbolos(simbolos: list[str], maximo: int = 6) -> tuple[list[str], str | None]:
+    """Valida lista de tickers para comparacao."""
+    if not simbolos:
+        return [], "Selecione ao menos duas acoes para comparar."
+
+    normalizados: list[str] = []
+    for item in simbolos:
+        ok, erro = normalizar_simbolo(item)
+        if erro:
+            return [], erro
+        if ok and ok not in normalizados:
+            normalizados.append(ok)
+
+    if len(normalizados) < 2:
+        return [], "Informe pelo menos duas acoes diferentes para comparar."
+
+    if len(normalizados) > maximo:
+        return [], f"Maximo de {maximo} acoes por comparacao."
+
+    return normalizados, None
+
+
+def validar_quantidade_acoes(
+    texto: str,
+    padrao: int = QUANTIDADE_PADRAO_PAINEL,
+    minimo: int = 1,
+    maximo: int = 100,
+) -> tuple[int | None, str | None]:
+    """Valida quantidade de acoes exibidas no painel (numero inteiro)."""
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    limpo = str(texto).strip()
+    if not limpo.isdigit():
+        return None, "Informe apenas numeros na quantidade de acoes."
+
+    valor = int(limpo)
+    if valor < minimo:
+        return None, f"A quantidade minima e {minimo} acao."
+
+    if valor > maximo:
+        return None, f"A quantidade maxima e {maximo} acoes."
+
+    return valor, None
+
+
+def validar_quantidade_cotas(
+    texto: str,
+    padrao: int = 100,
+    minimo: int = 1,
+    maximo: int = 9_999_999,
+) -> tuple[int | None, str | None]:
+    """Valida quantidade de acoes/cotas para simulacao de investimento no grafico."""
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    limpo = str(texto).strip().replace(".", "").replace(",", "")
+    if not limpo.isdigit():
+        return None, "Informe apenas numeros na quantidade de acoes."
+
+    valor = int(limpo)
+    if valor < minimo:
+        return None, f"A quantidade minima e {minimo} acao."
+
+    if valor > maximo:
+        return None, "Informe no maximo {maximo:,} acoes.".replace(",", ".")
+
+    return valor, None

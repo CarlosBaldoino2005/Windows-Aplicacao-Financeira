@@ -1,0 +1,61 @@
+{
+  "versao": "1.0.0",
+  "cores": {
+    "primaria": "#2563EB",
+    "primariaHover": "#1D4ED8",
+    "primariaActive": "#1E40AF",
+    "secundaria": "#64748B",
+    "fundo": "#F8FAFC",
+    "superficie": "#FFFFFF",
+    "borda": "#E2E8F0",
+    "texto": "#0F172A",
+    "textoSecundario": "#64748B",
+    "textoInverso": "#FFFFFF",
+    "sucesso": "#16A34A",
+    "sucessoFundo": "#F0FDF4",
+    "aviso": "#D97706",
+    "avisoFundo": "#FFFBEB",
+    "erro": "#DC2626",
+    "erroFundo": "#FEF2F2",
+    "info": "#2563EB",
+    "infoFundo": "#EFF6FF",
+    "selecao": "#2563EB",
+    "selecaoTexto": "#FFFFFF",
+    "zebraClara": "#FFFFFF",
+    "zebraEscura": "#F1F5F9"
+  },
+  "tipografia": {
+    "familia": "Segoe UI, system-ui, -apple-system, sans-serif",
+    "tamanhoBase": "14px",
+    "tituloPagina": "24px",
+    "tituloSecao": "18px",
+    "subtitulo": "16px",
+    "corpo": "14px",
+    "legenda": "12px",
+    "pesoNormal": 400,
+    "pesoMedio": 500,
+    "pesoTitulo": 600
+  },
+  "espacamento": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px",
+    "xxl": "48px"
+  },
+  "borda": {
+    "raioSm": "4px",
+    "raioMd": "8px",
+    "raioLg": "12px",
+    "largura": "1px"
+  },
+  "sombra": {
+    "card": "0 1px 3px rgba(15, 23, 42, 0.08)",
+    "elevada": "0 4px 12px rgba(15, 23, 42, 0.12)"
+  },
+  "transicao": {
+    "rapida": "150ms ease",
+    "padrao": "200ms ease"
+  }
+}
