@@ -16,6 +16,7 @@ from src.View.formatadores import (
     formatar_texto_opcional,
     formatar_variacao,
 )
+from src.View.janela_pesquisa_noticias import JanelaPesquisaNoticias
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
 from src.View.tema import CORES
 
@@ -47,6 +48,8 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._nomes_abas = NOMES_ABAS_CRIPTO if self._modo_cripto else NOMES_ABAS_ACAO
         self._frames_por_aba: dict[str, ctk.CTkFrame] = {}
         self._botoes_aba: dict[str, ctk.CTkButton] = {}
+        self._detalhes: DetalhesAcao | None = None
+        self._janela_noticias: JanelaPesquisaNoticias | None = None
 
         codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Mais detalhes — {codigo}")
@@ -55,7 +58,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
 
         self._montar_interface()
         configurar_janela_maximizada(self)
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(150, self._carregar_dados)
 
@@ -111,11 +114,56 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         rodape.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
         ctk.CTkButton(
             rodape,
+            text="Noticias",
+            command=self._abrir_noticias,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=120,
+        ).pack(side="left")
+        ctk.CTkButton(
+            rodape,
             text="Fechar",
-            command=self.destroy,
+            command=self._ao_fechar,
             fg_color=CORES["secundaria"],
             width=120,
         ).pack(side="right")
+
+    def _ao_fechar(self) -> None:
+        if self._janela_noticias is not None:
+            try:
+                if self._janela_noticias.winfo_exists():
+                    self._janela_noticias.destroy()
+            except Exception:
+                pass
+        self.destroy()
+
+    def _termo_busca_noticias(self) -> str:
+        if self._detalhes and self._detalhes.codigo:
+            return self._detalhes.codigo.strip()
+        return self._simbolo.replace(".SA", "").replace("-USD", "").strip()
+
+    def _abrir_noticias(self) -> None:
+        if self._janela_noticias is not None:
+            try:
+                if self._janela_noticias.winfo_exists():
+                    self._janela_noticias.focus_force()
+                    self._janela_noticias.lift()
+                    return
+            except Exception:
+                pass
+
+        termo = self._termo_busca_noticias()
+        if len(termo) < 2:
+            termo = self._simbolo.replace(".SA", "").replace("-USD", "")
+        titulo = f"Noticias — {termo}"
+        self._janela_noticias = JanelaPesquisaNoticias(
+            self,
+            self._controlador,
+            modo_cripto=self._modo_cripto,
+            termo_inicial=termo,
+            titulo_personalizado=titulo,
+            buscar_ao_abrir=True,
+        )
 
     def _montar_barra_abas(self, pai: ctk.CTkFrame) -> None:
         grade = ctk.CTkFrame(pai, fg_color=CORES["borda"], corner_radius=10)
@@ -196,6 +244,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._executar_em_thread(buscar, ao_concluir)
 
     def _preencher_tela(self, dados: DetalhesAcao) -> None:
+        self._detalhes = dados
         titulo = f"{dados.codigo} — {dados.nome_empresa}"
         self._label_titulo.configure(text=titulo)
 

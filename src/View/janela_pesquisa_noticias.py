@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import threading
 from tkinter import messagebox
+from typing import Any
 
 import customtkinter as ctk
 
-from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.noticia_mercado import NoticiaMercado
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
@@ -30,20 +30,31 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
     def __init__(
         self,
         pai: ctk.CTkToplevel,
-        controlador: ControladorMercado,
+        controlador: Any,
         modo_cripto: bool = False,
+        termo_inicial: str | None = None,
+        titulo_personalizado: str | None = None,
+        buscar_ao_abrir: bool = False,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._modo_cripto = modo_cripto
+        self._termo_inicial = (termo_inicial or "").strip()
+        self._buscar_ao_abrir = buscar_ao_abrir and len(self._termo_inicial) >= 2
         self._noticias: list[NoticiaMercado] = []
         self._termo_atual = ""
         self._idioma: ControladorExibicaoNoticiasIdioma | None = None
         self._config_painel = ConfigPainelIni()
 
-        self.title(
-            "Pesquisar noticias de cripto" if modo_cripto else "Pesquisar noticias"
-        )
+        if titulo_personalizado:
+            titulo_janela = titulo_personalizado
+        elif self._termo_inicial:
+            titulo_janela = f"Noticias — {self._termo_inicial}"
+        else:
+            titulo_janela = (
+                "Pesquisar noticias de cripto" if modo_cripto else "Pesquisar noticias"
+            )
+        self.title(titulo_janela)
         self.configure(fg_color=CORES["fundo"])
         self.minsize(880, 600)
 
@@ -52,24 +63,38 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.transient(pai)
         self.focus_force()
+        if self._buscar_ao_abrir:
+            self.after(200, lambda: self._executar_pesquisa(self._termo_inicial))
 
     def _montar_interface(self) -> None:
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         cabecalho.pack(fill="x")
 
+        titulo_cabecalho = (
+            f"Noticias — {self._termo_inicial}"
+            if self._termo_inicial
+            else "Pesquisar noticias"
+        )
         ctk.CTkLabel(
             cabecalho,
-            text="Pesquisar noticias",
+            text=titulo_cabecalho,
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
 
-        ctk.CTkLabel(
-            cabecalho,
-            text=(
+        texto_ajuda = (
+            f"Noticias relacionadas a {self._termo_inicial}. "
+            "Voce pode alterar o termo e pesquisar de novo. "
+            "Use a lista para ver no idioma original ou traduzido para portugues."
+            if self._termo_inicial
+            else (
                 "Digite codigo (PETR4, AAPL), nome da empresa (Vale, Apple) "
                 "ou assunto. Use a lista para ver original ou traduzido para portugues."
-            ),
+            )
+        )
+        ctk.CTkLabel(
+            cabecalho,
+            text=texto_ajuda,
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=900,
@@ -90,12 +115,14 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             ),
         )
         self._entrada_busca.pack(side="left", padx=(0, 8))
+        if self._termo_inicial:
+            self._entrada_busca.insert(0, self._termo_inicial)
         self._entrada_busca.bind("<Return>", lambda _e: self._executar_pesquisa())
 
         ctk.CTkButton(
             linha_busca,
             text="Pesquisar",
-            command=self._executar_pesquisa,
+            command=lambda: self._executar_pesquisa(),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=120,
@@ -104,9 +131,14 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
         barra_status = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra_status.pack(fill="x", padx=16, pady=(0, 12))
 
+        texto_status_inicial = (
+            f"Buscando noticias sobre \"{self._termo_inicial}\"..."
+            if self._buscar_ao_abrir
+            else "Informe o termo e clique em Pesquisar."
+        )
         self._label_status = ctk.CTkLabel(
             barra_status,
-            text="Informe o termo e clique em Pesquisar.",
+            text=texto_status_inicial,
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=500,
@@ -134,11 +166,12 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             lambda: self._idioma.reexibir_apos_atualizar_lista() if self._idioma else None,
         )
 
-        exibir_mensagem_lista(
-            self._lista,
-            "Os resultados aparecerao aqui apos a pesquisa.",
-            self,
-        )
+        if not self._buscar_ao_abrir:
+            exibir_mensagem_lista(
+                self._lista,
+                "Os resultados aparecerao aqui apos a pesquisa.",
+                self,
+            )
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
         rodape.pack(fill="x", padx=16, pady=(0, 12))
@@ -160,8 +193,8 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
 
         threading.Thread(target=trabalho, daemon=True).start()
 
-    def _executar_pesquisa(self) -> None:
-        termo = self._entrada_busca.get().strip()
+    def _executar_pesquisa(self, termo_opcional: str | None = None) -> None:
+        termo = (termo_opcional or self._entrada_busca.get()).strip()
         if len(termo) < 2:
             messagebox.showwarning(
                 "Pesquisar",
