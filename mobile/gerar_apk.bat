@@ -1,9 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-cd /d "%~dp0financeiro_app"
-
+set ORIGEM=%~dp0financeiro_app
 set FLUTTER=C:\src\flutter\bin\flutter.bat
+set WORK_TEMP=C:\temp\financeiro_apk_work
+set PROJETO=%WORK_TEMP%\financeiro_app
 
 if not exist "%FLUTTER%" (
     echo Flutter nao encontrado. Execute primeiro:
@@ -40,7 +41,7 @@ if not defined JAVA_HOME (
 
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 
-REM --- Android SDK ---
+REM --- Android SDK e Gradle fora do OneDrive ---
 if not defined ANDROID_HOME (
     if exist "C:\Android\Sdk\platform-tools\adb.exe" (
         set "ANDROID_HOME=C:\Android\Sdk"
@@ -50,6 +51,24 @@ if defined ANDROID_HOME (
     set "ANDROID_SDK_ROOT=%ANDROID_HOME%"
     set "PATH=%ANDROID_HOME%\platform-tools;%PATH%"
 )
+set "GRADLE_USER_HOME=C:\temp\financeiro_gradle_user"
+
+if not exist "%WORK_TEMP%" mkdir "%WORK_TEMP%"
+
+echo.
+echo Projeto no OneDrive trava o Gradle. Copiando para build local...
+echo Origem: %ORIGEM%
+echo Build:  %PROJETO%
+echo.
+
+robocopy "%ORIGEM%" "%PROJETO%" /E /XD build .dart_tool android\.gradle android\app\build ios\Flutter\ephemeral macos\Flutter\ephemeral linux\flutter\ephemeral windows\flutter\ephemeral /NFL /NDL /NJH /NJS /nc /ns /np >nul
+if errorlevel 8 (
+    echo Falha ao copiar projeto para %PROJETO%
+    pause
+    exit /b 1
+)
+
+cd /d "%PROJETO%"
 
 if not exist "android\app\build.gradle.kts" if not exist "android\app\build.gradle" (
     echo Gerando pastas Android...
@@ -57,10 +76,16 @@ if not exist "android\app\build.gradle.kts" if not exist "android\app\build.grad
 )
 
 call "%FLUTTER%" pub get
+if errorlevel 1 (
+    echo Falha no pub get.
+    pause
+    exit /b 1
+)
 
 echo.
 echo JAVA_HOME=%JAVA_HOME%
 if defined ANDROID_HOME echo ANDROID_HOME=%ANDROID_HOME%
+echo GRADLE_USER_HOME=%GRADLE_USER_HOME%
 echo.
 
 "%JAVA_HOME%\bin\java.exe" -version 2>&1
@@ -78,14 +103,20 @@ call "%FLUTTER%" build apk --release
 
 if errorlevel 1 (
     echo.
-    echo Falha no build.
-    echo Verifique: JAVA_HOME, Android SDK e licencas:
-    echo   flutter doctor --android-licenses
+    echo Falha no build. Verifique: flutter doctor --android-licenses
     pause
     exit /b 1
 )
 
+set APK_BUILD=%PROJETO%\build\app\outputs\flutter-apk\app-release.apk
+set APK_DEST=%ORIGEM%\build\app\outputs\flutter-apk
+if not exist "%APK_DEST%" mkdir "%APK_DEST%"
+copy /Y "%APK_BUILD%" "%APK_DEST%\" >nul
+
 echo.
 echo APK gerado em:
-echo %cd%\build\app\outputs\flutter-apk\app-release.apk
+echo %APK_BUILD%
+echo.
+echo Copia no projeto (OneDrive):
+echo %APK_DEST%\app-release.apk
 pause
