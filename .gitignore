@@ -23,3 +23,8 @@ dist/
 build/
 .cache/
 node_modules/
+mobile/**/build/
+mobile/**/.dart_tool/
+mobile/**/.flutter-plugins-dependencies
+mobile/**/android/.gradle/
+mobile/**/ios/Pods/

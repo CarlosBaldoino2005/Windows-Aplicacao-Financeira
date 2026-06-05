@@ -1,0 +1,15 @@
+# Deploy gratuito no Render: https://render.com
+# Conecte o repositorio GitHub e use este Blueprint ou crie Web Service manualmente.
+services:
+  - type: web
+    name: financeiro-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/saude
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: FINANCEIRO_API_KEY
+        generateValue: true
+      - key: FINANCEIRO_CORS_ORIGENS
+        value: "*"
