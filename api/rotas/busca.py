@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.dependencias import obter_controlador_mercado
+from api.dependencias import obter_busca_servico
 from api.serializadores import busca_para_dict
 
 router = APIRouter(prefix="/busca", tags=["Busca"])
@@ -15,8 +15,8 @@ def buscar_acoes(
     limite: int = Query(default=12, ge=1, le=30),
 ) -> dict:
     """Busca acoes por termo (local + Yahoo)."""
-    controlador = obter_controlador_mercado()
-    resultados, erro = controlador.pesquisar_acoes(q.strip())
+    servico = obter_busca_servico()
+    resultados, erro = servico.buscar(q.strip())
     if erro and not resultados:
         raise HTTPException(status_code=400, detail=erro)
 

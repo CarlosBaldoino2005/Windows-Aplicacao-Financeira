@@ -1,0 +1,6 @@
+# Dependencias da API no Docker/Render (sem GUI desktop)
+yfinance>=1.4.0
+Pillow>=10.0.0
+deep-translator>=1.11.4
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
