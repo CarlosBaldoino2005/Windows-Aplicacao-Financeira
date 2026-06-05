@@ -18,6 +18,8 @@ from src.Tool.detalhes_financeiros_helper import (
     extrair_linhas_demonstrativo,
     extrair_periodos_resultado,
 )
+from src.Tool.calculos_indicadores_helper import ContextoCalculoIndicador, montar_calculos_indicadores
+from src.Tool.opinioes_analistas_helper import montar_opinioes_analistas, traduzir_nota_analista
 from src.Tool.registrador_log import RegistradorLog
 from src.View.formatadores import formatar_moeda, formatar_numero_grande, formatar_percentual
 
@@ -65,6 +67,8 @@ class DetalhesAcaoServico:
         detalhes = self._montar_de_info_yahoo(simbolo, info)
         self._preencher_demonstrativos_yfinance(ticker, detalhes)
         self._preencher_dividendos_pagos(simbolo, detalhes)
+        self._preencher_opinioes_analistas(ticker, detalhes)
+        self._preencher_calculos_indicadores(detalhes, info)  # apos dividendos (ultimo dividendo)
         detalhes.concorrentes = self._buscar_concorrentes(
             simbolo,
             detalhes.codigo,
@@ -76,14 +80,23 @@ class DetalhesAcaoServico:
 
     def _tentar_backups(self, simbolo: str) -> tuple[DetalhesAcao | None, str]:
         if eh_acao_b3(simbolo):
-            detalhes = self._montar_de_brapi(simbolo)
+            detalhes, info_fonte = self._montar_de_brapi(simbolo)
             if detalhes:
                 self._preencher_dividendos_pagos(simbolo, detalhes)
+                self._preencher_calculos_indicadores(
+                    detalhes,
+                    info_fonte,
+                    ContextoCalculoIndicador(
+                        preco=detalhes.preco_atual,
+                        variacao_pct=detalhes.variacao_dia_pct,
+                    ),
+                )
                 return detalhes, "Brapi"
 
-        detalhes = self._montar_de_yahoo_chart(simbolo)
+        detalhes, info_fonte, contexto_fonte = self._montar_de_yahoo_chart(simbolo)
         if detalhes:
             self._preencher_dividendos_pagos(simbolo, detalhes)
+            self._preencher_calculos_indicadores(detalhes, info_fonte, contexto_fonte)
             return detalhes, "Yahoo Chart API"
 
         return None, ""
@@ -109,10 +122,10 @@ class DetalhesAcaoServico:
         preencher_cadastro_empresa_de_yahoo(detalhes, info)
         return detalhes
 
-    def _montar_de_brapi(self, simbolo: str) -> DetalhesAcao | None:
+    def _montar_de_brapi(self, simbolo: str) -> tuple[DetalhesAcao | None, dict]:
         dados = self._brapi.buscar_cotacao_detalhe(simbolo)
         if not dados or not dados.get("results"):
-            return None
+            return None, {}
 
         item = dados["results"][0]
         codigo = simbolo.replace(".SA", "")
@@ -141,6 +154,12 @@ class DetalhesAcaoServico:
             indicadores.append(("Capitalizacao", formatar_numero_grande(float(item["marketCap"]), moeda)))
         if item.get("priceEarnings"):
             indicadores.append(("P/L", f"{float(item['priceEarnings']):.2f}"))
+        texto_p_vpa = _formatar_p_vpa(item, preco)
+        if texto_p_vpa:
+            indicadores.append(("P/VPA", texto_p_vpa))
+        vpa = _float_opcional(item.get("bookValue"))
+        if vpa is not None:
+            indicadores.append(("VPA", formatar_moeda(vpa, moeda)))
         if item.get("earningsPerShare"):
             indicadores.append(("Lucro por acao", formatar_moeda(float(item["earningsPerShare"]), moeda)))
         if variacao_pct is not None:
@@ -153,27 +172,31 @@ class DetalhesAcaoServico:
         detalhes.indicadores = indicadores
         detalhes.concorrentes = self._buscar_concorrentes(simbolo, codigo, detalhes.industria, detalhes.setor)
         self._complementar_avisos(detalhes)
-        return detalhes
+        return detalhes, item
 
-    def _montar_de_yahoo_chart(self, simbolo: str) -> DetalhesAcao | None:
+    def _montar_de_yahoo_chart(
+        self,
+        simbolo: str,
+    ) -> tuple[DetalhesAcao | None, dict, ContextoCalculoIndicador | None]:
         meta = self._yahoo_chart.buscar_meta(simbolo)
         resumo = self._cadeia.buscar_resumos([simbolo])
         if not meta and not resumo:
-            return None
+            return None, {}, None
 
         codigo = simbolo.replace(".SA", "")
         moeda = "BRL" if simbolo.endswith(".SA") else "USD"
         nome = codigo
         preco = None
         variacao_pct = None
+        preco_anterior = None
 
         if meta:
             moeda = str(meta.get("currency") or moeda)
             nome = str(meta.get("longName") or meta.get("shortName") or codigo)
             preco = _float_opcional(meta.get("regularMarketPrice"))
-            anterior = _float_opcional(meta.get("chartPreviousClose") or meta.get("previousClose"))
-            if preco is not None and anterior:
-                variacao_pct = round(((preco - anterior) / anterior) * 100, 2) if anterior else 0.0
+            preco_anterior = _float_opcional(meta.get("chartPreviousClose") or meta.get("previousClose"))
+            if preco is not None and preco_anterior:
+                variacao_pct = round(((preco - preco_anterior) / preco_anterior) * 100, 2)
 
         if resumo:
             item = resumo[0]
@@ -195,30 +218,49 @@ class DetalhesAcaoServico:
             if variacao_pct is not None:
                 detalhes.indicadores.append(("Variacao do dia", f"{variacao_pct:.2f}%"))
 
+        contexto = ContextoCalculoIndicador(
+            preco=preco,
+            variacao_pct=variacao_pct,
+            preco_anterior=preco_anterior,
+        )
         detalhes.concorrentes = self._buscar_concorrentes(simbolo, codigo, detalhes.industria, detalhes.setor)
         self._complementar_avisos(detalhes)
-        return detalhes
+        return detalhes, meta or {}, contexto
 
     def _montar_indicadores(self, info: dict, moeda: str) -> list[tuple[str, str]]:
         campos = [
             ("Preco atual", "regularMarketPrice", lambda v: formatar_moeda(float(v), moeda)),
+            ("Variacao do dia", "regularMarketChangePercent", lambda v: f"{float(v):.2f}%"),
             ("Capitalizacao", "marketCap", lambda v: formatar_numero_grande(float(v), moeda)),
+            ("Valor da empresa", "enterpriseValue", lambda v: formatar_numero_grande(float(v), moeda)),
             ("Receita (TTM)", "totalRevenue", lambda v: formatar_numero_grande(float(v), moeda)),
             ("Lucro liquido (TTM)", "netIncomeToCommon", lambda v: formatar_numero_grande(float(v), moeda)),
             ("EBITDA", "ebitda", lambda v: formatar_numero_grande(float(v), moeda)),
+            ("Margem bruta", "grossMargins", formatar_percentual),
             ("Margem de lucro", "profitMargins", formatar_percentual),
             ("Margem operacional", "operatingMargins", formatar_percentual),
             ("ROE", "returnOnEquity", formatar_percentual),
+            ("ROA", "returnOnAssets", formatar_percentual),
             ("P/L (trailing)", "trailingPE", lambda v: f"{float(v):.2f}"),
             ("P/L (forward)", "forwardPE", lambda v: f"{float(v):.2f}"),
+            ("Lucro por acao", "trailingEps", lambda v: formatar_moeda(float(v), moeda)),
+            ("P/Vendas", "priceToSalesTrailing12Months", lambda v: f"{float(v):.2f}"),
+            ("PEG", "pegRatio", lambda v: f"{float(v):.2f}"),
             ("Dividend yield", "dividendYield", _formatar_dividend_yield),
+            ("Payout dividendos", "payoutRatio", formatar_percentual),
             ("Beta", "beta", lambda v: f"{float(v):.2f}"),
             ("Divida/Patrimonio", "debtToEquity", lambda v: f"{float(v):.2f}"),
             ("Liquidez corrente", "currentRatio", lambda v: f"{float(v):.2f}"),
+            ("Liquidez seca", "quickRatio", lambda v: f"{float(v):.2f}"),
+            ("Variacao 52 semanas", "52WeekChange", formatar_percentual),
+            ("Volume do dia", "regularMarketVolume", _formatar_quantidade_grande),
+            ("Volume medio", "averageVolume", _formatar_quantidade_grande),
             ("Max. 52 semanas", "fiftyTwoWeekHigh", lambda v: formatar_moeda(float(v), moeda)),
             ("Min. 52 semanas", "fiftyTwoWeekLow", lambda v: formatar_moeda(float(v), moeda)),
-            ("Recomendacao analistas", "recommendationKey", str),
+            ("Preco alvo medio", "targetMeanPrice", lambda v: formatar_moeda(float(v), moeda)),
+            ("Recomendacao analistas", "recommendationKey", traduzir_nota_analista),
             ("Opinioes de analistas", "numberOfAnalystOpinions", str),
+            ("Acoes em circulacao", "sharesOutstanding", _formatar_quantidade_grande),
             ("Setor", "sector", str),
             ("Industria", "industry", str),
             ("Funcionarios", "fullTimeEmployees", lambda v: f"{int(v):,}".replace(",", ".")),
@@ -234,7 +276,67 @@ class DetalhesAcaoServico:
             except (TypeError, ValueError):
                 texto = str(valor)
             indicadores.append((rotulo, texto))
+
+        texto_p_vpa = _formatar_p_vpa(
+            info,
+            _float_opcional(info.get("regularMarketPrice") or info.get("currentPrice")),
+        )
+        if texto_p_vpa:
+            if any(rotulo == "P/L (forward)" for rotulo, _ in indicadores):
+                _inserir_indicador_apos(indicadores, "P/L (forward)", ("P/VPA", texto_p_vpa))
+            elif any(rotulo == "P/L (trailing)" for rotulo, _ in indicadores):
+                _inserir_indicador_apos(indicadores, "P/L (trailing)", ("P/VPA", texto_p_vpa))
+            else:
+                indicadores.append(("P/VPA", texto_p_vpa))
+
+        vpa = _float_opcional(info.get("bookValue"))
+        if vpa is not None:
+            if any(rotulo == "P/VPA" for rotulo, _ in indicadores):
+                _inserir_indicador_apos(indicadores, "P/VPA", ("VPA", formatar_moeda(vpa, moeda)))
+            else:
+                indicadores.append(("VPA", formatar_moeda(vpa, moeda)))
+
         return indicadores
+
+    def _preencher_calculos_indicadores(
+        self,
+        detalhes: DetalhesAcao,
+        info: dict,
+        contexto: ContextoCalculoIndicador | None = None,
+    ) -> None:
+        rotulos = {rotulo for rotulo, _ in detalhes.indicadores}
+        if not rotulos:
+            detalhes.calculos_indicadores = {}
+            return
+
+        ctx = contexto or ContextoCalculoIndicador(
+            preco=detalhes.preco_atual,
+            variacao_pct=detalhes.variacao_dia_pct,
+        )
+        if detalhes.pagamentos_dividendos:
+            ultimo = detalhes.pagamentos_dividendos[0]
+            ctx.ultimo_dividendo_valor = ultimo.valor_por_cota
+            ctx.ultimo_dividendo_data = ultimo.data_pagamento
+
+        detalhes.calculos_indicadores = montar_calculos_indicadores(
+            info,
+            detalhes.moeda,
+            rotulos,
+            ctx,
+        )
+
+    def _preencher_opinioes_analistas(self, ticker, detalhes: DetalhesAcao) -> None:
+        if detalhes.eh_cripto:
+            return
+        try:
+            detalhes.opinioes_analistas = montar_opinioes_analistas(
+                detalhes.simbolo,
+                detalhes.nome_empresa,
+                detalhes.moeda,
+                ticker=ticker,
+            )
+        except Exception as exc:
+            self._log.aviso(f"Opinioes de analistas indisponiveis para {detalhes.simbolo}: {exc}")
 
     def _preencher_dividendos_pagos(self, simbolo: str, detalhes: DetalhesAcao) -> None:
         if simbolo.endswith("-USD"):
@@ -309,6 +411,44 @@ class DetalhesAcaoServico:
                 "Demonstrativos trimestrais/anuais limitados para este ativo. "
                 "Exibimos indicadores agregados quando existirem."
             )
+
+
+def _formatar_p_vpa(info: dict, preco: float | None = None) -> str | None:
+    """Preco sobre valor patrimonial por acao (P/VPA), via Yahoo ou preco / VPA."""
+    valor = info.get("priceToBook")
+    if valor is not None and valor != "":
+        try:
+            return f"{float(valor):.2f}"
+        except (TypeError, ValueError):
+            pass
+
+    vpa = _float_opcional(info.get("bookValue"))
+    preco_calc = preco if preco is not None else _float_opcional(
+        info.get("regularMarketPrice") or info.get("currentPrice")
+    )
+    if preco_calc is not None and vpa is not None and vpa != 0:
+        return f"{preco_calc / vpa:.2f}"
+    return None
+
+
+def _inserir_indicador_apos(
+    indicadores: list[tuple[str, str]],
+    rotulo_referencia: str,
+    novo: tuple[str, str],
+) -> None:
+    for indice, (rotulo, _) in enumerate(indicadores):
+        if rotulo == rotulo_referencia:
+            indicadores.insert(indice + 1, novo)
+            return
+
+
+def _formatar_quantidade_grande(valor) -> str:
+    """Formata volume ou quantidade de papeis para exibicao em pt-BR."""
+    try:
+        numero = int(float(valor))
+    except (TypeError, ValueError):
+        return str(valor)
+    return f"{numero:,}".replace(",", ".")
 
 
 def _formatar_dividend_yield(valor) -> str:

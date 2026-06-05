@@ -25,6 +25,11 @@ from src.View.explicacao_indicador_helper import (
     adicionar_botao_explicacao_indicador,
 )
 from src.View.janela_informacoes_empresa import JanelaInformacoesEmpresa
+from src.View.janela_opinioes_analistas import (
+    ROTULOS_INDICADORES_ANALISTAS,
+    abrir_janela_opinioes_analistas,
+    adicionar_botao_opinioes_analistas,
+)
 
 NOMES_ABAS_ACAO = (
     "Empresa",
@@ -59,6 +64,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._gerenciador_explicacoes = GerenciadorExplicacaoIndicadores()
         self._janela_info_empresa: JanelaInformacoesEmpresa | None = None
         self._janela_grafico: ctk.CTkToplevel | None = None
+        self._janela_opinioes_analistas: ctk.CTkToplevel | None = None
 
         codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Mais detalhes — {codigo}")
@@ -156,6 +162,12 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             try:
                 if self._janela_noticias.winfo_exists():
                     self._janela_noticias.destroy()
+            except Exception:
+                pass
+        if self._janela_opinioes_analistas is not None:
+            try:
+                if self._janela_opinioes_analistas.winfo_exists():
+                    self._janela_opinioes_analistas.destroy()
             except Exception:
                 pass
         self.destroy()
@@ -427,6 +439,24 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 pass
         self._janela_info_empresa = JanelaInformacoesEmpresa(self, self._detalhes)
 
+    def _abrir_opinioes_analistas(self) -> None:
+        if self._detalhes is None:
+            return
+        if self._janela_opinioes_analistas is not None:
+            try:
+                if self._janela_opinioes_analistas.winfo_exists():
+                    self._janela_opinioes_analistas.focus_force()
+                    return
+            except Exception:
+                pass
+        self._janela_opinioes_analistas = abrir_janela_opinioes_analistas(
+            self,
+            self._detalhes.simbolo,
+            self._detalhes.nome_empresa,
+            self._detalhes.moeda,
+            self._detalhes.opinioes_analistas,
+        )
+
     def _montar_aba_dividendos(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Dividendos"], fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
@@ -504,7 +534,10 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             scroll,
-            text="Clique no botao ? ao lado de cada indicador para ver o que ele significa.",
+            text=(
+                "Clique no botao ? ao lado de cada indicador para ver o que ele significa. "
+                "Nos indicadores com calculo, tambem mostramos os valores e a conta usada."
+            ),
             font=ctk.CTkFont(size=13),
             text_color=CORES["textoSecundario"],
             wraplength=900,
@@ -522,11 +555,13 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             card.grid(row=linha, column=coluna, padx=6, pady=6, sticky="nsew")
 
             explicacao = obter_explicacao_indicador(rotulo)
+            calculo = dados.calculos_indicadores.get(rotulo)
             adicionar_botao_explicacao_indicador(
                 card,
                 rotulo,
                 explicacao,
                 self._gerenciador_explicacoes,
+                calculo=calculo,
             )
 
             ctk.CTkLabel(
@@ -537,6 +572,9 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 wraplength=400,
                 justify="left",
             ).pack(anchor="w", padx=10, pady=(2, 10))
+
+            if rotulo in ROTULOS_INDICADORES_ANALISTAS and not dados.eh_cripto:
+                adicionar_botao_opinioes_analistas(card, self._abrir_opinioes_analistas)
 
     def _montar_aba_periodos(
         self,

@@ -26,8 +26,9 @@ class GerenciadorExplicacaoIndicadores:
         card: ctk.CTkFrame,
         rotulo: str,
         explicacao: str,
+        calculo: str | None = None,
     ) -> None:
-        if not explicacao.strip():
+        if not explicacao.strip() and not (calculo or "").strip():
             return
 
         if self._painel_aberto is not None:
@@ -60,15 +61,43 @@ class GerenciadorExplicacaoIndicadores:
             justify="left",
         ).pack(anchor="w", padx=10, pady=(8, 4))
 
-        ctk.CTkLabel(
-            painel,
-            text=explicacao,
-            font=ctk.CTkFont(size=13),
-            text_color=CORES["texto"],
-            wraplength=400,
-            justify="left",
-            anchor="w",
-        ).pack(anchor="w", padx=10, pady=(0, 8))
+        if explicacao.strip():
+            ctk.CTkLabel(
+                painel,
+                text="O que significa",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=CORES["textoSecundario"],
+                anchor="w",
+            ).pack(anchor="w", padx=10, pady=(0, 2))
+
+            ctk.CTkLabel(
+                painel,
+                text=explicacao,
+                font=ctk.CTkFont(size=13),
+                text_color=CORES["texto"],
+                wraplength=400,
+                justify="left",
+                anchor="w",
+            ).pack(anchor="w", padx=10, pady=(0, 8))
+
+        if calculo and calculo.strip():
+            ctk.CTkLabel(
+                painel,
+                text="Como foi calculado",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=CORES["textoSecundario"],
+                anchor="w",
+            ).pack(anchor="w", padx=10, pady=(4, 2))
+
+            ctk.CTkLabel(
+                painel,
+                text=calculo,
+                font=ctk.CTkFont(size=12),
+                text_color=CORES["texto"],
+                wraplength=400,
+                justify="left",
+                anchor="w",
+            ).pack(anchor="w", padx=10, pady=(0, 8))
 
         ctk.CTkButton(
             painel,
@@ -88,9 +117,10 @@ def adicionar_botao_explicacao_indicador(
     rotulo: str,
     explicacao: str,
     gerenciador: GerenciadorExplicacaoIndicadores,
+    calculo: str | None = None,
 ) -> None:
-    """Coloca botao pequeno no card; ao clicar, abre painel com a explicacao."""
-    if not explicacao.strip():
+    """Coloca botao pequeno no card; ao clicar, abre painel com explicacao e calculo."""
+    if not explicacao.strip() and not (calculo or "").strip():
         return
 
     linha_topo = ctk.CTkFrame(card, fg_color="transparent")
@@ -110,7 +140,7 @@ def adicionar_botao_explicacao_indicador(
         width=30,
         height=26,
         font=ctk.CTkFont(size=14, weight="bold"),
-        command=lambda: gerenciador.alternar(card, rotulo, explicacao),
+        command=lambda: gerenciador.alternar(card, rotulo, explicacao, calculo),
         fg_color=CORES["primaria"],
         hover_color=CORES["primariaHover"],
     ).pack(side="right")

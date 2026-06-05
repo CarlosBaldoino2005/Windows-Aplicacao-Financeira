@@ -28,6 +28,10 @@ EXPLICACOES_INDICADORES: dict[str, str] = {
         "Lucro operacional aproximado, antes de juros, impostos, depreciacao e amortizacao. "
         "Ajuda a comparar o desempenho do negocio principal, sem efeitos contabeis extras."
     ),
+    "Margem bruta": (
+        "Porcentagem da receita que sobrou apos o custo direto dos produtos ou servicos. "
+        "Mostra a eficiencia basica da operacao antes de despesas administrativas e impostos."
+    ),
     "Margem de lucro": (
         "Porcentagem do faturamento que virou lucro. "
         "Exemplo: 10% significa que, a cada R$ 100 vendidos, R$ 10 ficaram de lucro."
@@ -41,6 +45,11 @@ EXPLICACOES_INDICADORES: dict[str, str] = {
         "Mede quanto lucro a empresa gera com o dinheiro dos acionistas. "
         "Quanto maior, melhor costuma ser o aproveitamento do capital proprio."
     ),
+    "ROA": (
+        "Retorno sobre os ativos (Return on Assets). "
+        "Mede quanto lucro a empresa produz com tudo que possui (maquinas, estoques, caixa, etc.). "
+        "Ajuda a comparar a eficiencia do uso total dos recursos."
+    ),
     "P/L (trailing)": (
         "Preco dividido pelo lucro dos ultimos 12 meses. "
         "Indica quantos anos de lucro atual o mercado esta pagando no preco da acao. "
@@ -50,9 +59,30 @@ EXPLICACOES_INDICADORES: dict[str, str] = {
         "Preco dividido pelo lucro esperado para os proximos 12 meses. "
         "Usa estimativas de analistas sobre o futuro da empresa."
     ),
+    "P/VPA": (
+        "Preco da acao dividido pelo valor patrimonial por acao (VPA). "
+        "Compara o preco de mercado com o patrimonio contabil de cada acao. "
+        "Valores menores podem indicar acao mais barata em relacao ao patrimonio; "
+        "valores muito altos podem sinalizar expectativa de crescimento ou sobrevalorizacao."
+    ),
+    "VPA": (
+        "Valor patrimonial por acao: patrimonio liquido da empresa dividido pelo numero de acoes. "
+        "Representa quanto de patrimonio contabil cada acao possui. "
+        "O P/VPA compara o preco de mercado com esse valor."
+    ),
     "P/L": (
         "Preco da acao dividido pelo lucro por acao. "
         "Ajuda a comparar se a acao esta cara ou barata em relacao ao lucro que gera."
+    ),
+    "P/Vendas": (
+        "Preco da acao dividido pela receita por acao dos ultimos 12 meses. "
+        "Compara o valor de mercado com o faturamento da empresa. "
+        "Util para avaliar empresas que ainda nao tem lucro ou setores de alto crescimento."
+    ),
+    "PEG": (
+        "Relacao entre o P/L e a taxa de crescimento esperado do lucro. "
+        "Tenta ajustar o multiplo de lucro pela velocidade de crescimento da empresa. "
+        "Valores menores podem indicar crescimento com preco mais razoavel."
     ),
     "Lucro por acao": (
         "Lucro da empresa dividido pelo numero de acoes. "
@@ -62,6 +92,11 @@ EXPLICACOES_INDICADORES: dict[str, str] = {
         "Rendimento dos dividendos em relacao ao preco da acao (em %). "
         "Indica quanto a empresa pagou em proventos nos ultimos 12 meses, "
         "comparado ao preco atual — util para quem busca renda."
+    ),
+    "Payout dividendos": (
+        "Porcentagem do lucro distribuida aos acionistas como dividendos. "
+        "Mostra quanto da geracao de lucro a empresa repassa em proventos "
+        "em vez de reinvestir no negocio."
     ),
     "Ultimo dividendo pago": (
         "Valor e data do pagamento de proventos mais recente. "
@@ -78,6 +113,30 @@ EXPLICACOES_INDICADORES: dict[str, str] = {
     "Liquidez corrente": (
         "Capacidade de pagar contas de curto prazo com o que a empresa tem disponivel. "
         "Acima de 1, em geral, sugere que ha recursos suficientes para honrar obrigacoes proximas."
+    ),
+    "Liquidez seca": (
+        "Capacidade de pagar dividas de curto prazo sem depender da venda de estoques. "
+        "E mais rigorosa que a liquidez corrente e indica reserva financeira imediata."
+    ),
+    "Valor da empresa": (
+        "Valor total da empresa considerando capital de mercado e divida liquida (EV). "
+        "Representa quanto custaria, em teoria, adquirir toda a companhia e quitar suas dividas."
+    ),
+    "Volume do dia": (
+        "Quantidade de papeis negociados no pregão atual ou no ultimo dia de negociacao. "
+        "Volume alto costuma indicar maior liquidez e interesse dos investidores."
+    ),
+    "Volume medio": (
+        "Media de papeis negociados por dia em um periodo recente. "
+        "Serve para comparar se o volume de hoje esta acima ou abaixo do habitual."
+    ),
+    "Preco alvo medio": (
+        "Media das estimativas de preco futuro feitas por analistas de mercado. "
+        "E uma referencia de expectativa, nao uma garantia de que a acao atingira esse valor."
+    ),
+    "Acoes em circulacao": (
+        "Quantidade de acoes disponiveis para negociacao no mercado. "
+        "Influencia capitalizacao, liquidez e o calculo de lucro e dividendos por acao."
     ),
     "Max. 52 semanas": (
         "Maior preco atingido nos ultimos 12 meses. "
@@ -176,7 +235,7 @@ EXPLICACOES_INDICADORES: dict[str, str] = {
 
 _EXPLICACAO_PADRAO = (
     "Indicador financeiro relacionado ao desempenho, tamanho ou perfil deste ativo. "
-    "Passe o mouse sobre outros indicadores para ver explicacoes detalhadas."
+    "Clique no botao ? de outros indicadores para ver explicacoes detalhadas."
 )
 
 

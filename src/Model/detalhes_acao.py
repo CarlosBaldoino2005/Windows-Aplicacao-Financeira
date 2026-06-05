@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from src.Model.opinioes_analistas import OpinioesAnalistasPacote
+
 
 @dataclass
 class PeriodoResultado:
@@ -75,6 +77,7 @@ class DetalhesAcao:
     preco_atual: float | None = None
     variacao_dia_pct: float | None = None
     indicadores: list[tuple[str, str]] = field(default_factory=list)
+    calculos_indicadores: dict[str, str] = field(default_factory=dict)
     trimestres: list[PeriodoResultado] = field(default_factory=list)
     anuais: list[PeriodoResultado] = field(default_factory=list)
     dre_trimestral: list[LinhaDemonstrativo] = field(default_factory=list)
@@ -83,5 +86,6 @@ class DetalhesAcao:
     fluxo_caixa: list[LinhaDemonstrativo] = field(default_factory=list)
     concorrentes: list[ConcorrenteResumo] = field(default_factory=list)
     pagamentos_dividendos: list[PagamentoDividendo] = field(default_factory=list)
+    opinioes_analistas: OpinioesAnalistasPacote | None = None
     avisos: list[str] = field(default_factory=list)
     eh_cripto: bool = False
