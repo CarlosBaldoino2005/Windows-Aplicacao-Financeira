@@ -266,6 +266,34 @@ def validar_quantidade_cotas(
     return valor, None
 
 
+def validar_valor_monetario_ptbr(texto: str) -> tuple[float | None, str | None]:
+    """Valida valor em reais/dolares no formato pt-BR (ex.: R$ 1.234,56)."""
+    if not texto or not str(texto).strip():
+        return None, "Informe o valor disponivel (ex.: R$ 10.000,00)."
+
+    limpo = str(texto).strip().upper()
+    limpo = limpo.replace("R$", "").replace("US$", "").replace("USD", "").strip()
+    limpo = limpo.replace(" ", "")
+
+    if not limpo:
+        return None, "Informe o valor disponivel (ex.: R$ 10.000,00)."
+
+    if "," in limpo and "." in limpo:
+        limpo = limpo.replace(".", "").replace(",", ".")
+    elif "," in limpo:
+        limpo = limpo.replace(",", ".")
+
+    try:
+        valor = float(limpo)
+    except ValueError:
+        return None, "Valor invalido. Use numeros no formato brasileiro (ex.: 1.234,56)."
+
+    if valor <= 0:
+        return None, "Informe um valor maior que zero."
+
+    return valor, None
+
+
 def validar_provedor_noticias(
     texto: str,
     categoria: str = "mercado",

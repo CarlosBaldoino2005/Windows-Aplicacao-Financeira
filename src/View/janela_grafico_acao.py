@@ -13,6 +13,7 @@ from typing import Any
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.mascara_moeda_helper import aplicar_mascara_inteiro_ptbr, formatar_inteiro_ptbr
 from src.Tool.validadores import validar_quantidade_cotas
 from src.Service.cdi_servico import CdiServico
 from src.View.grafico_helper import (
@@ -22,6 +23,7 @@ from src.View.grafico_helper import (
     configurar_selecao_periodo,
     configurar_tooltip_acao,
 )
+from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
 from src.View.janela_detalhes_acao import JanelaDetalhesAcao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
@@ -57,6 +59,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._canvas: FigureCanvasTkAgg | None = None
         self._janela_detalhes: JanelaDetalhesAcao | None = None
         self._janela_desvalorizacao: JanelaDesvalorizacao | None = None
+        self._janela_calcular_quantidade: JanelaCalcularQuantidade | None = None
         self._config_ini = ConfigPainelIni()
 
         codigo = simbolo.replace(".SA", "")
@@ -78,7 +81,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
     def _ao_fechar(self) -> None:
         self._persistir_quantidade_cotas_ini()
-        for attr in ("_janela_detalhes", "_janela_desvalorizacao"):
+        for attr in ("_janela_detalhes", "_janela_desvalorizacao", "_janela_calcular_quantidade"):
             janela = getattr(self, attr, None)
             if janela is not None:
                 try:
@@ -100,7 +103,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 
@@ -149,16 +153,26 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ).pack(side="left", padx=(0, 16))
 
         ctk.CTkLabel(barra, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
-        self._entrada_quantidade_cotas = ctk.CTkEntry(barra, width=90, justify="center")
+        self._entrada_quantidade_cotas = ctk.CTkEntry(barra, width=110, justify="center")
         qtd_ini = self._config_ini.carregar_quantidade_cotas_grafico()
-        self._entrada_quantidade_cotas.insert(0, str(qtd_ini))
-        self._entrada_quantidade_cotas.pack(side="left", padx=(0, 16))
+        self._entrada_quantidade_cotas.insert(0, formatar_inteiro_ptbr(qtd_ini))
+        aplicar_mascara_inteiro_ptbr(self._entrada_quantidade_cotas)
+        self._entrada_quantidade_cotas.pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            barra,
+            text="Calcular",
+            command=self._abrir_calcular_quantidade,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=90,
+        ).pack(side="left", padx=(0, 16))
 
         ctk.CTkButton(
             barra,
             text="Desvalorizacao",
             command=self._abrir_desvalorizacao,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=130,
         ).pack(side="left", padx=(0, 8))
@@ -167,7 +181,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             barra,
             text="Mais detalhes",
             command=self._abrir_mais_detalhes,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=130,
         ).pack(side="left")
@@ -227,6 +241,26 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._frame_painel_periodo.configure(
             label_text=f"Resumo do periodo: {self._combo_periodo.get()}"
         )
+
+    def _abrir_calcular_quantidade(self) -> None:
+        if self._janela_calcular_quantidade is not None:
+            try:
+                if self._janela_calcular_quantidade.winfo_exists():
+                    self._janela_calcular_quantidade.focus_force()
+                    return
+            except Exception:
+                pass
+        self._janela_calcular_quantidade = JanelaCalcularQuantidade(
+            self,
+            self._controlador,
+            self._simbolo,
+            ao_aplicar_quantidade=self._aplicar_quantidade_calculada,
+        )
+
+    def _aplicar_quantidade_calculada(self, quantidade: int) -> None:
+        self._entrada_quantidade_cotas.delete(0, "end")
+        self._entrada_quantidade_cotas.insert(0, formatar_inteiro_ptbr(quantidade))
+        self._carregar_grafico()
 
     def _abrir_desvalorizacao(self) -> None:
         if self._janela_desvalorizacao is not None:
