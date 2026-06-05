@@ -6,6 +6,7 @@ import yfinance as yf
 from src.Model.resultado_busca import ResultadoBusca
 from src.Model.acoes_universo import ACOES_B3_MONITORADAS, ACOES_EUA_MONITORADAS, ACOES_PADRAO
 from src.Tool.registrador_log import RegistradorLog
+from src.Tool.texto_busca_helper import normalizar_texto_busca, texto_contem_busca
 from src.Tool.validadores import normalizar_simbolo
 
 # Mesmas listas do painel + extras para busca local.
@@ -26,13 +27,13 @@ class BuscaAcoesServico:
         self._log = RegistradorLog()
 
     def _buscar_lista_local(self, termo: str) -> list[ResultadoBusca]:
-        termo_upper = termo.upper().strip()
         encontrados: list[ResultadoBusca] = []
         vistos: set[str] = set()
 
         candidatos = ACOES_B3_BUSCA + ACOES_INTERNACIONAIS_BUSCA
         for codigo in candidatos:
-            if termo_upper not in codigo and termo_upper not in codigo.replace("3", "").replace("4", ""):
+            codigo_sem_sufixo = codigo.replace("3", "").replace("4", "")
+            if not texto_contem_busca(termo, codigo, codigo_sem_sufixo):
                 continue
             simbolo, _ = normalizar_simbolo(codigo)
             if not simbolo or simbolo in vistos:
@@ -43,7 +44,7 @@ class BuscaAcoesServico:
 
         for simbolo in ACOES_PADRAO:
             codigo = simbolo.replace(".SA", "")
-            if termo_upper in codigo or termo_upper in simbolo.upper():
+            if texto_contem_busca(termo, codigo, simbolo):
                 if simbolo not in vistos:
                     vistos.add(simbolo)
                     bolsa = "B3" if simbolo.endswith(".SA") else "EUA"
@@ -99,7 +100,8 @@ class BuscaAcoesServico:
 
     def buscar(self, termo: str, limite: int = 12) -> tuple[list[ResultadoBusca], str | None]:
         termo_limpo = termo.strip()
-        if len(termo_limpo) < 2:
+        termo_busca = normalizar_texto_busca(termo_limpo)
+        if len(termo_busca) < 2:
             return [], "Digite ao menos 2 caracteres para pesquisar."
 
         agregado: dict[str, ResultadoBusca] = {}
@@ -108,7 +110,7 @@ class BuscaAcoesServico:
             agregado[item.simbolo] = item
 
         try:
-            for item in self._buscar_yahoo(termo_limpo, limite):
+            for item in self._buscar_yahoo(termo_busca, limite):
                 agregado[item.simbolo] = item
         except Exception as exc:
             self._log.aviso(

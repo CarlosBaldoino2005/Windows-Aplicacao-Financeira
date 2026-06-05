@@ -9,6 +9,7 @@ from src.Service.provedores.cadeia_mercado import CadeiaMercado
 from src.Service.provedores.provedor_brapi import ProvedorBrapi
 from src.Service.provedores.provedor_yahoo_chart import ProvedorYahooChart
 from src.Service.provedores.util_provedor import eh_acao_b3
+from src.Tool.cadastro_empresa_helper import preencher_cadastro_empresa_de_yahoo
 from src.Tool.dividendos_helper import extrair_pagamentos_dividendos
 from src.Tool.detalhes_financeiros_helper import (
     LINHAS_BALANCO,
@@ -105,6 +106,7 @@ class DetalhesAcaoServico:
             variacao_dia_pct=_float_opcional(info.get("regularMarketChangePercent")),
         )
         detalhes.indicadores = self._montar_indicadores(info, moeda)
+        preencher_cadastro_empresa_de_yahoo(detalhes, info)
         return detalhes
 
     def _montar_de_brapi(self, simbolo: str) -> DetalhesAcao | None:

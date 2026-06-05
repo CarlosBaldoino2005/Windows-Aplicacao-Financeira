@@ -1,4 +1,9 @@
 """Janela dedicada para visualizar o grafico de comparacao entre acoes."""
+from __future__ import annotations
+
+import threading
+from typing import Any
+
 import customtkinter as ctk
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -13,6 +18,10 @@ from src.View.grafico_helper import (
     configurar_selecao_periodo_comparacao,
     configurar_tooltip_comparacao,
 )
+from src.View.destaque_cotacao_helper import (
+    PainelDestaqueCotacao,
+    iniciar_atualizacao_destaque_multiplo,
+)
 from src.View.painel_comparacao_periodo import PainelComparacaoPeriodo, payload_instrucao
 from src.View.tema import CORES
 
@@ -22,9 +31,16 @@ CORES_GRAFICO = ["#2563EB", "#16A34A", "#D97706", "#DC2626", "#7C3AED", "#0891B2
 class JanelaGraficoComparacao(ctk.CTkToplevel):
     """Tela ampla com grafico, tooltip e selecao vermelha por periodo."""
 
-    def __init__(self, pai: ctk.CTk, dados: dict, rotulo_periodo: str) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTk,
+        dados: dict,
+        rotulo_periodo: str,
+        controlador: Any | None = None,
+    ) -> None:
         super().__init__(pai)
         self._dados = dados
+        self._controlador = controlador
         simbolos_txt = ", ".join(s.replace(".SA", "") for s in dados["simbolos"])
         self.title(f"Comparacao de acoes — {rotulo_periodo} — {simbolos_txt}")
         self.configure(fg_color=CORES["fundo"])
@@ -38,6 +54,8 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         configurar_janela_maximizada(self, ao_apos_layout=self._desenhar_grafico)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
+        if self._controlador is not None:
+            self._atualizar_destaque_cotacao()
 
     def _montar_interface(self) -> None:
         rodape = ctk.CTkFrame(self, fg_color="transparent")
@@ -46,7 +64,8 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 
@@ -70,6 +89,9 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
+        self._painel_destaque_cotacao = PainelDestaqueCotacao(cabecalho, modo_multiplo=True)
+        self._painel_destaque_cotacao.pack(fill="x", padx=16, pady=(0, 10))
+
         self._frame_painel_resultado = ctk.CTkScrollableFrame(
             cabecalho,
             height=200,
@@ -88,6 +110,27 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
+
+    def _executar_em_thread(self, funcao, ao_concluir) -> None:
+        def trabalho():
+            try:
+                resultado = funcao()
+                self.after(0, lambda: ao_concluir(resultado, None))
+            except Exception as exc:
+                self.after(0, lambda: ao_concluir(None, str(exc)))
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+    def _atualizar_destaque_cotacao(self) -> None:
+        simbolos = self._dados.get("simbolos") or []
+        if not simbolos or self._controlador is None:
+            return
+        iniciar_atualizacao_destaque_multiplo(
+            self._painel_destaque_cotacao,
+            self._controlador,
+            simbolos,
+            self._executar_em_thread,
+        )
 
     def _atualizar_painel_comparacao(self, payload: dict) -> None:
         PainelComparacaoPeriodo.exibir(self._frame_painel_resultado, payload)

@@ -1,6 +1,8 @@
 """Tabelas zebradas com destaque azul ao passar o mouse (tela Mais detalhes)."""
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import customtkinter as ctk
 
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
@@ -41,6 +43,7 @@ def adicionar_linha_zebrada(
     cores_celulas: list[str] | None = None,
     largura_wrap: int | None = None,
     opcoes_fonte: OpcoesFonteGrid | None = None,
+    ao_duplo_clique: Callable | None = None,
 ) -> ctk.CTkFrame:
     """Linha alternada branco/cinza; hover deixa fundo azul e texto branco."""
     opcoes = _resolver_opcoes(opcoes_fonte)
@@ -69,6 +72,15 @@ def adicionar_linha_zebrada(
         rotulos.append(rotulo)
 
     _configurar_hover_linha(linha, rotulos, fundo_base, cores_base)
+
+    if ao_duplo_clique is not None:
+        for widget in (linha, *rotulos):
+            widget.bind("<Double-1>", lambda _e: ao_duplo_clique(), add="+")
+            try:
+                widget.configure(cursor="hand2")
+            except Exception:
+                pass
+
     return linha
 
 

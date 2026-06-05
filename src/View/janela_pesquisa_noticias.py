@@ -199,7 +199,8 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self.destroy,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 

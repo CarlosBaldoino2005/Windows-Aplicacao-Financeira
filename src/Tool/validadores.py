@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
+from src.Tool.texto_busca_helper import normalizar_texto_busca
 
 
 _FORMATO_DATA = "%d/%m/%Y"
@@ -27,6 +28,11 @@ _ALIASES_CRIPTO: dict[str, str] = {
     "POL": "POL-USD",
 }
 
+_ALIASES_CRIPTO_NORM: dict[str, str] = {
+    normalizar_texto_busca(chave).upper(): valor
+    for chave, valor in _ALIASES_CRIPTO.items()
+}
+
 
 def normalizar_simbolo_cripto(simbolo: str) -> tuple[str | None, str | None]:
     """
@@ -36,12 +42,17 @@ def normalizar_simbolo_cripto(simbolo: str) -> tuple[str | None, str | None]:
     if not simbolo or not simbolo.strip():
         return None, "Informe o codigo da cripto (ex.: BTC ou ETH-USD)."
 
-    limpo = simbolo.strip().upper().replace("/", "-").replace(" ", "")
+    limpo = (
+        normalizar_texto_busca(simbolo.strip())
+        .upper()
+        .replace("/", "-")
+        .replace(" ", "")
+    )
     if not _PADRAO_SIMBOLO.match(limpo):
         return None, "Codigo invalido. Use letras, numeros e hifen."
 
-    if limpo in _ALIASES_CRIPTO:
-        return _ALIASES_CRIPTO[limpo], None
+    if limpo in _ALIASES_CRIPTO_NORM:
+        return _ALIASES_CRIPTO_NORM[limpo], None
 
     if "-USD" in limpo or "-USDT" in limpo:
         return limpo, None
@@ -60,7 +71,7 @@ def normalizar_simbolo(simbolo: str) -> tuple[str | None, str | None]:
     if not simbolo or not simbolo.strip():
         return None, "Informe o codigo da acao (ex.: PETR4 ou AAPL)."
 
-    limpo = simbolo.strip().upper()
+    limpo = normalizar_texto_busca(simbolo.strip()).upper()
     if not _PADRAO_SIMBOLO.match(limpo):
         return None, "Codigo invalido. Use apenas letras, numeros e ponto."
 

@@ -20,7 +20,11 @@ from src.Model.explicacoes_indicadores import obter_explicacao_indicador
 from src.View.janela_pesquisa_noticias import JanelaPesquisaNoticias
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
 from src.View.tema import CORES
-from src.View.tooltip_helper import vincular_tooltip_indicador
+from src.View.explicacao_indicador_helper import (
+    GerenciadorExplicacaoIndicadores,
+    adicionar_botao_explicacao_indicador,
+)
+from src.View.janela_informacoes_empresa import JanelaInformacoesEmpresa
 
 NOMES_ABAS_ACAO = (
     "Empresa",
@@ -52,6 +56,9 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._botoes_aba: dict[str, ctk.CTkButton] = {}
         self._detalhes: DetalhesAcao | None = None
         self._janela_noticias: JanelaPesquisaNoticias | None = None
+        self._gerenciador_explicacoes = GerenciadorExplicacaoIndicadores()
+        self._janela_info_empresa: JanelaInformacoesEmpresa | None = None
+        self._janela_grafico: ctk.CTkToplevel | None = None
 
         codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Mais detalhes — {codigo}")
@@ -126,11 +133,25 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 
     def _ao_fechar(self) -> None:
+        self._gerenciador_explicacoes.fechar_todos()
+        if self._janela_info_empresa is not None:
+            try:
+                if self._janela_info_empresa.winfo_exists():
+                    self._janela_info_empresa.destroy()
+            except Exception:
+                pass
+        if self._janela_grafico is not None:
+            try:
+                if self._janela_grafico.winfo_exists():
+                    self._janela_grafico._ao_fechar()
+            except Exception:
+                pass
         if self._janela_noticias is not None:
             try:
                 if self._janela_noticias.winfo_exists():
@@ -192,6 +213,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._selecionar_aba(self._nomes_abas[0])
 
     def _selecionar_aba(self, nome: str) -> None:
+        self._gerenciador_explicacoes.fechar_todos()
         for rotulo, botao in self._botoes_aba.items():
             if rotulo == nome:
                 botao.configure(
@@ -291,10 +313,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             self._montar_aba_periodos(self._frames_por_aba["Anuais"], dados.anuais, dados.moeda, "ano")
             self._montar_aba_demonstrativos(dados)
             self._montar_aba_concorrentes(dados)
-        if not self._modo_cripto and dados.pagamentos_dividendos:
-            self._selecionar_aba("Dividendos")
-        else:
-            self._selecionar_aba(self._nomes_abas[0])
+        self._selecionar_aba(self._nomes_abas[0])
 
     def _montar_aba_ativo(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Ativo"], fg_color="transparent")
@@ -351,7 +370,23 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             ("Site", dados.site),
         ]
         for rotulo, valor in campos:
-            self._linha_info(scroll, rotulo, formatar_texto_opcional(valor))
+            self._linha_info(
+                scroll,
+                rotulo,
+                formatar_texto_opcional(valor),
+                fonte_maior=True,
+            )
+
+        ctk.CTkButton(
+            scroll,
+            text="Mais informacoes cadastrais",
+            command=self._abrir_informacoes_empresa,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=220,
+            height=36,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=4, pady=(8, 4))
 
         if dados.site:
             ctk.CTkButton(
@@ -366,7 +401,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             scroll,
             text="Sobre a empresa",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(size=16, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=4, pady=(8, 4))
 
@@ -374,11 +409,23 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             scroll,
             text=texto_desc,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=14),
             text_color=CORES["texto"],
             wraplength=880,
             justify="left",
         ).pack(anchor="w", padx=4, pady=(0, 8))
+
+    def _abrir_informacoes_empresa(self) -> None:
+        if self._detalhes is None:
+            return
+        if self._janela_info_empresa is not None:
+            try:
+                if self._janela_info_empresa.winfo_exists():
+                    self._janela_info_empresa.focus_force()
+                    return
+            except Exception:
+                pass
+        self._janela_info_empresa = JanelaInformacoesEmpresa(self, self._detalhes)
 
     def _montar_aba_dividendos(self, dados: DetalhesAcao) -> None:
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Dividendos"], fg_color="transparent")
@@ -457,8 +504,8 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             scroll,
-            text="Passe o mouse sobre cada indicador para ver o que ele significa.",
-            font=ctk.CTkFont(size=11),
+            text="Clique no botao ? ao lado de cada indicador para ver o que ele significa.",
+            font=ctk.CTkFont(size=13),
             text_color=CORES["textoSecundario"],
             wraplength=900,
             justify="left",
@@ -473,29 +520,23 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             coluna = indice % 2
             card = ctk.CTkFrame(grade, fg_color=CORES["fundo"], corner_radius=8)
             card.grid(row=linha, column=coluna, padx=6, pady=6, sticky="nsew")
-            rotulo_indicador = ctk.CTkLabel(
+
+            explicacao = obter_explicacao_indicador(rotulo)
+            adicionar_botao_explicacao_indicador(
                 card,
-                text=rotulo,
-                font=ctk.CTkFont(size=11),
-                text_color=CORES["textoSecundario"],
+                rotulo,
+                explicacao,
+                self._gerenciador_explicacoes,
             )
-            rotulo_indicador.pack(anchor="w", padx=10, pady=(8, 0))
-            rotulo_valor = ctk.CTkLabel(
+
+            ctk.CTkLabel(
                 card,
                 text=valor,
-                font=ctk.CTkFont(size=13, weight="bold"),
+                font=ctk.CTkFont(size=15, weight="bold"),
                 text_color=CORES["texto"],
                 wraplength=400,
                 justify="left",
-            )
-            rotulo_valor.pack(anchor="w", padx=10, pady=(2, 10))
-
-            explicacao = obter_explicacao_indicador(rotulo)
-            vincular_tooltip_indicador(
-                [card, rotulo_indicador, rotulo_valor],
-                rotulo,
-                explicacao,
-            )
+            ).pack(anchor="w", padx=10, pady=(2, 10))
 
     def _montar_aba_periodos(
         self,
@@ -584,7 +625,8 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             scroll,
             text=(
-                "Outras criptomoedas monitoradas no painel, com cotacao atual do Yahoo Finance."
+                "Outras criptomoedas monitoradas no painel, com cotacao atual do Yahoo Finance. "
+                "Duplo clique na linha abre o grafico da cripto."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -616,6 +658,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             cor_var = CORES["texto"]
             if item.variacao_dia_pct is not None:
                 cor_var = CORES["sucesso"] if item.variacao_dia_pct >= 0 else CORES["erro"]
+            simbolo = self._simbolo_yahoo_concorrente(item.codigo)
             adicionar_linha_zebrada(
                 scroll,
                 [
@@ -626,6 +669,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 ],
                 indice,
                 cores_celulas=[CORES["texto"], CORES["texto"], CORES["texto"], cor_var],
+                ao_duplo_clique=lambda s=simbolo: self._abrir_grafico_ativo(s),
             )
 
     def _montar_aba_concorrentes(self, dados: DetalhesAcao) -> None:
@@ -636,7 +680,8 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             scroll,
             text=(
                 "Principais concorrentes do mesmo setor/industria (dados publicos). "
-                "Lucro e receita em valor anualizado (TTM) quando disponivel."
+                "Lucro e receita em valor anualizado (TTM) quando disponivel. "
+                "Duplo clique na linha abre o grafico do ativo."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -660,6 +705,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             cor_lucro = CORES["texto"]
             if lucro is not None:
                 cor_lucro = CORES["sucesso"] if lucro >= 0 else CORES["erro"]
+            simbolo = self._simbolo_yahoo_concorrente(item.codigo)
             adicionar_linha_zebrada(
                 scroll,
                 [
@@ -679,24 +725,56 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                     CORES["texto"],
                     CORES["texto"],
                 ],
+                ao_duplo_clique=lambda s=simbolo: self._abrir_grafico_ativo(s),
             )
 
+    def _simbolo_yahoo_concorrente(self, codigo: str) -> str:
+        """Monta ticker Yahoo do concorrente conforme o tipo do ativo atual."""
+        limpo = codigo.replace(".SA", "").replace("-USD", "")
+        if self._modo_cripto:
+            return f"{limpo}-USD"
+        if self._simbolo.endswith(".SA"):
+            return f"{limpo}.SA"
+        return limpo
+
+    def _abrir_grafico_ativo(self, simbolo: str) -> None:
+        from src.View.janela_grafico_acao import JanelaGraficoAcao
+
+        if self._janela_grafico is not None:
+            try:
+                if self._janela_grafico.winfo_exists():
+                    self._janela_grafico._ao_fechar()
+            except Exception:
+                pass
+        self._janela_grafico = JanelaGraficoAcao(self, self._controlador, simbolo)
+        codigo = simbolo.replace(".SA", "").replace("-USD", "")
+        self._janela_grafico.title(f"Grafico — {codigo}")
+
     @staticmethod
-    def _linha_info(pai: ctk.CTkFrame, rotulo: str, valor: str) -> None:
+    def _linha_info(
+        pai: ctk.CTkFrame,
+        rotulo: str,
+        valor: str,
+        fonte_maior: bool = False,
+    ) -> None:
+        tamanho_rotulo = 14 if fonte_maior else 12
+        tamanho_valor = 15 if fonte_maior else 12
+        largura_rotulo = 140 if fonte_maior else 120
+
         linha = ctk.CTkFrame(pai, fg_color="transparent")
-        linha.pack(fill="x", padx=4, pady=2)
+        linha.pack(fill="x", padx=4, pady=3 if fonte_maior else 2)
         ctk.CTkLabel(
             linha,
             text=f"{rotulo}:",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=tamanho_rotulo, weight="bold"),
             text_color=CORES["textoSecundario"],
-            width=120,
+            width=largura_rotulo,
             anchor="w",
         ).pack(side="left")
         ctk.CTkLabel(
             linha,
             text=valor,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=tamanho_valor),
             text_color=CORES["texto"],
             wraplength=700,
             justify="left",

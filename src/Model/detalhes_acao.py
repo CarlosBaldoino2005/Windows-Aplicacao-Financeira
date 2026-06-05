@@ -59,7 +59,18 @@ class DetalhesAcao:
     industria: str = ""
     pais: str = ""
     site: str = ""
+    site_ri: str = ""
     descricao: str = ""
+    cnpj: str = ""
+    endereco_linha1: str = ""
+    endereco_linha2: str = ""
+    cidade: str = ""
+    estado: str = ""
+    cep: str = ""
+    telefone: str = ""
+    bolsa: str = ""
+    dirigentes: list[tuple[str, str]] = field(default_factory=list)
+    filiais: list[str] = field(default_factory=list)
     funcionarios: int | None = None
     preco_atual: float | None = None
     variacao_dia_pct: float | None = None

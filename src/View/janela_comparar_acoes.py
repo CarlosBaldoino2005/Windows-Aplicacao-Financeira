@@ -146,7 +146,8 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             linha_codigo,
             text="Adicionar",
             command=self._adicionar_por_codigo,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
         ).pack(side="left")
 
         self._label_chips = ctk.CTkLabel(
@@ -168,9 +169,8 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             text="Limpar lista",
             width=100,
             command=self._limpar_lista,
-            fg_color="transparent",
-            border_width=1,
-            text_color=CORES["texto"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
         ).pack(anchor="w", padx=12, pady=(0, 12))
 
         linha_periodo = ctk.CTkFrame(form, fg_color="transparent")
@@ -219,7 +219,8 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 
@@ -471,4 +472,9 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             except Exception:
                 pass
 
-        self._janela_grafico = JanelaGraficoComparacao(self, dados, rotulo)
+        self._janela_grafico = JanelaGraficoComparacao(
+            self,
+            dados,
+            rotulo,
+            controlador=self._controlador,
+        )

@@ -122,7 +122,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             linha_add,
             text="Adicionar",
             command=self._adicionar_codigo,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
         ).pack(side="left")
 
         self._frame_resultados = ctk.CTkScrollableFrame(
@@ -142,8 +143,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             barra,
             text="Remover selecionada",
             command=self._remover_selecionada,
-            fg_color=CORES["erro"],
-            hover_color="#B91C1C",
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=150,
         ).pack(side="right", padx=(8, 0))
 
@@ -178,7 +179,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 

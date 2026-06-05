@@ -168,7 +168,8 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 

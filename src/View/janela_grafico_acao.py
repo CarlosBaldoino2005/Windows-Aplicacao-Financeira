@@ -23,9 +23,10 @@ from src.View.grafico_helper import (
     configurar_selecao_periodo,
     configurar_tooltip_acao,
 )
+from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
+from src.View.destaque_cotacao_helper import PainelDestaqueCotacao, iniciar_atualizacao_destaque
 from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
-from src.View.janela_detalhes_acao import JanelaDetalhesAcao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
 from src.View.painel_comparacao_periodo import (
@@ -57,13 +58,13 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._data_fim_inicial = (data_fim or "").strip()
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
-        self._janela_detalhes: JanelaDetalhesAcao | None = None
+        self._janela_detalhes: ctk.CTkToplevel | None = None
         self._janela_desvalorizacao: JanelaDesvalorizacao | None = None
         self._janela_calcular_quantidade: JanelaCalcularQuantidade | None = None
         self._config_ini = ConfigPainelIni()
 
-        codigo = simbolo.replace(".SA", "")
-        self.title(f"Grafico da acao — {codigo}")
+        codigo = codigo_exibicao(simbolo)
+        self.title(f"Grafico — {codigo}")
         self.configure(fg_color=CORES["fundo"])
         self.minsize(900, 600)
 
@@ -76,6 +77,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
+        self._atualizar_destaque_cotacao()
         # Aguarda a maximizacao na abertura antes de desenhar o grafico.
         self.after(950, self._carregar_grafico)
 
@@ -111,13 +113,17 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         cabecalho.pack(side="top", fill="x")
 
-        codigo = self._simbolo.replace(".SA", "")
+        codigo = codigo_exibicao(self._simbolo)
+        tipo = rotulo_tipo_ativo(self._simbolo)
         ctk.CTkLabel(
             cabecalho,
-            text=f"Grafico — {codigo}",
+            text=f"Grafico — {codigo} ({tipo})",
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
+
+        self._painel_destaque_cotacao = PainelDestaqueCotacao(cabecalho)
+        self._painel_destaque_cotacao.pack(fill="x", padx=16, pady=(0, 10))
 
         ctk.CTkLabel(
             cabecalho,
@@ -280,6 +286,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
 
     def _abrir_mais_detalhes(self) -> None:
+        from src.View.janela_detalhes_acao import JanelaDetalhesAcao
+
         if self._janela_detalhes is not None:
             try:
                 if self._janela_detalhes.winfo_exists():
@@ -329,7 +337,16 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         threading.Thread(target=trabalho, daemon=True).start()
 
+    def _atualizar_destaque_cotacao(self) -> None:
+        iniciar_atualizacao_destaque(
+            self._painel_destaque_cotacao,
+            self._controlador,
+            self._simbolo,
+            self._executar_em_thread,
+        )
+
     def _carregar_grafico(self) -> None:
+        self._atualizar_destaque_cotacao()
         quantidade, erro_qtd = self._ler_quantidade_cotas()
         if erro_qtd:
             self._label_status.configure(text=erro_qtd, text_color=CORES["erro"])

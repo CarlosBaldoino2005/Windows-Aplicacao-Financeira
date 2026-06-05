@@ -98,7 +98,8 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             linha_busca,
             text="Consultar codigo",
             command=self._consultar_direto,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
         ).pack(side="left")
 
         self._label_status = ctk.CTkLabel(
@@ -135,7 +136,8 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             rodape,
             text="Fechar",
             command=self._ao_fechar,
-            fg_color=CORES["secundaria"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
             width=120,
         ).pack(side="right")
 
