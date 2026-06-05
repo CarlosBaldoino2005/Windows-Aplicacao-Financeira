@@ -8,9 +8,8 @@ Problema comum no Windows com varios monitores: ao maximizar uma janela filha se
 2. Posicionar a filha sobre o pai (`rootx`, `rooty`, largura e altura iniciais).
 3. So entao maximizar (`state("zoomed")`, `wsMaximized`, `showMaximized()`, etc.).
 4. Em fallback manual de geometry, usar coordenadas e dimensoes do **monitor do pai**, nunca `+0+0` fixo.
-5. Ao **mover** a janela para outro monitor (arrastar ou maximizar de novo), reaplicar `ShowWindow(SW_MAXIMIZE)` no monitor **atual** da janela (`MonitorFromWindow` + `IsZoomed`).
-6. Registrar `<Configure>` e `<Map>` com debounce para corrigir tamanho errado apos troca de monitor.
-7. **Persistencia (janela principal):** gravar `monitor_dispositivo = DISPLAYn` no INI ao mover ou fechar; na proxima abertura posicionar nesse monitor; se nao existir, usar o monitor principal.
+5. Na abertura: **Restaurar** → posicionar no monitor → **Maximizar**; ao final **garantir** largura/altura da area de trabalho do monitor; **nao** reajustar depois (evita piscar ao rolar).
+6. **Persistencia (janela principal):** gravar `monitor_dispositivo = DISPLAYn` no INI ao abrir e ao fechar; na proxima abertura posicionar nesse monitor; se nao existir, usar o monitor principal.
 
 ## Python — arquivo canonico
 

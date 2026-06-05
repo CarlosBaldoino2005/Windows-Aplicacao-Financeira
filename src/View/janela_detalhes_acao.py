@@ -16,9 +16,11 @@ from src.View.formatadores import (
     formatar_texto_opcional,
     formatar_variacao,
 )
+from src.Model.explicacoes_indicadores import obter_explicacao_indicador
 from src.View.janela_pesquisa_noticias import JanelaPesquisaNoticias
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
 from src.View.tema import CORES
+from src.View.tooltip_helper import vincular_tooltip_indicador
 
 NOMES_ABAS_ACAO = (
     "Empresa",
@@ -453,6 +455,15 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         scroll = ctk.CTkScrollableFrame(self._frames_por_aba["Indicadores"], fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
+        ctk.CTkLabel(
+            scroll,
+            text="Passe o mouse sobre cada indicador para ver o que ele significa.",
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w", padx=4, pady=(0, 8))
+
         grade = ctk.CTkFrame(scroll, fg_color="transparent")
         grade.pack(fill="x")
         grade.columnconfigure((0, 1), weight=1)
@@ -462,20 +473,29 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             coluna = indice % 2
             card = ctk.CTkFrame(grade, fg_color=CORES["fundo"], corner_radius=8)
             card.grid(row=linha, column=coluna, padx=6, pady=6, sticky="nsew")
-            ctk.CTkLabel(
+            rotulo_indicador = ctk.CTkLabel(
                 card,
                 text=rotulo,
                 font=ctk.CTkFont(size=11),
                 text_color=CORES["textoSecundario"],
-            ).pack(anchor="w", padx=10, pady=(8, 0))
-            ctk.CTkLabel(
+            )
+            rotulo_indicador.pack(anchor="w", padx=10, pady=(8, 0))
+            rotulo_valor = ctk.CTkLabel(
                 card,
                 text=valor,
                 font=ctk.CTkFont(size=13, weight="bold"),
                 text_color=CORES["texto"],
                 wraplength=400,
                 justify="left",
-            ).pack(anchor="w", padx=10, pady=(2, 10))
+            )
+            rotulo_valor.pack(anchor="w", padx=10, pady=(2, 10))
+
+            explicacao = obter_explicacao_indicador(rotulo)
+            vincular_tooltip_indicador(
+                [card, rotulo_indicador, rotulo_valor],
+                rotulo,
+                explicacao,
+            )
 
     def _montar_aba_periodos(
         self,

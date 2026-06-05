@@ -11,6 +11,12 @@ _SW_MAXIMIZE = 3
 _SW_RESTORE = 9
 _SWP_SHOWWINDOW = 0x0040
 _MONITORINFOF_PRIMARIO = 1
+_MS_FINALIZAR_ABERTURA = 500
+_MS_ENTRE_TENTATIVAS_MAX = 120
+_MAX_TENTATIVAS_ABERTURA = 6
+_LARGURA_INICIAL_FILHA = 960
+_ALTURA_INICIAL_FILHA = 640
+_TOLERANCIA_COBRE_MONITOR_PX = 24
 
 
 @dataclass(frozen=True)
@@ -256,6 +262,150 @@ def _janela_esta_maximizada(janela) -> bool:
         return False
 
 
+def _area_trabalho_referencia(referencia) -> tuple[int, int, int, int] | None:
+    """Area de trabalho do monitor onde a janela de referencia (pai) esta."""
+    return _retangulo_area_trabalho_monitor(referencia)
+
+
+def _janela_cobre_area(
+    janela,
+    area: tuple[int, int, int, int],
+    tolerancia: int = _TOLERANCIA_COBRE_MONITOR_PX,
+) -> bool:
+    """Verifica se a janela ja ocupa praticamente toda a area informada."""
+    x, y, largura, altura = area
+    try:
+        janela.update_idletasks()
+        return (
+            abs(int(janela.winfo_rootx()) - x) <= 8
+            and abs(int(janela.winfo_rooty()) - y) <= 8
+            and abs(int(janela.winfo_width()) - largura) <= tolerancia
+            and abs(int(janela.winfo_height()) - altura) <= tolerancia
+        )
+    except Exception:
+        return False
+
+
+def _janela_abertura_ok(janela, referencia) -> bool:
+    """Sucesso quando a janela preenche a area de trabalho do monitor de referencia."""
+    area = _area_trabalho_referencia(referencia)
+    if area:
+        return _janela_cobre_area(janela, area)
+    return _janela_esta_maximizada(janela)
+
+
+def _garantir_tamanho_monitor_final(
+    janela,
+    referencia,
+    area_trabalho: tuple[int, int, int, int] | None = None,
+) -> None:
+    """
+    Passo final da abertura: forca a janela a ocupar toda a area util do monitor.
+    Restaurar -> tamanho do monitor -> maximizar; se preciso, geometry exata.
+    """
+    ref = referencia or janela
+    area = area_trabalho or _area_trabalho_referencia(ref)
+    if area is None:
+        return
+
+    if _janela_cobre_area(janela, area):
+        return
+
+    x, y, largura, altura = area
+    _preparar_janela_visivel(janela, ref)
+    _restaurar_janela(janela)
+    posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
+    _maximizar_janela_tk(janela)
+
+    if not _janela_cobre_area(janela, area):
+        posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
+
+    try:
+        janela.update_idletasks()
+    except Exception:
+        pass
+
+
+def _restaurar_janela(janela) -> None:
+    """Passo 1 da abertura: volta ao estado normal (equivalente ao botao Restaurar)."""
+    if _eh_windows():
+        hwnd = _hwnd(janela)
+        if hwnd:
+            try:
+                _user32().ShowWindow(hwnd, _SW_RESTORE)
+            except Exception:
+                pass
+    try:
+        janela.state("normal")
+    except Exception:
+        pass
+    try:
+        janela.update_idletasks()
+    except Exception:
+        pass
+
+
+def _maximizar_janela_tk(janela) -> None:
+    """Passo 3 da abertura: maximiza (equivalente ao botao Maximizar)."""
+    if _eh_windows():
+        hwnd = _hwnd(janela)
+        if hwnd:
+            try:
+                _user32().ShowWindow(hwnd, _SW_MAXIMIZE)
+            except Exception:
+                pass
+    try:
+        janela.state("zoomed")
+    except Exception:
+        pass
+    try:
+        janela.attributes("-zoomed", True)
+    except Exception:
+        pass
+    try:
+        janela.update_idletasks()
+    except Exception:
+        pass
+
+
+def _posicionar_no_monitor_antes_maximizar(
+    janela,
+    area: tuple[int, int, int, int],
+) -> None:
+    """Passo 2: coloca a janela no monitor certo em tamanho normal antes do zoom."""
+    x, y, _, _ = area
+    posicionar_janela_na_area_trabalho(
+        janela,
+        x,
+        y,
+        _LARGURA_INICIAL_FILHA,
+        _ALTURA_INICIAL_FILHA,
+    )
+
+
+def restaurar_e_maximizar_janela(
+    janela,
+    referencia=None,
+    area_trabalho: tuple[int, int, int, int] | None = None,
+) -> bool:
+    """
+    Sequencia usada na abertura: Restaurar -> posicionar no monitor -> Maximizar.
+    Replica o gesto manual que adapta a tela ao monitor.
+    """
+    ref = referencia or janela
+    area = area_trabalho or _area_trabalho_referencia(ref)
+    _preparar_janela_visivel(janela, ref)
+
+    _restaurar_janela(janela)
+
+    if area is not None:
+        _posicionar_no_monitor_antes_maximizar(janela, area)
+
+    _maximizar_janela_tk(janela)
+    _garantir_tamanho_monitor_final(janela, ref, area)
+    return _janela_abertura_ok(janela, ref)
+
+
 def _precisa_remaximizar(janela) -> bool:
     """Detecta janela maximizada com tamanho diferente do monitor atual."""
     if not _janela_esta_maximizada(janela):
@@ -339,29 +489,15 @@ def aplicar_monitor_inicial(janela, dispositivo_salvo: str | None) -> str | None
     return monitor.dispositivo
 
 
-def _maximizar_hwnd_windows(
-    janela,
-    referencia=None,
-    area_trabalho: tuple[int, int, int, int] | None = None,
-) -> bool:
+def _preparar_janela_visivel(janela, referencia=None) -> None:
+    """Garante que a janela esteja visivel antes do SW_MAXIMIZE no Windows."""
     try:
-        hwnd = _hwnd(janela)
-        if not hwnd:
-            return False
-
-        ref = referencia or janela
-        retangulo = area_trabalho or _retangulo_area_trabalho_monitor(ref)
-        user32 = _user32()
-
-        if retangulo:
-            x, y, largura, altura = retangulo
-            user32.ShowWindow(hwnd, _SW_RESTORE)
-            _posicionar_hwnd_na_area(hwnd, x, y, largura, altura)
-
-        user32.ShowWindow(hwnd, _SW_MAXIMIZE)
-        return bool(user32.IsZoomed(hwnd))
+        janela.deiconify()
+        janela.update_idletasks()
+        if referencia is not None and referencia is not janela:
+            janela.lift(referencia)
     except Exception:
-        return False
+        pass
 
 
 def _resolver_janela_referencia(janela, janela_pai=None):
@@ -382,33 +518,14 @@ def _resolver_janela_referencia(janela, janela_pai=None):
 
 
 def posicionar_janela_no_monitor_referencia(janela, referencia) -> None:
-    """
-    Coloca a janela na area de trabalho do monitor da referencia (pai).
-    Necessario antes do zoom no Windows com varios monitores.
-    """
+    """Coloca a janela filha no monitor da referencia (pai) em tamanho normal."""
     if referencia is janela:
         return
-    try:
-        referencia.update_idletasks()
-        janela.update_idletasks()
-
-        retangulo = _retangulo_area_trabalho_monitor(referencia)
-        if retangulo:
-            x, y, largura, altura = retangulo
-        else:
-            x = int(referencia.winfo_rootx())
-            y = int(referencia.winfo_rooty())
-            largura = max(800, int(referencia.winfo_screenwidth()))
-            altura = max(600, int(referencia.winfo_screenheight()))
-
-        posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
-        try:
-            janela.deiconify()
-            janela.lift(referencia)
-        except Exception:
-            pass
-    except Exception:
-        pass
+    area = _area_trabalho_referencia(referencia)
+    if area is None:
+        return
+    _posicionar_no_monitor_antes_maximizar(janela, area)
+    _preparar_janela_visivel(janela, referencia)
 
 
 def maximizar_janela(
@@ -416,146 +533,10 @@ def maximizar_janela(
     referencia=None,
     area_trabalho: tuple[int, int, int, int] | None = None,
 ) -> None:
-    """
-    Maximiza no monitor da janela de referencia (pai) ou no monitor atual.
-    Em outros SO tenta alternativas compativeis com Tk.
-    """
+    """Restaura e maximiza no monitor da janela de referencia (pai)."""
     ref = referencia or janela
-    if referencia is not None and referencia is not janela:
-        posicionar_janela_no_monitor_referencia(janela, referencia)
-
-    try:
-        janela.update_idletasks()
-    except Exception:
-        pass
-
-    if _eh_windows():
-        if _maximizar_hwnd_windows(janela, ref, area_trabalho=area_trabalho):
-            try:
-                janela.update_idletasks()
-            except Exception:
-                pass
-            return
-
-    try:
-        janela.state("normal")
-        janela.update_idletasks()
-        janela.state("zoomed")
-        if str(janela.state()) == "zoomed":
-            return
-    except Exception:
-        pass
-
-    try:
-        janela.attributes("-zoomed", True)
-        return
-    except Exception:
-        pass
-
-    try:
-        retangulo = area_trabalho or _retangulo_area_trabalho_monitor(ref)
-        if retangulo:
-            x, y, largura, altura = retangulo
-            janela.geometry(f"{largura}x{altura}+{x}+{y}")
-        else:
-            x = int(ref.winfo_rootx())
-            y = int(ref.winfo_rooty())
-            largura = int(ref.winfo_screenwidth())
-            altura = int(ref.winfo_screenheight())
-            janela.geometry(f"{largura}x{altura}+{x}+{y}")
-    except Exception:
-        pass
-
-
-def _registrar_ajuste_troca_monitor(
-    janela,
-    ao_apos_layout: Callable[[], None] | None = None,
-    ao_salvar_monitor: Callable[[str], None] | None = None,
-) -> None:
-    """
-    Reaplica maximizacao quando a janela muda de monitor ou fica com tamanho errado.
-    Opcionalmente grava o monitor atual no INI (janela principal).
-    """
-    estado = {
-        "monitor": _monitor_de_janela(janela),
-        "dispositivo": obter_dispositivo_monitor_janela(janela),
-        "timer": None,
-        "timer_salvar": None,
-        "em_ajuste": False,
-    }
-
-    def gravar_monitor_atual() -> None:
-        if ao_salvar_monitor is None:
-            return
-        dispositivo = obter_dispositivo_monitor_janela(janela)
-        if not dispositivo or dispositivo == estado["dispositivo"]:
-            return
-        estado["dispositivo"] = dispositivo
-        try:
-            ao_salvar_monitor(dispositivo)
-        except Exception:
-            pass
-
-    def executar_ajuste() -> None:
-        if estado["em_ajuste"]:
-            return
-        if not _janela_esta_maximizada(janela) and not _precisa_remaximizar(janela):
-            estado["monitor"] = _monitor_de_janela(janela)
-            return
-
-        estado["em_ajuste"] = True
-        try:
-            maximizar_janela(janela, janela)
-            janela.update_idletasks()
-            estado["monitor"] = _monitor_de_janela(janela)
-            gravar_monitor_atual()
-            if ao_apos_layout is not None:
-                ao_apos_layout()
-        except Exception:
-            pass
-        finally:
-            janela.after(180, lambda: estado.update({"em_ajuste": False}))
-
-    def agendar_ajuste(_evento=None) -> None:
-        if estado["em_ajuste"]:
-            return
-
-        monitor_atual = _monitor_de_janela(janela)
-        monitor_mudou = (
-            monitor_atual is not None
-            and estado["monitor"] is not None
-            and monitor_atual != estado["monitor"]
-        )
-
-        if monitor_mudou and ao_salvar_monitor is not None:
-            if estado["timer_salvar"] is not None:
-                try:
-                    janela.after_cancel(estado["timer_salvar"])
-                except Exception:
-                    pass
-            estado["timer_salvar"] = janela.after(400, gravar_monitor_atual)
-
-        if not monitor_mudou and not _precisa_remaximizar(janela):
-            if monitor_atual is not None:
-                estado["monitor"] = monitor_atual
-            return
-
-        if estado["timer"] is not None:
-            try:
-                janela.after_cancel(estado["timer"])
-            except Exception:
-                pass
-        estado["timer"] = janela.after(120, executar_ajuste)
-
-    try:
-        janela.bind("<Configure>", agendar_ajuste, add="+")
-    except Exception:
-        pass
-
-    try:
-        janela.bind("<Map>", agendar_ajuste, add="+")
-    except Exception:
-        pass
+    area = area_trabalho or _area_trabalho_referencia(ref)
+    restaurar_e_maximizar_janela(janela, ref, area_trabalho=area)
 
 
 def configurar_janela_maximizada(
@@ -566,13 +547,13 @@ def configurar_janela_maximizada(
     ao_salvar_monitor: Callable[[str], None] | None = None,
 ) -> None:
     """
-    Aplica maximizacao em etapas (CTkToplevel precisa de layout apos zoom).
-    Janelas filhas abrem maximizadas no mesmo monitor da janela pai.
-    Reajusta automaticamente ao trocar de monitor.
-    monitor_inicial + ao_salvar_monitor: persistencia do monitor da janela principal.
+    Na abertura: Restaurar, Maximizar e ao final garante o tamanho do monitor.
+    Executa uma vez; nao reajusta depois de carregada.
+    monitor_inicial + ao_salvar_monitor: monitor salvo no INI e gravacao ao fechar.
     """
     referencia = _resolver_janela_referencia(janela, janela_pai)
     _maximizou_mapa = {"feito": False}
+    _abertura_concluida = {"feito": False}
     area_inicial: tuple[int, int, int, int] | None = None
     inicial_aplicado = {"feito": False}
 
@@ -582,39 +563,62 @@ def configurar_janela_maximizada(
             area_inicial = monitor_resolvido.retangulo_trabalho()
             aplicar_monitor_inicial(janela, monitor_inicial)
 
-    def apenas_maximizar() -> None:
+    area_referencia = _area_trabalho_referencia(referencia)
+
+    def restaurar_e_maximizar() -> None:
         usar_area_salva = (
             area_inicial is not None
             and referencia is janela
             and not inicial_aplicado["feito"]
         )
+        area_alvo = area_inicial if usar_area_salva else area_referencia
+        restaurar_e_maximizar_janela(janela, referencia, area_trabalho=area_alvo)
         if usar_area_salva:
-            maximizar_janela(janela, referencia, area_trabalho=area_inicial)
             inicial_aplicado["feito"] = True
-        else:
-            maximizar_janela(janela, referencia)
-        try:
-            janela.update_idletasks()
-        except Exception:
-            pass
 
-    def maximizar_e_callback_layout() -> None:
-        apenas_maximizar()
+    def _concluir_abertura() -> None:
+        if _abertura_concluida["feito"]:
+            return
+
+        area_final = area_inicial if area_inicial and referencia is janela else area_referencia
+        _garantir_tamanho_monitor_final(janela, referencia, area_final)
+
+        _abertura_concluida["feito"] = True
         if ao_apos_layout is not None:
             ao_apos_layout()
+        if ao_salvar_monitor is not None:
+            dispositivo = obter_dispositivo_monitor_janela(janela)
+            if dispositivo:
+                try:
+                    ao_salvar_monitor(dispositivo)
+                except Exception:
+                    pass
 
-    posicionar_janela_no_monitor_referencia(janela, referencia)
-    janela.after(0, apenas_maximizar)
-    janela.after(80, apenas_maximizar)
-    janela.after(200, apenas_maximizar)
-    janela.after(450, maximizar_e_callback_layout)
-    _registrar_ajuste_troca_monitor(janela, ao_apos_layout, ao_salvar_monitor)
+    def finalizar_abertura(tentativa: int = 0) -> None:
+        """Repete maximizacao na abertura; depois nao reajusta mais."""
+        if _abertura_concluida["feito"]:
+            return
+
+        restaurar_e_maximizar()
+
+        if not _janela_abertura_ok(janela, referencia) and tentativa < _MAX_TENTATIVAS_ABERTURA:
+            atraso = _MS_ENTRE_TENTATIVAS_MAX + (tentativa * 60)
+            janela.after(atraso, lambda t=tentativa + 1: finalizar_abertura(t))
+            return
+
+        _concluir_abertura()
+
+    _preparar_janela_visivel(janela, referencia)
+    janela.after(0, restaurar_e_maximizar)
+    janela.after(80, restaurar_e_maximizar)
+    janela.after(200, restaurar_e_maximizar)
+    janela.after(_MS_FINALIZAR_ABERTURA, finalizar_abertura)
 
     def ao_mapear(_evento=None) -> None:
-        if _maximizou_mapa["feito"]:
+        if _maximizou_mapa["feito"] or _abertura_concluida["feito"]:
             return
         _maximizou_mapa["feito"] = True
-        janela.after(50, apenas_maximizar)
+        janela.after(50, lambda: finalizar_abertura(0))
 
     try:
         janela.bind("<Map>", ao_mapear, add="+")

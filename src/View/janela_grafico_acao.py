@@ -66,10 +66,15 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         self._montar_interface()
         self._aplicar_periodo_inicial()
-        configurar_janela_maximizada(self, ao_apos_layout=self._ajustar_grafico_ao_redimensionar)
+        configurar_janela_maximizada(
+            self,
+            ao_apos_layout=self._ajustar_grafico_ao_redimensionar,
+            janela_pai=pai,
+        )
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
-        self.after(200, self._carregar_grafico)
+        # Aguarda a maximizacao na abertura antes de desenhar o grafico.
+        self.after(950, self._carregar_grafico)
 
     def _ao_fechar(self) -> None:
         self._persistir_quantidade_cotas_ini()
@@ -448,15 +453,22 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+        self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
+        self.after(250, lambda: self._ajustar_grafico_ao_redimensionar(0))
 
-    def _ajustar_grafico_ao_redimensionar(self) -> None:
-        """Redesenha o matplotlib apos troca de monitor ou maximizacao."""
+    def _ajustar_grafico_ao_redimensionar(self, tentativa: int = 0) -> None:
+        """Redimensiona o matplotlib apos a janela abrir maximizada."""
         if self._canvas is None or self._figura is None:
+            if tentativa < 40:
+                self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
             return
         try:
             self._frame_grafico.update_idletasks()
             largura_px = max(400, self._frame_grafico.winfo_width() - 16)
             altura_px = max(300, self._frame_grafico.winfo_height() - 16)
+            if largura_px < 500 and tentativa < 40:
+                self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
+                return
             dpi = self._figura.get_dpi()
             self._figura.set_size_inches(largura_px / dpi, altura_px / dpi, forward=True)
             self._canvas.draw()
