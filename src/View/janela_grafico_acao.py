@@ -29,6 +29,10 @@ from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
+from src.View.janela_grafico_ampliado import (
+    abrir_grafico_ampliado_acao,
+    atualizar_estado_botao_grafico_ampliado,
+)
 from src.View.janela_resumo_periodo import (
     abrir_janela_resumo_periodo,
     atualizar_estado_botao_resumo_ampliado,
@@ -66,8 +70,10 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._janela_desvalorizacao: JanelaDesvalorizacao | None = None
         self._janela_calcular_quantidade: JanelaCalcularQuantidade | None = None
         self._janela_resumo_periodo: ctk.CTkToplevel | None = None
+        self._janela_grafico_ampliado: ctk.CTkToplevel | None = None
         self._config_ini = ConfigPainelIni()
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
+        self._dados_grafico_atual: dict | None = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Grafico — {codigo}")
@@ -94,6 +100,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             "_janela_desvalorizacao",
             "_janela_calcular_quantidade",
             "_janela_resumo_periodo",
+            "_janela_grafico_ampliado",
         ):
             janela = getattr(self, attr, None)
             if janela is not None:
@@ -243,6 +250,21 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._frame_painel_periodo.pack(fill="x", padx=16, pady=(0, 12))
         self._exibir_resumo_periodo(self._payload_resumo_periodo)
 
+        barra_grafico = ctk.CTkFrame(self, fg_color="transparent")
+        barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
+        self._btn_grafico_ampliado = ctk.CTkButton(
+            barra_grafico,
+            text="Ver grafico ampliado",
+            width=170,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            command=self._abrir_grafico_ampliado,
+            state="disabled",
+        )
+        self._btn_grafico_ampliado.pack(side="right")
+
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
 
@@ -275,6 +297,23 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._payload_resumo_periodo = payload
         PainelComparacaoPeriodo.exibir(self._frame_painel_periodo, payload)
         atualizar_estado_botao_resumo_ampliado(self._btn_resumo_ampliado, payload)
+
+    def _abrir_grafico_ampliado(self) -> None:
+        if self._janela_grafico_ampliado is not None:
+            try:
+                if self._janela_grafico_ampliado.winfo_exists():
+                    self._janela_grafico_ampliado.focus_force()
+                    return
+            except Exception:
+                pass
+        titulo = f"Grafico ampliado — {codigo_exibicao(self._simbolo)} — {self._combo_periodo.get()}"
+        self._janela_grafico_ampliado = abrir_grafico_ampliado_acao(
+            self,
+            titulo,
+            self._dados_grafico_atual,
+            self._obter_quantidade_cotas_para_grafico,
+            self._exibir_resumo_periodo,
+        )
 
     def _abrir_resumo_periodo_ampliado(self) -> None:
         if self._janela_resumo_periodo is not None:
@@ -545,6 +584,16 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+        self._dados_grafico_atual = {
+            "titulo": titulo,
+            "labels": labels,
+            "valores": valores,
+            "simbolo": simbolo,
+            "moeda": moeda,
+            "pontos_tooltip": pontos_tooltip,
+            "valores_cdi": valores_cdi,
+        }
+        atualizar_estado_botao_grafico_ampliado(self._btn_grafico_ampliado, True)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
         self.after(250, lambda: self._ajustar_grafico_ao_redimensionar(0))
 

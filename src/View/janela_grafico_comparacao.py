@@ -22,6 +22,10 @@ from src.View.destaque_cotacao_helper import (
     PainelDestaqueCotacao,
     iniciar_atualizacao_destaque_multiplo,
 )
+from src.View.janela_grafico_ampliado import (
+    abrir_grafico_ampliado_comparacao,
+    atualizar_estado_botao_grafico_ampliado,
+)
 from src.View.janela_resumo_periodo import (
     abrir_janela_resumo_periodo,
     atualizar_estado_botao_resumo_ampliado,
@@ -47,6 +51,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         self._controlador = controlador
         self._rotulo_periodo = rotulo_periodo
         self._janela_resumo_periodo: ctk.CTkToplevel | None = None
+        self._janela_grafico_ampliado: ctk.CTkToplevel | None = None
         simbolos_txt = ", ".join(s.replace(".SA", "") for s in dados["simbolos"])
         self.title(f"Comparacao de acoes — {rotulo_periodo} — {simbolos_txt}")
         self.configure(fg_color=CORES["fundo"])
@@ -127,6 +132,21 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         self._payload_resumo_periodo = payload_instrucao(texto_painel)
         self._exibir_resumo_comparacao(self._payload_resumo_periodo)
 
+        barra_grafico = ctk.CTkFrame(self, fg_color="transparent")
+        barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
+        self._btn_grafico_ampliado = ctk.CTkButton(
+            barra_grafico,
+            text="Ver grafico ampliado",
+            width=170,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            command=self._abrir_grafico_ampliado,
+            state="disabled",
+        )
+        self._btn_grafico_ampliado.pack(side="right")
+
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
 
@@ -158,6 +178,23 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
     def _atualizar_painel_comparacao(self, payload: dict) -> None:
         self._exibir_resumo_comparacao(payload)
+
+    def _abrir_grafico_ampliado(self) -> None:
+        if self._janela_grafico_ampliado is not None:
+            try:
+                if self._janela_grafico_ampliado.winfo_exists():
+                    self._janela_grafico_ampliado.focus_force()
+                    return
+            except Exception:
+                pass
+        simbolos_txt = ", ".join(s.replace(".SA", "") for s in self._dados["simbolos"])
+        titulo = f"Grafico ampliado — {self._rotulo_periodo} — {simbolos_txt}"
+        self._janela_grafico_ampliado = abrir_grafico_ampliado_comparacao(
+            self,
+            titulo,
+            self._dados,
+            self._exibir_resumo_comparacao,
+        )
 
     def _abrir_resumo_periodo_ampliado(self) -> None:
         if self._janela_resumo_periodo is not None:
@@ -285,8 +322,15 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
                 self._atualizar_painel_comparacao,
             )
         self._canvas.draw()
+        atualizar_estado_botao_grafico_ampliado(self._btn_grafico_ampliado, True)
 
     def _ao_fechar(self) -> None:
+        if self._janela_grafico_ampliado is not None:
+            try:
+                if self._janela_grafico_ampliado.winfo_exists():
+                    self._janela_grafico_ampliado.destroy()
+            except Exception:
+                pass
         if self._janela_resumo_periodo is not None:
             try:
                 if self._janela_resumo_periodo.winfo_exists():
