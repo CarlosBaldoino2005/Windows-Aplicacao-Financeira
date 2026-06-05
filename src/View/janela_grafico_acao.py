@@ -29,6 +29,7 @@ from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
+from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
 from src.View.janela_grafico_ampliado import (
     abrir_grafico_ampliado_acao,
     atualizar_estado_botao_grafico_ampliado,
@@ -74,6 +75,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._config_ini = ConfigPainelIni()
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
         self._dados_grafico_atual: dict | None = None
+        self._controle_zoom = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Grafico — {codigo}")
@@ -147,7 +149,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             cabecalho,
             text=(
                 "Ao carregar, o resumo do periodo escolhido aparece abaixo (preco, lucro, dividendos e CDI). "
-                "Passe o mouse no grafico para detalhes. Clique em 2 pontos para comparar outro intervalo."
+                "Use Zoom -/+ ou a roda do mouse. Apos ampliar, arraste o grafico com o mouse para mover. "
+                "Passe o mouse para detalhes e clique em 2 pontos para comparar outro intervalo."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -252,6 +255,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         barra_grafico = ctk.CTkFrame(self, fg_color="transparent")
         barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
+        montar_botoes_zoom_grafico(barra_grafico, lambda: self._controle_zoom)
         self._btn_grafico_ampliado = ctk.CTkButton(
             barra_grafico,
             text="Ver grafico ampliado",
@@ -513,6 +517,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             import matplotlib.pyplot as plt
 
             plt.close(self._figura)
+            self._controle_zoom = None
 
         largura_px = max(400, self._frame_grafico.winfo_width() - 16)
         altura_px = max(300, self._frame_grafico.winfo_height() - 16)
@@ -584,6 +589,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+        self._controle_zoom = criar_controle_zoom(canvas, eixo)
         self._dados_grafico_atual = {
             "titulo": titulo,
             "labels": labels,

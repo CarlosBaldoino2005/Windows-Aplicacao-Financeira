@@ -10,6 +10,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.lines import Line2D
 
 from src.View.formatadores import formatar_moeda
+from src.View.grafico_zoom_helper import consumir_arraste_pan
 from src.View.tema import CORES
 from src.View.painel_comparacao_periodo import (
     calcular_comparacao_acao_unica,
@@ -295,6 +296,8 @@ def configurar_selecao_periodo(
     def ao_clicar(evento):
         if evento.button != 1:
             return
+        if consumir_arraste_pan(canvas):
+            return
         indice = _indice_mais_proximo(evento, linha, eixo)
         if indice is None:
             return
@@ -339,7 +342,7 @@ def configurar_selecao_periodo(
             )
         canvas.draw_idle()
 
-    canvas.mpl_connect("button_press_event", ao_clicar)
+    canvas.mpl_connect("button_release_event", ao_clicar)
     ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO))
 
 
@@ -399,6 +402,8 @@ def configurar_selecao_periodo_comparacao(
     def ao_clicar(evento):
         if evento.button != 1:
             return
+        if consumir_arraste_pan(canvas):
+            return
         indice = _indice_por_eixo_x(evento, eixo, quantidade)
         if indice is None:
             return
@@ -429,7 +434,7 @@ def configurar_selecao_periodo_comparacao(
             )
         canvas.draw_idle()
 
-    canvas.mpl_connect("button_press_event", ao_clicar)
+    canvas.mpl_connect("button_release_event", ao_clicar)
     ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_COMPARACAO))
 
 

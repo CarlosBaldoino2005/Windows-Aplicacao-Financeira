@@ -19,6 +19,7 @@ from src.View.grafico_helper import (
     configurar_tooltip_acao,
     configurar_tooltip_comparacao,
 )
+from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
 from src.View.painel_comparacao_periodo import calcular_comparacao_acao_unica
 from src.View.tema import CORES
 
@@ -42,6 +43,7 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         self._atualizar_painel_pai = atualizar_painel_pai
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
+        self._controle_zoom = None
 
         self.title(titulo_janela)
         self.configure(fg_color=CORES["fundo"])
@@ -67,14 +69,18 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Visualizacao ampliada do grafico. Passe o mouse para detalhes "
-                "e clique em dois pontos para comparar intervalos (o resumo atualiza na tela principal)."
+                "Visualizacao ampliada do grafico. Use Zoom -/+ ou a roda do mouse e arraste para mover. "
+                "Passe o mouse para detalhes e clique em dois pontos para comparar intervalos."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=960,
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        barra_zoom = ctk.CTkFrame(self, fg_color="transparent")
+        barra_zoom.pack(fill="x", padx=16, pady=(0, 4))
+        montar_botoes_zoom_grafico(barra_zoom, lambda: self._controle_zoom)
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(fill="both", expand=True, padx=16, pady=(8, 8))
@@ -102,6 +108,7 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
             plt.close(self._figura)
             self._figura = None
             self._canvas = None
+            self._controle_zoom = None
 
         dados = self._dados_grafico
         labels = dados["labels"]
@@ -173,6 +180,7 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+        self._controle_zoom = criar_controle_zoom(canvas, eixo)
 
     def _publicar_resumo_periodo(
         self,
@@ -236,6 +244,7 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
         self._atualizar_painel_pai = atualizar_painel_pai
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
+        self._controle_zoom = None
 
         self.title(titulo_janela)
         self.configure(fg_color=CORES["fundo"])
@@ -261,7 +270,7 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Visualizacao ampliada do grafico comparativo. "
+                "Visualizacao ampliada do grafico comparativo. Use Zoom -/+ ou a roda do mouse e arraste para mover. "
                 "Clique em dois pontos para ver o resumo do intervalo na tela principal."
             ),
             font=ctk.CTkFont(size=12),
@@ -269,6 +278,10 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
             wraplength=960,
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        barra_zoom = ctk.CTkFrame(self, fg_color="transparent")
+        barra_zoom.pack(fill="x", padx=16, pady=(0, 4))
+        montar_botoes_zoom_grafico(barra_zoom, lambda: self._controle_zoom)
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(fill="both", expand=True, padx=16, pady=(8, 8))
@@ -296,6 +309,7 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
             plt.close(self._figura)
             self._figura = None
             self._canvas = None
+            self._controle_zoom = None
 
         dados = self._dados
         simbolos = dados.get("simbolos") or []
@@ -376,6 +390,7 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+        self._controle_zoom = criar_controle_zoom(canvas, eixo)
 
     def _ajustar_grafico(self, tentativa: int = 0) -> None:
         if self._canvas is None or self._figura is None:

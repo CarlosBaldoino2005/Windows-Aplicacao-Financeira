@@ -22,6 +22,7 @@ from src.View.destaque_cotacao_helper import (
     PainelDestaqueCotacao,
     iniciar_atualizacao_destaque_multiplo,
 )
+from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
 from src.View.janela_grafico_ampliado import (
     abrir_grafico_ampliado_comparacao,
     atualizar_estado_botao_grafico_ampliado,
@@ -52,6 +53,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         self._rotulo_periodo = rotulo_periodo
         self._janela_resumo_periodo: ctk.CTkToplevel | None = None
         self._janela_grafico_ampliado: ctk.CTkToplevel | None = None
+        self._controle_zoom = None
         simbolos_txt = ", ".join(s.replace(".SA", "") for s in dados["simbolos"])
         self.title(f"Comparacao de acoes — {rotulo_periodo} — {simbolos_txt}")
         self.configure(fg_color=CORES["fundo"])
@@ -93,7 +95,9 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Passe o mouse para detalhes. Linha laranja tracejada: 100% CDI (indice base 100). "
+                "Use Zoom -/+ ou a roda do mouse. Apos ampliar, arraste o grafico para mover. "
+                "Passe o mouse para detalhes. "
+                "Linha laranja tracejada: 100% CDI (indice base 100). "
                 "Clique em 2 pontos para comparar o intervalo (marcadores vermelhos)."
             ),
             font=ctk.CTkFont(size=12),
@@ -134,6 +138,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
         barra_grafico = ctk.CTkFrame(self, fg_color="transparent")
         barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
+        montar_botoes_zoom_grafico(barra_grafico, lambda: self._controle_zoom)
         self._btn_grafico_ampliado = ctk.CTkButton(
             barra_grafico,
             text="Ver grafico ampliado",
@@ -241,6 +246,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
             plt.close(self._figura)
             self._figura = None
+            self._controle_zoom = None
 
         dados = self._dados
         simbolos = dados.get("simbolos") or []
@@ -322,6 +328,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
                 self._atualizar_painel_comparacao,
             )
         self._canvas.draw()
+        self._controle_zoom = criar_controle_zoom(self._canvas, eixo)
         atualizar_estado_botao_grafico_ampliado(self._btn_grafico_ampliado, True)
 
     def _ao_fechar(self) -> None:
