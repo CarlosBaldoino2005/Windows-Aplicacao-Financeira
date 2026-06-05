@@ -201,30 +201,44 @@ def enriquecer_comparacao_com_cdi(payload: dict) -> dict:
 class PainelComparacaoPeriodo:
     """Renderiza cards e tabela resumo no topo da janela de comparacao."""
 
+    _modo_amplo: bool = False
+
     @staticmethod
-    def exibir(container: ctk.CTkFrame, dados: dict) -> None:
-        for widget in container.winfo_children():
-            widget.destroy()
+    def _tamanho_fonte(base: int) -> int:
+        return base + (3 if PainelComparacaoPeriodo._modo_amplo else 0)
 
-        tipo = dados.get("tipo", "instrucao")
+    @staticmethod
+    def _largura_texto(base: int) -> int:
+        return base + (220 if PainelComparacaoPeriodo._modo_amplo else 0)
 
-        if tipo == "instrucao":
-            PainelComparacaoPeriodo._exibir_instrucao(container, dados.get("texto", ""))
-        elif tipo == "parcial":
-            PainelComparacaoPeriodo._exibir_parcial(container, dados)
-        elif tipo == "completo":
-            PainelComparacaoPeriodo._exibir_completo(container, dados)
+    @staticmethod
+    def exibir(container: ctk.CTkFrame, dados: dict, modo_amplo: bool = False) -> None:
+        PainelComparacaoPeriodo._modo_amplo = modo_amplo
+        try:
+            for widget in container.winfo_children():
+                widget.destroy()
+
+            tipo = dados.get("tipo", "instrucao")
+
+            if tipo == "instrucao":
+                PainelComparacaoPeriodo._exibir_instrucao(container, dados.get("texto", ""))
+            elif tipo == "parcial":
+                PainelComparacaoPeriodo._exibir_parcial(container, dados)
+            elif tipo == "completo":
+                PainelComparacaoPeriodo._exibir_completo(container, dados)
+        finally:
+            PainelComparacaoPeriodo._modo_amplo = False
 
     @staticmethod
     def _exibir_instrucao(container: ctk.CTkFrame, texto: str) -> None:
         ctk.CTkLabel(
             container,
             text=texto,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12)),
             text_color=CORES["texto"],
             fg_color=CORES.get("destaqueInstrucao", CORES["erroFundo"]),
             corner_radius=8,
-            wraplength=1050,
+            wraplength=PainelComparacaoPeriodo._largura_texto(1050),
             justify="left",
         ).pack(fill="x", padx=4, pady=6)
 
@@ -241,7 +255,7 @@ class PainelComparacaoPeriodo:
         ctk.CTkLabel(
             container,
             text=texto,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(13), weight="bold"),
             text_color=CORES["primaria"],
             fg_color=CORES.get("destaqueParcial", CORES["infoFundo"]),
             corner_radius=8,
@@ -249,7 +263,7 @@ class PainelComparacaoPeriodo:
         ctk.CTkLabel(
             container,
             text="Clique no segundo ponto no grafico (data final).",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12)),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=8, pady=(0, 6))
 
@@ -287,7 +301,7 @@ class PainelComparacaoPeriodo:
                     f"Pior no intervalo: {dados['pior_desempenho']}  "
                     f"(ordenado da maior para a menor variacao %)"
                 ),
-                font=ctk.CTkFont(size=11, weight="bold"),
+                font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(11), weight="bold"),
                 text_color=CORES["textoSecundario"],
             ).pack(anchor="w", padx=8, pady=(0, 6))
             PainelComparacaoPeriodo._exibir_faixa_cdi_periodo(container, dados)
@@ -308,14 +322,17 @@ class PainelComparacaoPeriodo:
         celula = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=8)
         celula.grid(row=0, column=coluna, padx=6, pady=4, sticky="nsew")
         ctk.CTkLabel(
-            celula, text=titulo, font=ctk.CTkFont(size=11), text_color=CORES["textoSecundario"]
+            celula,
+            text=titulo,
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(11)),
+            text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=10, pady=(8, 0))
         ctk.CTkLabel(
             celula,
             text=valor,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(13), weight="bold"),
             text_color=cor_valor,
-            wraplength=280,
+            wraplength=PainelComparacaoPeriodo._largura_texto(280),
             justify="left",
         ).pack(anchor="w", padx=10, pady=(2, 10))
 
@@ -334,13 +351,13 @@ class PainelComparacaoPeriodo:
         ctk.CTkLabel(
             topo,
             text=acao["codigo"],
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(16), weight="bold"),
             text_color=CORES["texto"],
         ).pack(side="left")
         ctk.CTkLabel(
             topo,
             text=f"{sinal}{pct:.2f}%",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(14), weight="bold"),
             text_color=cor_pct,
             fg_color=fundo_pct,
             corner_radius=6,
@@ -432,7 +449,7 @@ class PainelComparacaoPeriodo:
         ctk.CTkLabel(
             bloco,
             text="Dividendos no periodo",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12), weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=10, pady=(8, 4))
 
@@ -485,9 +502,9 @@ class PainelComparacaoPeriodo:
                 ctk.CTkLabel(
                     bloco,
                     text=texto,
-                    font=ctk.CTkFont(size=11),
+                    font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(11)),
                     text_color=CORES["textoSecundario"],
-                    wraplength=420,
+                    wraplength=PainelComparacaoPeriodo._largura_texto(420),
                     justify="left",
                 ).pack(anchor="w", padx=10, pady=(0, 8))
 
@@ -517,9 +534,9 @@ class PainelComparacaoPeriodo:
         ctk.CTkLabel(
             faixa,
             text=texto,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12), weight="bold"),
             text_color=cor,
-            wraplength=1000,
+            wraplength=PainelComparacaoPeriodo._largura_texto(1000),
             justify="left",
         ).pack(anchor="w", padx=12, pady=10)
 
@@ -605,18 +622,19 @@ class PainelComparacaoPeriodo:
     ) -> None:
         linha = ctk.CTkFrame(pai, fg_color="transparent")
         linha.pack(fill="x", padx=10, pady=3)
+        largura_rotulo = 140 if PainelComparacaoPeriodo._modo_amplo else 110
         ctk.CTkLabel(
             linha,
             text=rotulo,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(11)),
             text_color=CORES["textoSecundario"],
-            width=110,
+            width=largura_rotulo,
             anchor="w",
         ).pack(side="left")
         ctk.CTkLabel(
             linha,
             text=valor,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12), weight="bold"),
             text_color=cor_valor or CORES["texto"],
             anchor="w",
             justify="left",

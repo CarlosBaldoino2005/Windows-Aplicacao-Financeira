@@ -22,6 +22,10 @@ from src.View.destaque_cotacao_helper import (
     PainelDestaqueCotacao,
     iniciar_atualizacao_destaque_multiplo,
 )
+from src.View.janela_resumo_periodo import (
+    abrir_janela_resumo_periodo,
+    atualizar_estado_botao_resumo_ampliado,
+)
 from src.View.painel_comparacao_periodo import PainelComparacaoPeriodo, payload_instrucao
 from src.View.tema import CORES
 
@@ -41,6 +45,8 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         super().__init__(pai)
         self._dados = dados
         self._controlador = controlador
+        self._rotulo_periodo = rotulo_periodo
+        self._janela_resumo_periodo: ctk.CTkToplevel | None = None
         simbolos_txt = ", ".join(s.replace(".SA", "") for s in dados["simbolos"])
         self.title(f"Comparacao de acoes — {rotulo_periodo} — {simbolos_txt}")
         self.configure(fg_color=CORES["fundo"])
@@ -92,6 +98,21 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         self._painel_destaque_cotacao = PainelDestaqueCotacao(cabecalho, modo_multiplo=True)
         self._painel_destaque_cotacao.pack(fill="x", padx=16, pady=(0, 10))
 
+        barra_resumo = ctk.CTkFrame(cabecalho, fg_color="transparent")
+        barra_resumo.pack(fill="x", padx=16, pady=(0, 4))
+        self._btn_resumo_ampliado = ctk.CTkButton(
+            barra_resumo,
+            text="Ver resumo ampliado",
+            width=170,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            command=self._abrir_resumo_periodo_ampliado,
+            state="disabled",
+        )
+        self._btn_resumo_ampliado.pack(side="right")
+
         self._frame_painel_resultado = ctk.CTkScrollableFrame(
             cabecalho,
             height=200,
@@ -103,10 +124,8 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         avisos = self._dados.get("avisos") or []
         if avisos:
             texto_painel += " Avisos: " + " | ".join(avisos)
-        PainelComparacaoPeriodo.exibir(
-            self._frame_painel_resultado,
-            payload_instrucao(texto_painel),
-        )
+        self._payload_resumo_periodo = payload_instrucao(texto_painel)
+        self._exibir_resumo_comparacao(self._payload_resumo_periodo)
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
@@ -132,8 +151,27 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             self._executar_em_thread,
         )
 
-    def _atualizar_painel_comparacao(self, payload: dict) -> None:
+    def _exibir_resumo_comparacao(self, payload: dict) -> None:
+        self._payload_resumo_periodo = payload
         PainelComparacaoPeriodo.exibir(self._frame_painel_resultado, payload)
+        atualizar_estado_botao_resumo_ampliado(self._btn_resumo_ampliado, payload)
+
+    def _atualizar_painel_comparacao(self, payload: dict) -> None:
+        self._exibir_resumo_comparacao(payload)
+
+    def _abrir_resumo_periodo_ampliado(self) -> None:
+        if self._janela_resumo_periodo is not None:
+            try:
+                if self._janela_resumo_periodo.winfo_exists():
+                    self._janela_resumo_periodo.focus_force()
+                    return
+            except Exception:
+                pass
+        simbolos_txt = ", ".join(s.replace(".SA", "") for s in self._dados["simbolos"])
+        titulo = f"Resumo da comparacao — {self._rotulo_periodo} — {simbolos_txt}"
+        self._janela_resumo_periodo = abrir_janela_resumo_periodo(
+            self, self._payload_resumo_periodo, titulo
+        )
 
     def _area_grafico_valida(self) -> bool:
         try:
@@ -249,6 +287,12 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         self._canvas.draw()
 
     def _ao_fechar(self) -> None:
+        if self._janela_resumo_periodo is not None:
+            try:
+                if self._janela_resumo_periodo.winfo_exists():
+                    self._janela_resumo_periodo.destroy()
+            except Exception:
+                pass
         if self._figura:
             import matplotlib.pyplot as plt
 

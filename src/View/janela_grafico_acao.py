@@ -29,6 +29,10 @@ from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
+from src.View.janela_resumo_periodo import (
+    abrir_janela_resumo_periodo,
+    atualizar_estado_botao_resumo_ampliado,
+)
 from src.View.painel_comparacao_periodo import (
     PainelComparacaoPeriodo,
     calcular_comparacao_acao_unica,
@@ -61,7 +65,9 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._janela_detalhes: ctk.CTkToplevel | None = None
         self._janela_desvalorizacao: JanelaDesvalorizacao | None = None
         self._janela_calcular_quantidade: JanelaCalcularQuantidade | None = None
+        self._janela_resumo_periodo: ctk.CTkToplevel | None = None
         self._config_ini = ConfigPainelIni()
+        self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Grafico — {codigo}")
@@ -83,7 +89,12 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
     def _ao_fechar(self) -> None:
         self._persistir_quantidade_cotas_ini()
-        for attr in ("_janela_detalhes", "_janela_desvalorizacao", "_janela_calcular_quantidade"):
+        for attr in (
+            "_janela_detalhes",
+            "_janela_desvalorizacao",
+            "_janela_calcular_quantidade",
+            "_janela_resumo_periodo",
+        ):
             janela = getattr(self, attr, None)
             if janela is not None:
                 try:
@@ -208,6 +219,21 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
         self._label_status.pack(anchor="w", padx=16, pady=(0, 4))
 
+        barra_resumo = ctk.CTkFrame(cabecalho, fg_color="transparent")
+        barra_resumo.pack(fill="x", padx=16, pady=(0, 4))
+        self._btn_resumo_ampliado = ctk.CTkButton(
+            barra_resumo,
+            text="Ver resumo ampliado",
+            width=170,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            command=self._abrir_resumo_periodo_ampliado,
+            state="disabled",
+        )
+        self._btn_resumo_ampliado.pack(side="right")
+
         self._frame_painel_periodo = ctk.CTkScrollableFrame(
             cabecalho,
             height=240,
@@ -215,10 +241,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             label_text="Resumo do periodo selecionado no grafico",
         )
         self._frame_painel_periodo.pack(fill="x", padx=16, pady=(0, 12))
-        PainelComparacaoPeriodo.exibir(
-            self._frame_painel_periodo,
-            payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO),
-        )
+        self._exibir_resumo_periodo(self._payload_resumo_periodo)
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
@@ -246,6 +269,24 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
     def _atualizar_rotulo_painel_periodo(self) -> None:
         self._frame_painel_periodo.configure(
             label_text=f"Resumo do periodo: {self._combo_periodo.get()}"
+        )
+
+    def _exibir_resumo_periodo(self, payload: dict) -> None:
+        self._payload_resumo_periodo = payload
+        PainelComparacaoPeriodo.exibir(self._frame_painel_periodo, payload)
+        atualizar_estado_botao_resumo_ampliado(self._btn_resumo_ampliado, payload)
+
+    def _abrir_resumo_periodo_ampliado(self) -> None:
+        if self._janela_resumo_periodo is not None:
+            try:
+                if self._janela_resumo_periodo.winfo_exists():
+                    self._janela_resumo_periodo.focus_force()
+                    return
+            except Exception:
+                pass
+        titulo = f"Resumo do periodo — {self._combo_periodo.get()} — {codigo_exibicao(self._simbolo)}"
+        self._janela_resumo_periodo = abrir_janela_resumo_periodo(
+            self, self._payload_resumo_periodo, titulo
         )
 
     def _abrir_calcular_quantidade(self) -> None:
@@ -480,7 +521,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
 
         def atualizar_painel(payload: dict) -> None:
-            PainelComparacaoPeriodo.exibir(self._frame_painel_periodo, payload)
+            self._exibir_resumo_periodo(payload)
 
         configurar_tooltip_acao(canvas, eixo, linha, pontos_tooltip, simbolo, moeda)
         configurar_selecao_periodo(
