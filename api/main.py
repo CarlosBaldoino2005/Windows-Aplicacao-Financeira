@@ -14,8 +14,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.config import obter_chave_api, origens_cors
-from api.rotas import busca, mercado, saude
+from api.config import VERSAO_API, obter_chave_api, origens_cors
+from api.rotas import busca, cripto, detalhes, fiis, indices, mercado, saude
 
 
 @asynccontextmanager
@@ -27,7 +27,7 @@ async def ciclo_vida(_app: FastAPI):
 app = FastAPI(
     title="Financeiro API",
     description="API do painel de mercado para o app Android Financeiro.",
-    version="1.0.0",
+    version=VERSAO_API,
     lifespan=ciclo_vida,
 )
 
@@ -53,6 +53,10 @@ async def validar_chave_api(request: Request, call_next):
 
 app.include_router(saude.router, prefix="/api")
 app.include_router(mercado.router, prefix="/api")
+app.include_router(cripto.router, prefix="/api")
+app.include_router(fiis.router, prefix="/api")
+app.include_router(indices.router, prefix="/api")
+app.include_router(detalhes.router, prefix="/api")
 app.include_router(busca.router, prefix="/api")
 
 

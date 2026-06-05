@@ -1,24 +1,28 @@
 import 'package:flutter/material.dart';
 
 import '../modelos/cotacao_resumo.dart';
+import '../modelos/tipo_ativo.dart';
 import '../servicos/api_cliente.dart';
 import '../servicos/favoritos_local.dart';
 import '../widgets/cotacao_card.dart';
 import '../widgets/estado_carregando.dart';
 import '../widgets/estado_erro.dart';
+import '../widgets/seletor_tipo_ativo.dart';
+import 'grafico_tela.dart';
 
 class PainelTela extends StatefulWidget {
   const PainelTela({super.key});
 
   @override
-  State<PainelTela> createState() => _PainelTelaState();
+  State<PainelTela> createState() => PainelTelaState();
 }
 
-class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateMixin {
+class PainelTelaState extends State<PainelTela> with SingleTickerProviderStateMixin {
   final ApiCliente _api = ApiCliente();
   final FavoritosLocal _servicoFavoritos = FavoritosLocal();
 
   late TabController _abas;
+  TipoAtivo _tipo = TipoAtivo.acoes;
   bool _carregando = true;
   String? _erro;
   List<CotacaoResumo> _emAlta = [];
@@ -39,20 +43,26 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
     super.dispose();
   }
 
+  /// Chamado pelo botão Atualizar da tela principal.
+  Future<void> recarregar() => _carregar();
+
   Future<void> _carregar() async {
     setState(() {
       _carregando = true;
       _erro = null;
     });
     try {
-      final painel = await _api.obterPainel();
+      final painel = await _api.obterPainel(tipo: _tipo);
       final fav = await _servicoFavoritos.listar();
       if (!mounted) return;
       setState(() {
         _emAlta = painel['emAlta'] ?? [];
         _emQueda = painel['emQueda'] ?? [];
         _todas = painel['todas'] ?? [];
-        _favoritosSimbolos = fav.toSet();
+        _favoritosSimbolos = fav
+            .where((item) => item.tipo == _tipo)
+            .map((item) => item.simbolo)
+            .toSet();
         _carregando = false;
       });
     } catch (e) {
@@ -64,14 +74,20 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
     }
   }
 
+  void _mudarTipo(TipoAtivo novo) {
+    if (novo == _tipo) return;
+    setState(() => _tipo = novo);
+    _carregar();
+  }
+
   Future<void> _alternarFavorito(CotacaoResumo cotacao) async {
     final simbolo = cotacao.simbolo;
     try {
       if (_favoritosSimbolos.contains(simbolo)) {
-        await _servicoFavoritos.remover(simbolo);
+        await _servicoFavoritos.remover(_tipo, simbolo);
         setState(() => _favoritosSimbolos.remove(simbolo));
       } else {
-        await _servicoFavoritos.adicionar(simbolo);
+        await _servicoFavoritos.adicionar(_tipo, simbolo);
         setState(() => _favoritosSimbolos.add(simbolo));
       }
     } catch (e) {
@@ -82,9 +98,22 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
     }
   }
 
+  void _abrirGrafico(CotacaoResumo cotacao) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GraficoTela(
+          simbolo: cotacao.simbolo,
+          codigo: cotacao.codigo,
+          tipo: _tipo,
+          cotacao: cotacao,
+        ),
+      ),
+    );
+  }
+
   Widget _lista(List<CotacaoResumo> itens) {
     if (itens.isEmpty) {
-      return const Center(child: Text('Nenhuma acao nesta aba.'));
+      return Center(child: Text('Nenhum ativo nesta aba (${_tipo.rotulo}).'));
     }
     return RefreshIndicator(
       onRefresh: _carregar,
@@ -97,6 +126,7 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
             cotacao: item,
             ehFavorito: _favoritosSimbolos.contains(item.simbolo),
             aoAlternarFavorito: () => _alternarFavorito(item),
+            aoTocar: () => _abrirGrafico(item),
           );
         },
       ),
@@ -105,34 +135,39 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    if (_carregando) return const EstadoCarregando(mensagem: 'Carregando painel...');
-    if (_erro != null) {
-      return EstadoErro(mensagem: _erro!, aoTentarNovamente: _carregar);
-    }
-
     return Column(
       children: [
-        Material(
-          color: Theme.of(context).cardColor,
-          child: TabBar(
-            controller: _abas,
-            tabs: const [
-              Tab(text: 'Em alta'),
-              Tab(text: 'Em queda'),
-              Tab(text: 'Todas'),
-            ],
-          ),
+        SeletorTipoAtivo(
+          tipoSelecionado: _tipo,
+          aoMudar: _mudarTipo,
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _abas,
-            children: [
-              _lista(_emAlta),
-              _lista(_emQueda),
-              _lista(_todas),
-            ],
+        if (_carregando)
+          const Expanded(child: EstadoCarregando(mensagem: 'Carregando painel...'))
+        else if (_erro != null)
+          Expanded(child: EstadoErro(mensagem: _erro!, aoTentarNovamente: _carregar))
+        else ...[
+          Material(
+            color: Theme.of(context).cardColor,
+            child: TabBar(
+              controller: _abas,
+              tabs: const [
+                Tab(text: 'Em alta'),
+                Tab(text: 'Em queda'),
+                Tab(text: 'Todas'),
+              ],
+            ),
           ),
-        ),
+          Expanded(
+            child: TabBarView(
+              controller: _abas,
+              children: [
+                _lista(_emAlta),
+                _lista(_emQueda),
+                _lista(_todas),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

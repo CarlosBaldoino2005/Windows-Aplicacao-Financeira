@@ -109,14 +109,22 @@ if errorlevel 1 (
 )
 
 set APK_BUILD=%PROJETO%\build\app\outputs\flutter-apk\app-release.apk
-set APK_DEST=%ORIGEM%\build\app\outputs\flutter-apk
-if not exist "%APK_DEST%" mkdir "%APK_DEST%"
-copy /Y "%APK_BUILD%" "%APK_DEST%\" >nul
+set APK_NOME=Financeiro.apk
+set APK_DEST=%~dp0%APK_NOME%
+set APK_COPIA_PROJETO=%ORIGEM%\%APK_NOME%
+
+copy /Y "%APK_BUILD%" "%APK_DEST%" >nul
+if errorlevel 1 (
+    echo Falha ao copiar APK para %APK_DEST%
+    pause
+    exit /b 1
+)
+copy /Y "%APK_BUILD%" "%APK_COPIA_PROJETO%" >nul
 
 echo.
-echo APK gerado em:
-echo %APK_BUILD%
+echo APK gerado:
+echo %APK_DEST%
 echo.
-echo Copia no projeto (OneDrive):
-echo %APK_DEST%\app-release.apk
+echo Copia no app:
+echo %APK_COPIA_PROJETO%
 pause

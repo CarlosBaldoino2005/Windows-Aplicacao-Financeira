@@ -47,6 +47,6 @@ Write-Host @"
    flutter pub get
    flutter build apk --release
 
-APK: mobile\financeiro_app\build\app\outputs\flutter-apk\app-release.apk
+APK: mobile\Financeiro.apk
 
 "@

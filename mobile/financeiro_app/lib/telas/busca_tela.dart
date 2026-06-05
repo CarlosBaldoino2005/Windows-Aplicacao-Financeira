@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../modelos/resultado_busca.dart';
+import '../modelos/tipo_ativo.dart';
 import '../servicos/api_cliente.dart';
 import '../servicos/favoritos_local.dart';
 import '../tema/cores.dart';
 import '../widgets/estado_carregando.dart';
+import '../widgets/seletor_tipo_ativo.dart';
+import 'grafico_tela.dart';
 
 class BuscaTela extends StatefulWidget {
   const BuscaTela({super.key});
 
   @override
-  State<BuscaTela> createState() => _BuscaTelaState();
+  State<BuscaTela> createState() => BuscaTelaState();
 }
 
-class _BuscaTelaState extends State<BuscaTela> {
+class BuscaTelaState extends State<BuscaTela> {
   final ApiCliente _api = ApiCliente();
   final FavoritosLocal _servicoFavoritos = FavoritosLocal();
   final TextEditingController _campo = TextEditingController();
 
+  TipoAtivo _tipo = TipoAtivo.acoes;
   bool _carregando = false;
   String? _erro;
   List<ResultadoBusca> _resultados = [];
@@ -35,12 +39,45 @@ class _BuscaTelaState extends State<BuscaTela> {
     super.dispose();
   }
 
+  String get _dicaCampo {
+    return switch (_tipo) {
+      TipoAtivo.cripto => 'BTC, ETH, SOL...',
+      TipoAtivo.fiis => 'HGLG11, MXRF11...',
+      TipoAtivo.indices => 'Use o painel Índices',
+      TipoAtivo.acoes => 'PETR4, Vale, AAPL...',
+    };
+  }
+
   Future<void> _carregarFavoritos() async {
     final lista = await _servicoFavoritos.listar();
-    if (mounted) setState(() => _favoritosSimbolos = lista.toSet());
+    if (mounted) {
+      setState(() {
+        _favoritosSimbolos = lista
+            .where((item) => item.tipo == _tipo)
+            .map((item) => item.simbolo)
+            .toSet();
+      });
+    }
+  }
+
+  void _mudarTipo(TipoAtivo novo) {
+    setState(() {
+      _tipo = novo;
+      _resultados = [];
+      _erro = null;
+    });
+    _carregarFavoritos();
   }
 
   Future<void> _pesquisar() async {
+    if (_tipo == TipoAtivo.indices) {
+      setState(() {
+        _erro = 'Para índices, use a aba Painel → Índices.';
+        _resultados = [];
+      });
+      return;
+    }
+
     final termo = _campo.text.trim();
     if (termo.length < 2) {
       setState(() {
@@ -56,7 +93,7 @@ class _BuscaTelaState extends State<BuscaTela> {
     });
 
     try {
-      final lista = await _api.buscarAcoes(termo);
+      final lista = await _api.buscar(termo, tipo: _tipo);
       if (!mounted) return;
       setState(() {
         _resultados = lista;
@@ -74,10 +111,10 @@ class _BuscaTelaState extends State<BuscaTela> {
   Future<void> _alternarFavorito(ResultadoBusca item) async {
     try {
       if (_favoritosSimbolos.contains(item.simbolo)) {
-        await _servicoFavoritos.remover(item.simbolo);
+        await _servicoFavoritos.remover(_tipo, item.simbolo);
         setState(() => _favoritosSimbolos.remove(item.simbolo));
       } else {
-        await _servicoFavoritos.adicionar(item.simbolo);
+        await _servicoFavoritos.adicionar(_tipo, item.simbolo);
         setState(() => _favoritosSimbolos.add(item.simbolo));
       }
     } catch (e) {
@@ -88,10 +125,26 @@ class _BuscaTelaState extends State<BuscaTela> {
     }
   }
 
+  void _abrirAtivo(ResultadoBusca item) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GraficoTela(
+          simbolo: item.simbolo,
+          codigo: item.codigo,
+          tipo: _tipo,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        SeletorTipoAtivo(
+          tipoSelecionado: _tipo,
+          aoMudar: _mudarTipo,
+        ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -99,9 +152,9 @@ class _BuscaTelaState extends State<BuscaTela> {
               Expanded(
                 child: TextField(
                   controller: _campo,
-                  decoration: const InputDecoration(
-                    hintText: 'PETR4, Vale, AAPL...',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: _dicaCampo,
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   textInputAction: TextInputAction.search,
@@ -132,8 +185,12 @@ class _BuscaTelaState extends State<BuscaTela> {
                 return ListTile(
                   title: Text(item.codigo, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('${item.nome} • ${item.bolsa}'),
+                  onTap: () => _abrirAtivo(item),
                   trailing: IconButton(
-                    icon: Icon(fav ? Icons.star : Icons.star_border, color: fav ? Colors.amber : null),
+                    icon: Icon(
+                      fav ? Icons.star : Icons.star_border,
+                      color: fav ? Colors.amber : null,
+                    ),
                     onPressed: () => _alternarFavorito(item),
                   ),
                 );

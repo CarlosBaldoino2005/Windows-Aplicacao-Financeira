@@ -14,28 +14,37 @@ class InicioTela extends StatefulWidget {
 class _InicioTelaState extends State<InicioTela> {
   int _indice = 0;
 
-  final _telas = const [
-    PainelTela(),
-    BuscaTela(),
-    FavoritosTela(),
-  ];
+  final _chavePainel = GlobalKey<PainelTelaState>();
+  final _chaveFavoritos = GlobalKey<FavoritosTelaState>();
+
+  void _atualizarTudo() {
+    _chavePainel.currentState?.recarregar();
+    _chaveFavoritos.currentState?.recarregar();
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final telas = [
+      PainelTela(key: _chavePainel),
+      const BuscaTela(),
+      FavoritosTela(key: _chaveFavoritos),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Financeiro'),
         actions: [
           IconButton(
             tooltip: 'Atualizar',
-            onPressed: () => setState(() {}),
+            onPressed: _atualizarTudo,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: IndexedStack(
         index: _indice,
-        children: _telas,
+        children: telas,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _indice,

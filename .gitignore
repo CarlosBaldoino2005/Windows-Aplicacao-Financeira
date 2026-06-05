@@ -28,3 +28,5 @@ mobile/**/.dart_tool/
 mobile/**/.flutter-plugins-dependencies
 mobile/**/android/.gradle/
 mobile/**/ios/Pods/
+mobile/Financeiro.apk
+mobile/financeiro_app/Financeiro.apk

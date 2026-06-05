@@ -4,7 +4,15 @@ App instalavel em Flutter que consome a **API FastAPI** do projeto (`api/`).
 
 Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/cores.dart`).
 
-## Fase 1 (atual)
+## Fase 2 (atual)
+
+- Painel com seletor: **Ações**, **Cripto**, **FIIs** e **Índices**
+- Gráfico de histórico com periodos (dia, semana, mês, etc.)
+- **Mais detalhes**: empresa, indicadores, dividendos e resultados
+- Busca por tipo de ativo
+- Favoritos por tipo (salvos no celular)
+
+## Fase 1
 
 - Painel: Em alta / Em queda / Todas
 - Busca de acoes
@@ -65,7 +73,7 @@ flutter run
 flutter build apk --release
 ```
 
-APK em: `build\app\outputs\flutter-apk\app-release.apk`
+APK em: `mobile\Financeiro.apk` (gerado por `gerar_apk.bat`)
 
 Copie para o celular e instale (habilite "fontes desconhecidas" se necessario).
 
@@ -78,4 +86,4 @@ O celular nao alcanca `127.0.0.1` do PC. Use:
 
 ## Proximas fases
 
-- Graficos, comparar, detalhes, noticias, cripto, FIIs (novas rotas na API + telas Flutter)
+- Comparar ativos, noticias, tema escuro, empresas pagadoras de dividendos

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from api.config import VERSAO_API
+
 router = APIRouter(tags=["Saude"])
 
 
@@ -12,5 +14,15 @@ def verificar_saude() -> dict:
     return {
         "status": "ok",
         "servico": "financeiro-api",
-        "versao": "1.0.0",
+        "versao": VERSAO_API,
+        "recursos": [
+            "painel-acoes",
+            "painel-cripto",
+            "painel-fiis",
+            "painel-indices",
+            "detalhes",
+            "historico",
+            "busca-cripto",
+            "busca-fiis",
+        ],
     }

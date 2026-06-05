@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 
+VERSAO_API = "1.1.0"
+
 
 def obter_porta() -> int:
     """Porta do servidor (Render injeta PORT)."""
