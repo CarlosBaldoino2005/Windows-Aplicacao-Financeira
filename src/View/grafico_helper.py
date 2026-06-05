@@ -31,6 +31,49 @@ DESLOC_TOOLTIP_PONTOS = 18
 MARGEM_TOOLTIP_FRACAO = 0.22
 
 
+def aplicar_tema_matplotlib(eixo, figura=None) -> None:
+    """Aplica cores de texto, eixos e legenda conforme modo claro/escuro (CORES)."""
+    cor_texto = CORES["texto"]
+    cor_borda = CORES["borda"]
+    fundo_grafico = CORES.get("graficoFundo", CORES["superficie"])
+
+    if figura is not None:
+        figura.set_facecolor(fundo_grafico)
+
+    eixo.set_facecolor(fundo_grafico)
+
+    titulo = eixo.get_title()
+    if titulo:
+        eixo.title.set_color(cor_texto)
+
+    rotulo_y = eixo.get_ylabel()
+    if rotulo_y:
+        eixo.yaxis.label.set_color(cor_texto)
+
+    rotulo_x = eixo.get_xlabel()
+    if rotulo_x:
+        eixo.xaxis.label.set_color(cor_texto)
+
+    eixo.tick_params(axis="x", colors=cor_texto, labelcolor=cor_texto)
+    eixo.tick_params(axis="y", colors=cor_texto, labelcolor=cor_texto)
+
+    for rotulo in eixo.get_xticklabels():
+        rotulo.set_color(cor_texto)
+    for rotulo in eixo.get_yticklabels():
+        rotulo.set_color(cor_texto)
+
+    for spine in eixo.spines.values():
+        spine.set_color(cor_borda)
+
+    legenda = eixo.get_legend()
+    if legenda is not None:
+        moldura = legenda.get_frame()
+        moldura.set_facecolor(fundo_grafico)
+        moldura.set_edgecolor(cor_borda)
+        for texto in legenda.get_texts():
+            texto.set_color(cor_texto)
+
+
 def _formatar_volume(volume: int | None) -> str:
     if volume is None:
         return "—"
@@ -52,6 +95,7 @@ def _criar_anotacao_tooltip(eixo):
         ),
         arrowprops=dict(arrowstyle="->", color=CORES["primaria"], lw=1),
         fontsize=9,
+        color=CORES["texto"],
         annotation_clip=False,
         clip_on=False,
     )

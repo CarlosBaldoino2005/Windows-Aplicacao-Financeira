@@ -16,6 +16,7 @@ log/
 dados/favoritos.json
 dados/favoritos_cripto.json
 dados/favoritos_dividendos.json
+dados/favoritos_fiis.json
 dados/painel.ini
 *.log
 dist/

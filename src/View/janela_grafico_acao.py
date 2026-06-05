@@ -8,6 +8,8 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
+from typing import Any
+
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
@@ -16,9 +18,11 @@ from src.Service.cdi_servico import CdiServico
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
     TEXTO_INSTRUCAO_GRAFICO_ACAO,
+    aplicar_tema_matplotlib,
     configurar_selecao_periodo,
     configurar_tooltip_acao,
 )
+from src.View.janela_desvalorizacao import JanelaDesvalorizacao
 from src.View.janela_detalhes_acao import JanelaDetalhesAcao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
@@ -37,7 +41,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
     def __init__(
         self,
         pai: ctk.CTk,
-        controlador: ControladorMercado,
+        controlador: ControladorMercado | Any,
         simbolo: str,
         periodo_chave: str | None = None,
         data_inicio: str | None = None,
@@ -52,6 +56,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._janela_detalhes: JanelaDetalhesAcao | None = None
+        self._janela_desvalorizacao: JanelaDesvalorizacao | None = None
         self._config_ini = ConfigPainelIni()
 
         codigo = simbolo.replace(".SA", "")
@@ -61,19 +66,21 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         self._montar_interface()
         self._aplicar_periodo_inicial()
-        configurar_janela_maximizada(self)
+        configurar_janela_maximizada(self, ao_apos_layout=self._ajustar_grafico_ao_redimensionar)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(200, self._carregar_grafico)
 
     def _ao_fechar(self) -> None:
         self._persistir_quantidade_cotas_ini()
-        if self._janela_detalhes is not None:
-            try:
-                if self._janela_detalhes.winfo_exists():
-                    self._janela_detalhes.destroy()
-            except Exception:
-                pass
+        for attr in ("_janela_detalhes", "_janela_desvalorizacao"):
+            janela = getattr(self, attr, None)
+            if janela is not None:
+                try:
+                    if janela.winfo_exists():
+                        janela.destroy()
+                except Exception:
+                    pass
         if self._figura:
             import matplotlib.pyplot as plt
 
@@ -144,6 +151,15 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         ctk.CTkButton(
             barra,
+            text="Desvalorizacao",
+            command=self._abrir_desvalorizacao,
+            fg_color=CORES["secundaria"],
+            hover_color=CORES["primariaHover"],
+            width=130,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            barra,
             text="Mais detalhes",
             command=self._abrir_mais_detalhes,
             fg_color=CORES["secundaria"],
@@ -205,6 +221,23 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
     def _atualizar_rotulo_painel_periodo(self) -> None:
         self._frame_painel_periodo.configure(
             label_text=f"Resumo do periodo: {self._combo_periodo.get()}"
+        )
+
+    def _abrir_desvalorizacao(self) -> None:
+        if self._janela_desvalorizacao is not None:
+            try:
+                if self._janela_desvalorizacao.winfo_exists():
+                    self._janela_desvalorizacao.focus_force()
+                    return
+            except Exception:
+                pass
+        self._janela_desvalorizacao = JanelaDesvalorizacao(
+            self,
+            self._controlador,
+            self._simbolo,
+            periodo_chave=self._periodo_chave(),
+            data_inicio=self._entrada_inicio.get(),
+            data_fim=self._entrada_fim.get(),
         )
 
     def _abrir_mais_detalhes(self) -> None:
@@ -384,7 +417,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         eixo.set_ylabel(rotulo_eixo, fontsize=11)
         eixo.set_xticks(indices)
         eixo.set_xticklabels(labels, rotation=25, ha="right", fontsize=8)
-        eixo.grid(True, alpha=0.3)
+        eixo.grid(True, alpha=0.3, color=CORES["borda"])
+        aplicar_tema_matplotlib(eixo, figura)
         figura.subplots_adjust(bottom=0.22, left=0.08, right=0.96, top=0.9)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
@@ -414,6 +448,20 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
         self._figura = figura
         self._canvas = canvas
+
+    def _ajustar_grafico_ao_redimensionar(self) -> None:
+        """Redesenha o matplotlib apos troca de monitor ou maximizacao."""
+        if self._canvas is None or self._figura is None:
+            return
+        try:
+            self._frame_grafico.update_idletasks()
+            largura_px = max(400, self._frame_grafico.winfo_width() - 16)
+            altura_px = max(300, self._frame_grafico.winfo_height() - 16)
+            dpi = self._figura.get_dpi()
+            self._figura.set_size_inches(largura_px / dpi, altura_px / dpi, forward=True)
+            self._canvas.draw()
+        except Exception:
+            pass
 
     def _exibir_resumo_periodo_do_grafico(
         self,

@@ -264,3 +264,29 @@ def validar_quantidade_cotas(
         return None, "Informe no maximo {maximo:,} acoes.".replace(",", ".")
 
     return valor, None
+
+
+def validar_provedor_noticias(
+    texto: str,
+    categoria: str = "mercado",
+) -> tuple[str, str | None]:
+    """Valida chave do servidor de noticias (mercado ou cripto)."""
+    from src.Model.provedores_noticias import (
+        CATEGORIA_CRIPTO,
+        PROVEDOR_PADRAO_CRIPTO,
+        PROVEDOR_PADRAO_MERCADO,
+        obter_provedor,
+    )
+
+    padrao = (
+        PROVEDOR_PADRAO_CRIPTO
+        if categoria == CATEGORIA_CRIPTO
+        else PROVEDOR_PADRAO_MERCADO
+    )
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    chave = str(texto).strip().lower()
+    if obter_provedor(chave, categoria):
+        return chave, None
+    return padrao, "Provedor de noticias invalido para esta categoria."

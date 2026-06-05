@@ -6,9 +6,10 @@ from matplotlib.figure import Figure
 
 from src.Service.cdi_servico import CdiServico
 from src.Tool.janela_helper import configurar_janela_maximizada
-from src.View.grafico_helper import COR_LINHA_CDI
 from src.View.grafico_helper import (
+    COR_LINHA_CDI,
     TEXTO_INSTRUCAO_GRAFICO_COMPARACAO,
+    aplicar_tema_matplotlib,
     configurar_selecao_periodo_comparacao,
     configurar_tooltip_comparacao,
 )
@@ -182,7 +183,8 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         eixo.set_title("Desempenho relativo no periodo", fontsize=14, fontweight="bold")
         eixo.set_ylabel("Indice relativo (base 100)", fontsize=11)
         eixo.legend(loc="best", fontsize=10)
-        eixo.grid(True, alpha=0.3)
+        eixo.grid(True, alpha=0.3, color=CORES["borda"])
+        aplicar_tema_matplotlib(eixo, figura)
         figura.subplots_adjust(bottom=0.2, left=0.08, right=0.96, top=0.92)
 
         self._figura = figura

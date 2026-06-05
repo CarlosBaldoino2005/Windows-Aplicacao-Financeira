@@ -17,9 +17,19 @@ from src.Tool.validadores import (
     validar_quantidade_cotas,
     validar_quantidade_cripto,
 )
+from src.Model.provedores_noticias import (
+    CATEGORIA_CRIPTO,
+    CATEGORIA_MERCADO,
+    PROVEDOR_PADRAO_CRIPTO,
+    PROVEDOR_PADRAO_MERCADO,
+)
 from src.View.tema import MODO_PADRAO
 
 SECAO_PAINEL = "PAINEL"
+SECAO_JANELA = "JANELA"
+CHAVE_MONITOR_DISPOSITIVO = "monitor_dispositivo"
+CHAVE_PROVEDOR_NOTICIAS = "provedor_noticias"
+CHAVE_PROVEDOR_NOTICIAS_CRIPTO = "provedor_noticias_cripto"
 CHAVE_QUANTIDADE_ACOES = "quantidade_acoes"
 CHAVE_QUANTIDADE_COTAS_GRAFICO = "quantidade_cotas_grafico"
 CHAVE_MODO_APARENCIA = "modo_aparencia"
@@ -181,6 +191,89 @@ class ConfigPainelIni:
         if SECAO_PAINEL not in parser:
             parser[SECAO_PAINEL] = {}
         parser[SECAO_PAINEL][CHAVE_QUANTIDADE_COTAS_GRAFICO] = str(quantidade)
+        self._gravar(parser)
+
+    def carregar_monitor_janela(self) -> str | None:
+        """Identificador do monitor salvo (ex.: DISPLAY2) ou None se nunca gravado."""
+        parser = self._ler_parser()
+        if SECAO_JANELA not in parser:
+            return None
+        texto = (parser[SECAO_JANELA].get(CHAVE_MONITOR_DISPOSITIVO) or "").strip()
+        if not texto:
+            return None
+        return texto.upper()
+
+    def carregar_provedor_noticias(self) -> str:
+        """Chave do servidor de noticias de mercado (ex.: brasil_ibovespa)."""
+        return self._carregar_chave_provedor(
+            CHAVE_PROVEDOR_NOTICIAS,
+            PROVEDOR_PADRAO_MERCADO,
+            CATEGORIA_MERCADO,
+        )
+
+    def salvar_provedor_noticias(self, chave: str) -> None:
+        self._salvar_chave_provedor(
+            CHAVE_PROVEDOR_NOTICIAS,
+            chave,
+            CATEGORIA_MERCADO,
+        )
+
+    def carregar_provedor_noticias_cripto(self) -> str:
+        """Chave do servidor de noticias de criptomoedas."""
+        return self._carregar_chave_provedor(
+            CHAVE_PROVEDOR_NOTICIAS_CRIPTO,
+            PROVEDOR_PADRAO_CRIPTO,
+            CATEGORIA_CRIPTO,
+        )
+
+    def salvar_provedor_noticias_cripto(self, chave: str) -> None:
+        self._salvar_chave_provedor(
+            CHAVE_PROVEDOR_NOTICIAS_CRIPTO,
+            chave,
+            CATEGORIA_CRIPTO,
+        )
+
+    def _carregar_chave_provedor(
+        self,
+        chave_ini: str,
+        padrao: str,
+        categoria: str,
+    ) -> str:
+        from src.Tool.validadores import validar_provedor_noticias
+
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            return padrao
+        texto = (parser[SECAO_PAINEL].get(chave_ini) or "").strip()
+        if not texto:
+            return padrao
+        chave_ok, _ = validar_provedor_noticias(texto, categoria)
+        return chave_ok
+
+    def _salvar_chave_provedor(
+        self,
+        chave_ini: str,
+        chave_provedor: str,
+        categoria: str,
+    ) -> None:
+        from src.Tool.validadores import validar_provedor_noticias
+
+        chave_ok, _ = validar_provedor_noticias(chave_provedor, categoria)
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][chave_ini] = chave_ok
+        self._gravar(parser)
+
+    def salvar_monitor_janela(self, dispositivo: str) -> None:
+        """Grava o monitor onde a janela principal foi exibida pela ultima vez."""
+        nome = (dispositivo or "").strip().upper()
+        if not nome:
+            return
+        parser = self._ler_parser()
+        if SECAO_JANELA not in parser:
+            parser[SECAO_JANELA] = {}
+        parser[SECAO_JANELA][CHAVE_MONITOR_DISPOSITIVO] = nome
         self._gravar(parser)
 
     def _ler_ou_criar_secao(self) -> dict[str, str]:

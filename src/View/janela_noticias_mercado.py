@@ -11,6 +11,10 @@ from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
 from src.View.janela_pesquisa_noticias import JanelaPesquisaNoticias
 from src.View.noticias_fotos_helper import criar_combo_fotos_noticias
+from src.View.noticias_provedor_helper import (
+    criar_combo_provedor_noticias,
+    descricao_provedor_atual,
+)
 from src.View.noticias_idioma_helper import (
     IDIOMA_ORIGINAL,
     ControladorExibicaoNoticiasIdioma,
@@ -72,11 +76,22 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
 
+        self._label_provedor = ctk.CTkLabel(
+            cabecalho,
+            text=descricao_provedor_atual(self._config_painel, self._modo_cripto),
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=900,
+            justify="left",
+        )
+        self._label_provedor.pack(anchor="w", padx=16, pady=(0, 4))
+
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Principais manchetes de Brasil e EUA (Yahoo Finance). "
-                "Use a lista ao lado para ver no idioma original ou traduzido para portugues."
+                "Escolha o servidor de noticias (Brasil, EUA, Europa, cripto, etc.). "
+                "A preferencia e salva no painel.ini. Use a lista ao lado para "
+                "ver no idioma original ou traduzido para portugues."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -130,6 +145,12 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             self._config_painel,
             lambda: self._idioma.reexibir_apos_atualizar_lista() if self._idioma else None,
         )
+        criar_combo_provedor_noticias(
+            barra,
+            self._config_painel,
+            self._ao_mudar_provedor_noticias,
+            modo_cripto=self._modo_cripto,
+        )
 
         ctk.CTkLabel(barra, text="Filtrar").pack(side="right", padx=(12, 6))
         self._combo_filtro = ctk.CTkComboBox(
@@ -168,6 +189,12 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
     def _ao_mudar_filtro(self, valor: str) -> None:
         self._filtro_atual = valor
         self._renderizar_lista()
+
+    def _ao_mudar_provedor_noticias(self, _chave: str) -> None:
+        self._label_provedor.configure(
+            text=descricao_provedor_atual(self._config_painel, self._modo_cripto)
+        )
+        self._carregar_noticias()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         def trabalho() -> None:

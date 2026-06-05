@@ -9,6 +9,8 @@ from src.Service.painel_periodo_servico import PainelPeriodoServico
 from src.Service.noticias_mercado_servico import NoticiasMercadoServico
 from src.Service.traducao_noticias_servico import TraducaoNoticiasServico
 from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
+from src.Model.desvalorizacao import AnaliseDesvalorizacao
+from src.Tool.desvalorizacao_helper import analisar_desvalorizacoes_periodo
 from src.Tool.validadores import normalizar_simbolo, validar_data_ptbr, validar_lista_simbolos
 
 
@@ -137,6 +139,34 @@ class ControladorMercado:
         if not serie:
             return None, "Historico indisponivel para este periodo."
         return serie, None
+
+    def obter_desvalorizacoes_periodo(
+        self,
+        simbolo: str,
+        periodo: str,
+        data_inicio_texto: str | None = None,
+        data_fim_texto: str | None = None,
+    ) -> tuple[AnaliseDesvalorizacao | None, str | None]:
+        """Identifica quedas de preco (pico → fundo) no historico do periodo."""
+        serie, erro = self.obter_historico(
+            simbolo, periodo, data_inicio_texto, data_fim_texto
+        )
+        if erro or serie is None:
+            return None, erro or "Historico indisponivel para este periodo."
+
+        moeda = "BRL" if serie.simbolo.endswith(".SA") else "USD"
+        analise = analisar_desvalorizacoes_periodo(
+            serie.pontos,
+            serie.simbolo,
+            serie.periodo,
+            moeda,
+        )
+        if analise.ultima is None:
+            return None, (
+                f"Nenhuma desvalorizacao identificada no periodo ({analise.periodo_rotulo}). "
+                "O preco pode ter subido ou permanecido estavel."
+            )
+        return analise, None
 
     def comparar(
         self,

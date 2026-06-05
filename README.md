@@ -8,10 +8,11 @@ Toda a interface e logica estao em Python (CustomTkinter + Matplotlib). Nao e ne
 
 - **Painel**: abas **Em alta**, **Em queda** e **Todas**; configuracoes em `dados/painel.ini` (quantidades e tema claro/escuro).
 - **Pesquisar acao**, **Acoes favoritas**, **Comparar acoes**, **Noticias do mercado** e **Criptomoedas**: botoes na tela principal; favoritos de acoes em `dados/favoritos.json` e de criptos em `dados/favoritos_cripto.json` (ate 40 cada).
-- **Grafico da acao**: abre em janela dedicada (periodo dia/mes/ano etc.); duplo clique no painel ou nos favoritos; **linha laranja tracejada** com evolucao em 100% CDI no grafico (acoes em reais); selecao de dois pontos com quantidade mostra valor pago, valor final, lucro/prejuizo e comparacao CDI no painel; botao **Mais detalhes** com perfil da empresa, indicadores, DRE/balanco/fluxo e concorrentes (yfinance).
+- **Grafico da acao**: abre em janela dedicada (periodo dia/mes/ano etc.); duplo clique no painel ou nos favoritos; **linha laranja tracejada** com evolucao em 100% CDI no grafico (acoes em reais); selecao de dois pontos com quantidade mostra valor pago, valor final, lucro/prejuizo e comparacao CDI no painel; botao **Desvalorizacao** abre tela com a ultima queda (pico → fundo) no periodo e lista outras quedas do intervalo; botao **Mais detalhes** com perfil da empresa, indicadores, DRE/balanco/fluxo e concorrentes (yfinance).
 - **Comparar acoes** (`janela_comparar_acoes.py`): ate 6 tickers, periodo configuravel; grafico em nova janela com indice base 100, linha **100% CDI** e desempenho relativo.
 - **Noticias do mercado** (`janela_noticias_mercado.py`): manchetes Brasil e EUA via Yahoo Finance; **Pesquisar** abre tela para buscar por acao, empresa ou assunto; listbox **Original** / **Portugues (traduzido)** em ambas as telas (`deep-translator`).
 - **Criptomoedas** (`janela_hub_criptomoedas.py`): painel com abas Em alta / Em queda / Todas, pesquisa, favoritos, comparacao, graficos e noticias (pares `BTC-USD`, `ETH-USD`, etc. no Yahoo Finance).
+- **Fundos imobiliarios** (`janela_hub_fundos_imobiliarios.py`): mesmo painel de acoes, filtrando somente FIIs da B3 (HGLG11, MXRF11, etc.).
 
 ## Requisitos
 
@@ -107,6 +108,9 @@ quantidade_cotas_grafico = 100
 modo_aparencia = claro
 fotos_noticias = medio
 fonte_grid = medio
+
+[JANELA]
+monitor_dispositivo = DISPLAY2
 ```
 
 - **quantidade_acoes**: maximo de linhas nas abas Em alta, Em queda e Todas (1 a 100).
@@ -115,6 +119,9 @@ fonte_grid = medio
 - **fotos_noticias**: `nenhum`, `pequeno`, `medio` ou `grande` — tamanho das miniaturas nas telas de noticias (tambem alteravel no combo **Fotos**).
 - **fonte_grid**: `pequeno`, `medio` ou `grande` — tamanho da fonte nas grids de cotacoes (painel, favoritos, cripto e tabelas de Mais detalhes); alteravel no combo **Fonte grid**.
 - **quantidade_cripto**: maximo de linhas no painel de criptomoedas (1 a 80).
+- **provedor_noticias**: servidor de noticias de mercado (`geral`, `brasil_ibovespa`, `brasil_blue_chips`, `eua_wall_street`, `eua_tecnologia`, `europa`, `asia`, `commodities`, etc.). Alteravel no combo **Servidor** nas telas de noticias; todas as buscas usam essa fonte.
+- **provedor_noticias_cripto**: servidor para noticias de criptomoedas (`cripto_geral`, `cripto_top3`, `cripto_bitcoin`, etc.).
+- **monitor_dispositivo** (secao `[JANELA]`): monitor da janela principal (`DISPLAY1`, `DISPLAY2`, ...). Gravado automaticamente ao mover a janela para outro monitor ou ao fechar o app. Na proxima abertura, abre maximizado nesse monitor; se ele nao existir mais, usa o monitor principal.
 
 ## Empresa + dividendos
 
@@ -123,6 +130,14 @@ Botao **Empresa + dividendos** na tela principal abre um painel com a mesma estr
 Em **Mais detalhes** do grafico, a aba **Dividendos** mostra data e valor por acao de cada pagamento registrado na fonte.
 
 Favoritos do painel: `dados/favoritos_dividendos.json` (ignorado pelo Git).
+
+## Fundos imobiliarios
+
+Botao **Fundos imobiliarios** (entre Empresa + dividendos e Acoes por periodo) abre painel com a mesma estrutura, listando **somente FIIs da B3** (lista curada + validacao de ticker 11).
+
+Inclui pesquisa, favoritos, comparacao, graficos, noticias e proventos em **Mais detalhes**.
+
+Favoritos do painel: `dados/favoritos_fiis.json` (ignorado pelo Git).
 
 ## Acoes por periodo
 

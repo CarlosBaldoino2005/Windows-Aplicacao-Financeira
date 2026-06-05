@@ -15,6 +15,7 @@ from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_noticias_mercado import JanelaNoticiasMercado
 from src.View.janela_hub_criptomoedas import JanelaHubCriptomoedas
 from src.View.janela_hub_empresas_dividendos import JanelaHubEmpresasDividendos
+from src.View.janela_hub_fundos_imobiliarios import JanelaHubFundosImobiliarios
 from src.View.janela_hub_painel_periodo import JanelaHubPainelPeriodo
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
@@ -25,7 +26,7 @@ from src.View.tabela_mercado_helper import (
     reaplicar_fonte_em_tabelas,
 )
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import configurar_janela_maximizada, obter_dispositivo_monitor_janela
 from src.Tool.validadores import validar_quantidade_acoes
 from src.View.tema import (
     CORES,
@@ -48,6 +49,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_cripto: JanelaHubCriptomoedas | None = None
         self._janela_dividendos: JanelaHubEmpresasDividendos | None = None
+        self._janela_fiis: JanelaHubFundosImobiliarios | None = None
         self._janela_painel_periodo: JanelaHubPainelPeriodo | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._carga_inicial_painel_feita = False
@@ -55,9 +57,26 @@ class InterfaceApp(ctk.CTk):
 
         self._configurar_aparencia()
         self._montar_layout()
-        # Abre maximizado (padrao do projeto e regra global do usuario).
-        configurar_janela_maximizada(self)
+        self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
+        # Abre maximizado no monitor salvo no INI (ou principal se ausente).
+        configurar_janela_maximizada(
+            self,
+            monitor_inicial=self._config_painel.carregar_monitor_janela(),
+            ao_salvar_monitor=self._salvar_monitor_principal,
+        )
         self._agendar_carga_inicial_painel()
+
+    def _salvar_monitor_principal(self, dispositivo: str) -> None:
+        try:
+            self._config_painel.salvar_monitor_janela(dispositivo)
+        except OSError:
+            pass
+
+    def _ao_fechar(self) -> None:
+        dispositivo = obter_dispositivo_monitor_janela(self)
+        if dispositivo:
+            self._salvar_monitor_principal(dispositivo)
+        self.destroy()
 
     def _configurar_aparencia(self) -> None:
         aplicar_modo_aparencia(self._config_painel.carregar_modo_aparencia())
@@ -223,6 +242,16 @@ class InterfaceApp(ctk.CTk):
             linha_botoes,
             text="Empresa + dividendos",
             command=self._abrir_hub_empresas_dividendos,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            width=200,
+            height=36,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            linha_botoes,
+            text="Fundos imobiliarios",
+            command=self._abrir_hub_fundos_imobiliarios,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=200,
@@ -466,6 +495,19 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_dividendos = JanelaHubEmpresasDividendos(self)
+
+    def _abrir_hub_fundos_imobiliarios(self) -> None:
+        """Abre (ou foca) o painel de fundos imobiliarios (FIIs)."""
+        if self._janela_fiis is not None:
+            try:
+                if self._janela_fiis.winfo_exists():
+                    self._janela_fiis.focus_force()
+                    self._janela_fiis.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_fiis = JanelaHubFundosImobiliarios(self)
 
     def _abrir_hub_painel_periodo(self) -> None:
         """Abre painel em alta / queda / todas com variacao no periodo escolhido."""

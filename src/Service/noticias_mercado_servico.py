@@ -7,17 +7,16 @@ from datetime import datetime, timezone
 import yfinance as yf
 
 from src.Model.noticia_mercado import NoticiaMercado
+from src.Model.provedores_noticias import (
+    CATEGORIA_MERCADO,
+    ProvedorNoticias,
+    resolver_provedor,
+    simbolo_permitido_no_provedor,
+)
 from src.Service.busca_acoes_servico import BuscaAcoesServico
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.registrador_log import RegistradorLog
 from src.Tool.validadores import normalizar_simbolo
-
-# Fontes para noticias gerais (Brasil + EUA / mercado global).
-_FONTES_MERCADO: list[tuple[str, str]] = [
-    ("^BVSP", "Brasil"),
-    ("EWZ", "Brasil"),
-    ("SPY", "EUA"),
-    ("^GSPC", "EUA"),
-]
 
 _LIMITE_POR_FONTE = 8
 _LIMITE_TOTAL = 40
@@ -25,7 +24,6 @@ _LIMITE_POR_SIMBOLO_PESQUISA = 10
 _LIMITE_SIMBOLOS_PESQUISA = 5
 _LIMITE_TOTAL_PESQUISA = 35
 
-# Termos comuns em portugues mapeados para palavras frequentes nas manchetes em ingles.
 _TERMOS_BUSCA_EN: dict[str, str] = {
     "inflacao": "inflation",
     "inflação": "inflation",
@@ -46,24 +44,38 @@ _TERMOS_BUSCA_EN: dict[str, str] = {
 
 
 class NoticiasMercadoServico:
-    """Agrega e ordena noticias das principais referencias de mercado."""
+    """Agrega e ordena noticias conforme o provedor escolhido no INI."""
 
     def __init__(
         self,
-        fontes: list[tuple[str, str]] | None = None,
+        config: ConfigPainelIni | None = None,
         busca=None,
+        categoria: str = CATEGORIA_MERCADO,
     ) -> None:
         self._log = RegistradorLog()
-        self._fontes = fontes or _FONTES_MERCADO
+        self._config = config or ConfigPainelIni()
         self._busca_acoes = busca or BuscaAcoesServico()
+        self._categoria = categoria
+
+    def obter_provedor_atual(self) -> ProvedorNoticias:
+        if self._categoria == CATEGORIA_MERCADO:
+            chave = self._config.carregar_provedor_noticias()
+        else:
+            chave = self._config.carregar_provedor_noticias_cripto()
+        return resolver_provedor(chave, self._categoria)
+
+    def _fontes_ativas(self) -> list[tuple[str, str]]:
+        provedor = self.obter_provedor_atual()
+        return [(simbolo, regiao) for simbolo, regiao in provedor.fontes]
 
     def listar_principais(self) -> tuple[list[NoticiaMercado], str | None]:
         """Retorna noticias recentes deduplicadas ou mensagem de erro."""
+        provedor = self.obter_provedor_atual()
         vistos_ids: set[str] = set()
         vistos_titulos: set[str] = set()
         coletadas: list[NoticiaMercado] = []
 
-        for simbolo, regiao in self._fontes:
+        for simbolo, regiao in self._fontes_ativas():
             try:
                 brutas = yf.Ticker(simbolo).news or []
             except Exception as exc:
@@ -74,7 +86,11 @@ class NoticiasMercadoServico:
             for item in brutas:
                 if adicionadas_fonte >= _LIMITE_POR_FONTE:
                     break
-                noticia = self._converter_item(item, regiao)
+                noticia = self._converter_item(
+                    item,
+                    regiao,
+                    referencia=provedor.nome,
+                )
                 if noticia is None:
                     continue
                 chave_titulo = self._normalizar_titulo(noticia.titulo)
@@ -86,7 +102,10 @@ class NoticiasMercadoServico:
                 adicionadas_fonte += 1
 
         if not coletadas:
-            return [], "Nenhuma noticia disponivel no momento. Tente atualizar mais tarde."
+            return [], (
+                f"Nenhuma noticia disponivel para \"{provedor.nome}\". "
+                "Tente outro servidor ou atualize mais tarde."
+            )
 
         coletadas.sort(
             key=lambda n: n.data_publicacao or datetime.min.replace(tzinfo=timezone.utc),
@@ -95,12 +114,13 @@ class NoticiasMercadoServico:
         return coletadas[:_LIMITE_TOTAL], None
 
     def pesquisar(self, termo: str) -> tuple[list[NoticiaMercado], str | None]:
-        """Busca noticias por codigo, empresa ou palavra-chave no titulo/resumo."""
+        """Busca noticias pelo provedor ativo e termo digitado."""
         texto = (termo or "").strip()
         if len(texto) < 2:
             return [], "Digite pelo menos 2 caracteres para pesquisar."
 
-        fontes = self._resolver_fontes_pesquisa(texto)
+        provedor = self.obter_provedor_atual()
+        fontes = self._resolver_fontes_pesquisa(texto, provedor)
         coletadas = self._coletar_de_simbolos(fontes, _LIMITE_POR_SIMBOLO_PESQUISA)
 
         termo_chave = self._normalizar_texto_busca(texto)
@@ -110,8 +130,8 @@ class NoticiasMercadoServico:
 
         if not coletadas:
             return [], (
-                f"Nenhuma noticia encontrada para \"{texto}\". "
-                "Tente um codigo (PETR4, AAPL), nome da empresa ou outro termo."
+                f"Nenhuma noticia encontrada para \"{texto}\" em "
+                f"\"{provedor.nome}\". Tente outro termo ou servidor."
             )
 
         coletadas.sort(
@@ -120,22 +140,28 @@ class NoticiasMercadoServico:
         )
         return coletadas[:_LIMITE_TOTAL_PESQUISA], None
 
-    def _resolver_fontes_pesquisa(self, termo: str) -> list[tuple[str, str, str]]:
+    def _resolver_fontes_pesquisa(
+        self,
+        termo: str,
+        provedor: ProvedorNoticias,
+    ) -> list[tuple[str, str, str]]:
         """Retorna lista (simbolo, regiao, referencia exibida)."""
         vistos: set[str] = set()
         fontes: list[tuple[str, str, str]] = []
 
-        def incluir(simbolo: str, nome_exibicao: str) -> None:
+        def incluir(simbolo: str, nome_exibicao: str, regiao: str) -> None:
             if not simbolo or simbolo in vistos:
                 return
+            if not simbolo_permitido_no_provedor(simbolo, provedor):
+                return
             vistos.add(simbolo)
-            regiao = "Brasil" if simbolo.upper().endswith(".SA") else "EUA"
             fontes.append((simbolo, regiao, nome_exibicao))
 
         simbolo_direto, erro = normalizar_simbolo(termo)
         if not erro:
             rotulo = simbolo_direto.replace(".SA", "")
-            incluir(simbolo_direto, rotulo)
+            regiao = "Brasil" if simbolo_direto.upper().endswith(".SA") else "EUA"
+            incluir(simbolo_direto, rotulo, regiao)
 
         try:
             resultados, _msg = self._busca_acoes.buscar(termo)
@@ -144,9 +170,12 @@ class NoticiasMercadoServico:
             resultados = []
 
         for item in resultados[:_LIMITE_SIMBOLOS_PESQUISA]:
+            if not simbolo_permitido_no_provedor(item.simbolo, provedor):
+                continue
             codigo = item.simbolo.replace(".SA", "")
             rotulo = f"{codigo} — {item.nome}"
-            incluir(item.simbolo, rotulo)
+            regiao = "Brasil" if item.simbolo.upper().endswith(".SA") else "EUA"
+            incluir(item.simbolo, rotulo, regiao)
 
         return fontes[:_LIMITE_SIMBOLOS_PESQUISA]
 
@@ -155,6 +184,7 @@ class NoticiasMercadoServico:
         fontes: list[tuple[str, str, str]],
         limite_por_fonte: int,
     ) -> list[NoticiaMercado]:
+        provedor = self.obter_provedor_atual()
         vistos_ids: set[str] = set()
         vistos_titulos: set[str] = set()
         coletadas: list[NoticiaMercado] = []
@@ -170,7 +200,11 @@ class NoticiasMercadoServico:
             for item in brutas:
                 if adicionadas >= limite_por_fonte:
                     break
-                noticia = self._converter_item(item, regiao, referencia)
+                noticia = self._converter_item(
+                    item,
+                    regiao,
+                    referencia or provedor.nome,
+                )
                 if noticia is None:
                     continue
                 chave = self._normalizar_titulo(noticia.titulo)
@@ -195,7 +229,7 @@ class NoticiasMercadoServico:
     def _filtrar_por_palavra_chave(
         self, termo_chave: str, termo_original: str
     ) -> list[NoticiaMercado]:
-        """Filtra manchetes gerais pelo texto digitado (pt-BR ou termos em ingles)."""
+        """Filtra manchetes do provedor ativo pelo texto digitado."""
         gerais, erro = self.listar_principais()
         if erro or not gerais:
             return []
@@ -220,19 +254,7 @@ class NoticiasMercadoServico:
             if not bate:
                 bate = any(palavra in texto for palavra in palavras)
             if bate:
-                copia = NoticiaMercado(
-                    id=noticia.id,
-                    titulo=noticia.titulo,
-                    resumo=noticia.resumo,
-                    data_publicacao=noticia.data_publicacao,
-                    data_exibicao=noticia.data_exibicao,
-                    fonte=noticia.fonte,
-                    url=noticia.url,
-                    regiao=noticia.regiao,
-                    referencia="Mercado geral",
-                    url_imagem=noticia.url_imagem,
-                )
-                filtradas.append(copia)
+                filtradas.append(noticia)
         return filtradas
 
     @staticmethod
@@ -317,7 +339,6 @@ class NoticiasMercadoServico:
 
     @staticmethod
     def _extrair_url_imagem(conteudo: dict) -> str:
-        """URL da miniatura (Yahoo Finance) quando disponivel."""
         miniatura = conteudo.get("thumbnail")
         if not isinstance(miniatura, dict):
             return ""

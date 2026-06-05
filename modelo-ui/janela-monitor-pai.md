@@ -8,6 +8,9 @@ Problema comum no Windows com varios monitores: ao maximizar uma janela filha se
 2. Posicionar a filha sobre o pai (`rootx`, `rooty`, largura e altura iniciais).
 3. So entao maximizar (`state("zoomed")`, `wsMaximized`, `showMaximized()`, etc.).
 4. Em fallback manual de geometry, usar coordenadas e dimensoes do **monitor do pai**, nunca `+0+0` fixo.
+5. Ao **mover** a janela para outro monitor (arrastar ou maximizar de novo), reaplicar `ShowWindow(SW_MAXIMIZE)` no monitor **atual** da janela (`MonitorFromWindow` + `IsZoomed`).
+6. Registrar `<Configure>` e `<Map>` com debounce para corrigir tamanho errado apos troca de monitor.
+7. **Persistencia (janela principal):** gravar `monitor_dispositivo = DISPLAYn` no INI ao mover ou fechar; na proxima abertura posicionar nesse monitor; se nao existir, usar o monitor principal.
 
 ## Python — arquivo canonico
 
@@ -41,4 +44,4 @@ Antes de exibir form filho maximizado:
 Ao alterar o helper global, atualize:
 
 1. `C:\Users\Carlos\.cursor\modelo-ui\templates\janela_helper.py`
-2. `src/Tool/janela_helper.py` deste projeto
+2. `src/Tool/janela_helper.py` de cada projeto Python ativo que use Tk/CustomTkinter

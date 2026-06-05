@@ -11,6 +11,10 @@ from src.Model.noticia_mercado import NoticiaMercado
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada
 from src.View.noticias_fotos_helper import criar_combo_fotos_noticias
+from src.View.noticias_provedor_helper import (
+    criar_combo_provedor_noticias,
+    descricao_provedor_atual,
+)
 from src.View.noticias_idioma_helper import (
     IDIOMA_ORIGINAL,
     ControladorExibicaoNoticiasIdioma,
@@ -82,6 +86,16 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
 
+        self._label_provedor = ctk.CTkLabel(
+            cabecalho,
+            text=descricao_provedor_atual(self._config_painel, self._modo_cripto),
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=900,
+            justify="left",
+        )
+        self._label_provedor.pack(anchor="w", padx=16, pady=(0, 4))
+
         texto_ajuda = (
             f"Noticias relacionadas a {self._termo_inicial}. "
             "Voce pode alterar o termo e pesquisar de novo. "
@@ -89,7 +103,7 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             if self._termo_inicial
             else (
                 "Digite codigo (PETR4, AAPL), nome da empresa (Vale, Apple) "
-                "ou assunto. Use a lista para ver original ou traduzido para portugues."
+                "ou assunto. A busca usa o servidor escolhido (salvo no painel.ini)."
             )
         )
         ctk.CTkLabel(
@@ -165,6 +179,12 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             self._config_painel,
             lambda: self._idioma.reexibir_apos_atualizar_lista() if self._idioma else None,
         )
+        criar_combo_provedor_noticias(
+            barra_status,
+            self._config_painel,
+            self._ao_mudar_provedor_noticias,
+            modo_cripto=self._modo_cripto,
+        )
 
         if not self._buscar_ao_abrir:
             exibir_mensagem_lista(
@@ -182,6 +202,15 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             fg_color=CORES["secundaria"],
             width=120,
         ).pack(side="right")
+
+    def _ao_mudar_provedor_noticias(self, _chave: str) -> None:
+        self._label_provedor.configure(
+            text=descricao_provedor_atual(self._config_painel, self._modo_cripto)
+        )
+        if self._termo_atual and len(self._termo_atual) >= 2:
+            self._executar_pesquisa(self._termo_atual)
+        elif self._entrada_busca.get().strip():
+            self._executar_pesquisa()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         def trabalho() -> None:

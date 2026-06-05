@@ -9,6 +9,7 @@ import customtkinter as ctk
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.janela_helper import configurar_janela_maximizada
 from src.Tool.dividendos_helper import eh_pagadora_dividendos
+from src.Tool.fiis_helper import eh_fii
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.placeholders_ui import (
     PLACEHOLDER_CODIGO_ACAO,
@@ -39,11 +40,13 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         controlador: ControladorMercado,
         modo_cripto: bool = False,
         modo_somente_dividendos: bool = False,
+        modo_somente_fiis: bool = False,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._modo_cripto = modo_cripto
         self._modo_somente_dividendos = modo_somente_dividendos
+        self._modo_somente_fiis = modo_somente_fiis
         self._simbolos: list[str] = []
         self._janela_grafico: JanelaGraficoComparacao | None = None
 
@@ -261,10 +264,25 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         )
         return False
 
+    def _validar_fii(self, simbolo: str) -> bool:
+        if not self._modo_somente_fiis:
+            return True
+        if eh_fii(simbolo):
+            return True
+        codigo = self._codigo_exibicao(simbolo)
+        messagebox.showwarning(
+            "Comparar",
+            f"{codigo} nao consta como fundo imobiliario (FII) nas fontes consultadas.",
+            parent=self,
+        )
+        return False
+
     def _incluir_simbolo(self, simbolo: str) -> bool:
         if not simbolo:
             return False
         if not self._validar_empresa_dividendos(simbolo):
+            return False
+        if not self._validar_fii(simbolo):
             return False
         if simbolo in self._simbolos:
             messagebox.showinfo(
