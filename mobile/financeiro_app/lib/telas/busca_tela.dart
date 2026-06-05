@@ -15,13 +15,13 @@ class BuscaTela extends StatefulWidget {
 
 class _BuscaTelaState extends State<BuscaTela> {
   final ApiCliente _api = ApiCliente();
-  final FavoritosLocal _favoritos = FavoritosLocal();
+  final FavoritosLocal _servicoFavoritos = FavoritosLocal();
   final TextEditingController _campo = TextEditingController();
 
   bool _carregando = false;
   String? _erro;
   List<ResultadoBusca> _resultados = [];
-  Set<String> _favoritos = {};
+  Set<String> _favoritosSimbolos = {};
 
   @override
   void initState() {
@@ -36,8 +36,8 @@ class _BuscaTelaState extends State<BuscaTela> {
   }
 
   Future<void> _carregarFavoritos() async {
-    final lista = await _favoritos.listar();
-    if (mounted) setState(() => _favoritos = lista.toSet());
+    final lista = await _servicoFavoritos.listar();
+    if (mounted) setState(() => _favoritosSimbolos = lista.toSet());
   }
 
   Future<void> _pesquisar() async {
@@ -73,12 +73,12 @@ class _BuscaTelaState extends State<BuscaTela> {
 
   Future<void> _alternarFavorito(ResultadoBusca item) async {
     try {
-      if (_favoritos.contains(item.simbolo)) {
-        await _favoritos.remover(item.simbolo);
-        setState(() => _favoritos.remove(item.simbolo));
+      if (_favoritosSimbolos.contains(item.simbolo)) {
+        await _servicoFavoritos.remover(item.simbolo);
+        setState(() => _favoritosSimbolos.remove(item.simbolo));
       } else {
-        await _favoritos.adicionar(item.simbolo);
-        setState(() => _favoritos.add(item.simbolo));
+        await _servicoFavoritos.adicionar(item.simbolo);
+        setState(() => _favoritosSimbolos.add(item.simbolo));
       }
     } catch (e) {
       if (!mounted) return;
@@ -128,7 +128,7 @@ class _BuscaTelaState extends State<BuscaTela> {
               itemCount: _resultados.length,
               itemBuilder: (context, indice) {
                 final item = _resultados[indice];
-                final fav = _favoritos.contains(item.simbolo);
+                final fav = _favoritosSimbolos.contains(item.simbolo);
                 return ListTile(
                   title: Text(item.codigo, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('${item.nome} • ${item.bolsa}'),

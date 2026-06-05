@@ -16,7 +16,7 @@ class PainelTela extends StatefulWidget {
 
 class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateMixin {
   final ApiCliente _api = ApiCliente();
-  final FavoritosLocal _favoritos = FavoritosLocal();
+  final FavoritosLocal _servicoFavoritos = FavoritosLocal();
 
   late TabController _abas;
   bool _carregando = true;
@@ -24,7 +24,7 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
   List<CotacaoResumo> _emAlta = [];
   List<CotacaoResumo> _emQueda = [];
   List<CotacaoResumo> _todas = [];
-  Set<String> _favoritos = {};
+  Set<String> _favoritosSimbolos = {};
 
   @override
   void initState() {
@@ -46,13 +46,13 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
     });
     try {
       final painel = await _api.obterPainel();
-      final fav = await _favoritos.listar();
+      final fav = await _servicoFavoritos.listar();
       if (!mounted) return;
       setState(() {
         _emAlta = painel['emAlta'] ?? [];
         _emQueda = painel['emQueda'] ?? [];
         _todas = painel['todas'] ?? [];
-        _favoritos = fav.toSet();
+        _favoritosSimbolos = fav.toSet();
         _carregando = false;
       });
     } catch (e) {
@@ -67,12 +67,12 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
   Future<void> _alternarFavorito(CotacaoResumo cotacao) async {
     final simbolo = cotacao.simbolo;
     try {
-      if (_favoritos.contains(simbolo)) {
-        await _favoritos.remover(simbolo);
-        setState(() => _favoritos.remove(simbolo));
+      if (_favoritosSimbolos.contains(simbolo)) {
+        await _servicoFavoritos.remover(simbolo);
+        setState(() => _favoritosSimbolos.remove(simbolo));
       } else {
-        await _favoritos.adicionar(simbolo);
-        setState(() => _favoritos.add(simbolo));
+        await _servicoFavoritos.adicionar(simbolo);
+        setState(() => _favoritosSimbolos.add(simbolo));
       }
     } catch (e) {
       if (!mounted) return;
@@ -95,7 +95,7 @@ class _PainelTelaState extends State<PainelTela> with SingleTickerProviderStateM
           final item = itens[indice];
           return CotacaoCard(
             cotacao: item,
-            ehFavorito: _favoritos.contains(item.simbolo),
+            ehFavorito: _favoritosSimbolos.contains(item.simbolo),
             aoAlternarFavorito: () => _alternarFavorito(item),
           );
         },

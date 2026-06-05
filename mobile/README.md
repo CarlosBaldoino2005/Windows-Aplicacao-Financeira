@@ -13,9 +13,13 @@ Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/
 
 ## Requisitos
 
-1. [Flutter SDK](https://docs.flutter.dev/get-started/install) (canal stable)
-2. Android Studio ou SDK Android (para gerar APK)
-3. API rodando (local ou Render)
+1. **Flutter SDK** — ja pode instalar com o script do projeto:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File "scripts\instalar_flutter.ps1"
+   ```
+   (instala em `C:\src\flutter` e adiciona ao PATH do usuario)
+2. **Android Studio** — obrigatorio para gerar APK ([download](https://developer.android.com/studio))
+3. API no Render: `https://windows-aplicacao-financeira.onrender.com` (ja configurada em `api_config.dart`)
 
 ## 1. Subir a API
 
