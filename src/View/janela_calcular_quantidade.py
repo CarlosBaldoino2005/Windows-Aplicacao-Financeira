@@ -6,7 +6,11 @@ from typing import Any
 
 import customtkinter as ctk
 
-from src.Tool.janela_helper import executar_em_thread
+from src.Tool.janela_helper import (
+    configurar_janela_filha_modal,
+    executar_em_thread,
+    liberar_modal_janela_filha,
+)
 
 from src.Tool.calcular_quantidade_helper import calcular_quantidade_por_valor
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
@@ -55,17 +59,13 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
 
         self._montar_interface()
         _centralizar_sobre_pai(self, pai, _LARGURA_JANELA, _ALTURA_JANELA)
-        self.transient(pai)
-        self.grab_set()
+        configurar_janela_filha_modal(self, pai)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(100, self._carregar_preco_atual)
 
     def _ao_fechar(self) -> None:
-        try:
-            self.grab_release()
-        except Exception:
-            pass
+        liberar_modal_janela_filha(self)
         self.destroy()
 
     def _montar_interface(self) -> None:

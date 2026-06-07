@@ -62,9 +62,8 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
         self.minsize(880, 600)
 
         self._montar_interface()
-        configurar_janela_maximizada(self)
+        configurar_janela_maximizada(self, janela_pai=pai)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.transient(pai)
         self.focus_force()
         if self._buscar_ao_abrir:
             self.after(200, lambda: self._executar_pesquisa(self._termo_inicial))

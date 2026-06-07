@@ -627,6 +627,147 @@ def configurar_janela_maximizada(
     except (RuntimeError, Exception):
         pass
 
+    referencia_modal = _resolver_janela_referencia(janela, janela_pai)
+    if referencia_modal is not janela:
+        configurar_janela_filha_modal(janela, referencia_modal)
+
+
+def _aplicar_grab_modal(janela, janela_pai) -> None:
+    if not janela_ui_ainda_ativa(janela):
+        return
+    try:
+        janela.grab_set()
+        janela.focus_force()
+        if janela_pai is not None and janela_ui_ainda_ativa(janela_pai):
+            janela.lift(janela_pai)
+    except Exception:
+        pass
+
+
+def _tem_filhas_modais_ativas(pai) -> bool:
+    filhas = getattr(pai, "_financeiro_filhas_modais", None)
+    if not filhas:
+        return False
+    ativas = [item for item in filhas if janela_ui_ainda_ativa(item)]
+    pai._financeiro_filhas_modais = ativas
+    return len(ativas) > 0
+
+
+def _focar_ultima_filha_modal(pai) -> None:
+    filhas = getattr(pai, "_financeiro_filhas_modais", []) or []
+    for filha in reversed(filhas):
+        if janela_ui_ainda_ativa(filha):
+            try:
+                filha.lift(pai)
+                filha.focus_force()
+            except Exception:
+                pass
+            return
+
+
+def _registrar_filha_modal_no_pai(pai, filha) -> None:
+    filhas = getattr(pai, "_financeiro_filhas_modais", None)
+    if filhas is None:
+        filhas = []
+        pai._financeiro_filhas_modais = filhas
+    if filha not in filhas:
+        filhas.append(filha)
+
+    if not getattr(pai, "_financeiro_guardiao_fechar", False):
+        pai._financeiro_guardiao_fechar = True
+        comando_anterior = pai.protocol("WM_DELETE_WINDOW") or ""
+
+        def _fechar_pai_com_filhas_abertas() -> None:
+            if _tem_filhas_modais_ativas(pai):
+                _focar_ultima_filha_modal(pai)
+                return
+            if comando_anterior:
+                pai.tk.call(comando_anterior)
+            else:
+                pai.destroy()
+
+        pai.protocol("WM_DELETE_WINDOW", _fechar_pai_com_filhas_abertas)
+
+    def _remover_filha(_evento=None) -> None:
+        lista = getattr(pai, "_financeiro_filhas_modais", []) or []
+        if filha in lista:
+            lista.remove(filha)
+
+    filha.bind("<Destroy>", _remover_filha, add="+")
+
+
+def _redirecionar_foco_para_filha(filha, pai) -> None:
+    if not janela_ui_ainda_ativa(filha):
+        return
+
+    def _ao_focar_pai(_evento=None) -> None:
+        if not janela_ui_ainda_ativa(filha):
+            return
+        agendar_na_ui(filha, lambda: _aplicar_grab_modal(filha, pai))
+
+    try:
+        pai.bind("<FocusIn>", _ao_focar_pai, add="+")
+    except Exception:
+        pass
+
+
+def configurar_janela_filha_modal(janela, janela_pai=None) -> None:
+    """
+    Impede interacao com a janela pai enquanto a filha estiver aberta.
+    Use automaticamente via configurar_janela_maximizada ou chame apos criar CTkToplevel.
+    """
+    pai = janela_pai or _resolver_janela_referencia(janela, None)
+    if pai is None or pai is janela:
+        return
+    if getattr(janela, "_financeiro_modal_configurada", False):
+        return
+
+    janela._financeiro_modal_configurada = True
+    janela._financeiro_janela_pai_modal = pai
+
+    try:
+        janela.transient(pai)
+    except Exception:
+        pass
+
+    _registrar_filha_modal_no_pai(pai, janela)
+    _redirecionar_foco_para_filha(janela, pai)
+
+    def _aplicar_ao_exibir(_evento=None) -> None:
+        _aplicar_grab_modal(janela, pai)
+
+    try:
+        janela.bind("<Map>", _aplicar_ao_exibir, add="+")
+    except Exception:
+        pass
+    agendar_na_ui(janela, _aplicar_ao_exibir)
+
+
+def liberar_modal_janela_filha(janela) -> None:
+    """Libera o bloqueio modal e devolve o foco ao pai, se ainda existir."""
+    try:
+        janela.grab_release()
+    except Exception:
+        pass
+
+    pai = getattr(janela, "_financeiro_janela_pai_modal", None)
+    if pai is not None and janela_ui_ainda_ativa(pai):
+        if getattr(pai, "_financeiro_modal_configurada", False):
+            agendar_na_ui(pai, lambda: _aplicar_grab_modal(pai, getattr(pai, "_financeiro_janela_pai_modal", None)))
+        else:
+            try:
+                pai.focus_force()
+            except Exception:
+                pass
+
+
+def reaplicar_grab_janela_filha(janela) -> None:
+    """Reaplica grab apos fechar um dialogo modal aberto por esta janela."""
+    if not getattr(janela, "_financeiro_modal_configurada", False):
+        return
+    pai = getattr(janela, "_financeiro_janela_pai_modal", None)
+    agendar_na_ui(janela, lambda: _aplicar_grab_modal(janela, pai))
+
 
 def janela_ui_ainda_ativa(janela) -> bool:
     """Verifica se a janela Tk ainda existe e pode receber callbacks."""
