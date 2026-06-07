@@ -1,7 +1,7 @@
 """Janela dedicada para pesquisar uma acao e ver cotacao."""
 from __future__ import annotations
 
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 import customtkinter as ctk
 
@@ -91,6 +91,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             command=self._pesquisar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
@@ -99,6 +100,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             command=self._consultar_direto,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left")
 
         self._label_status = ctk.CTkLabel(
@@ -127,6 +129,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             command=self._abrir_janela_grafico,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=160,
             height=36,
         ).pack(side="left")
@@ -137,6 +140,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -249,6 +253,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
                 command=lambda s=item.simbolo: self._selecionar_acao(s),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             ).pack(side="right", padx=8, pady=4)
 
     def _normalizar_entrada(self, termo: str):

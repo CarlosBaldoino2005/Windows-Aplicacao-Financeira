@@ -132,6 +132,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             command=self._abrir_noticias,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="left")
         ctk.CTkButton(
@@ -140,6 +141,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -212,9 +214,9 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 corner_radius=8,
                 font=ctk.CTkFont(size=12, weight="bold"),
                 command=lambda n=nome: self._selecionar_aba(n),
-                fg_color=CORES["superficie"],
-                hover_color=CORES["zebraEscura"],
-                text_color=CORES["texto"],
+                fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 border_width=1,
                 border_color=CORES["borda"],
             )
@@ -235,9 +237,9 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 )
             else:
                 botao.configure(
-                    fg_color=CORES["superficie"],
-                    hover_color=CORES["zebraEscura"],
-                    text_color=CORES["texto"],
+                    fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                     border_color=CORES["borda"],
                 )
         self._trocar_aba(nome)
@@ -341,6 +343,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 command=lambda url=dados.site: webbrowser.open(url),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=200,
             ).pack(anchor="w", padx=4, pady=(4, 12))
 
@@ -387,6 +390,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             command=self._abrir_informacoes_empresa,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=220,
             height=36,
             font=ctk.CTkFont(size=14, weight="bold"),
@@ -399,6 +403,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 command=lambda url=dados.site: webbrowser.open(url),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=200,
             ).pack(anchor="w", padx=4, pady=(4, 12))
 

@@ -315,6 +315,58 @@ def validar_intervalo_atualizacao_segundos(
     return valor, None
 
 
+def validar_valor_monetario_opcional(texto: str) -> tuple[float | None, str | None]:
+    """Valida valor monetario pt-BR ou aceita vazio."""
+    if not texto or not str(texto).strip():
+        return None, None
+    return validar_valor_monetario_ptbr(texto)
+
+
+def validar_limites_monitoramento(
+    valor_baixo: float | None,
+    valor_alto: float | None,
+    preco_atual: float | None = None,
+    moeda: str = "BRL",
+) -> str | None:
+    """Exige ao menos um limite, garante ordem entre limites e coerencia com o preco atual."""
+    if valor_baixo is None and valor_alto is None:
+        return "Informe pelo menos valor baixo ou valor alto."
+
+    if valor_baixo is not None and valor_baixo <= 0:
+        return "Valor baixo deve ser maior que zero."
+
+    if valor_alto is not None and valor_alto <= 0:
+        return "Valor alto deve ser maior que zero."
+
+    if (
+        valor_baixo is not None
+        and valor_alto is not None
+        and valor_baixo >= valor_alto
+    ):
+        return "Valor baixo deve ser menor que valor alto."
+
+    if preco_atual is not None and preco_atual > 0:
+        preco_texto = _formatar_preco_validacao(preco_atual, moeda)
+        if valor_baixo is not None and valor_baixo > preco_atual:
+            return (
+                f"Valor baixo nao pode ser maior que o preco atual ({preco_texto})."
+            )
+        if valor_alto is not None and valor_alto < preco_atual:
+            return (
+                f"Valor alto nao pode ser menor que o preco atual ({preco_texto})."
+            )
+
+    return None
+
+
+def _formatar_preco_validacao(valor: float, moeda: str = "BRL") -> str:
+    """Formata preco para mensagens de validacao em pt-BR."""
+    if moeda == "BRL":
+        texto = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {texto}"
+    return f"US$ {valor:,.2f}"
+
+
 def validar_valor_monetario_ptbr(texto: str) -> tuple[float | None, str | None]:
     """Valida valor em reais/dolares no formato pt-BR (ex.: R$ 1.234,56)."""
     if not texto or not str(texto).strip():

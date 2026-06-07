@@ -78,6 +78,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -116,6 +117,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             command=self._abrir_resumo_periodo_ampliado,
             state="disabled",
         )
@@ -146,6 +148,7 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             command=self._abrir_grafico_ampliado,
             state="disabled",
         )

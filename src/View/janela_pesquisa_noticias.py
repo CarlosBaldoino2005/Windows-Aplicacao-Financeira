@@ -1,7 +1,7 @@
 """Janela para pesquisar noticias por acao, empresa ou assunto."""
 from __future__ import annotations
 
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 from typing import Any
 
 import customtkinter as ctk
@@ -137,6 +137,7 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             command=lambda: self._executar_pesquisa(),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="left")
 
@@ -199,6 +200,7 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             command=self.destroy,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 

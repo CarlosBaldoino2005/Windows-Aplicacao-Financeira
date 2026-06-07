@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 import customtkinter as ctk
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 from src.Model.opcoes_atualizacao_automatica import (
     INTERVALO_MAXIMO_SEGUNDOS,
@@ -18,6 +19,7 @@ from src.Tool.validadores import (
     validar_fonte_grid,
     validar_intervalo_atualizacao_segundos,
     validar_quantidade_acoes,
+    validar_quantidade_cripto,
 )
 from src.View.tema import (
     CORES,
@@ -27,6 +29,15 @@ from src.View.tema import (
 
 _LARGURA = 480
 _ALTURA = 580
+
+EscopoQuantidadePainel = Literal["acoes", "cripto", "fiis", "dividendos"]
+
+_TITULOS_ESCOPO: dict[EscopoQuantidadePainel, str] = {
+    "acoes": "Configuracoes do painel",
+    "cripto": "Configuracoes — criptomoedas",
+    "fiis": "Configuracoes — fundos imobiliarios",
+    "dividendos": "Configuracoes — empresa + dividendos",
+}
 
 
 @dataclass(frozen=True)
@@ -63,16 +74,24 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
         pai: ctk.CTk,
         config: ConfigPainelIni,
         ao_aplicar: Callable[[ResultadoConfiguracaoPainel], None],
+        *,
+        escopo_quantidade: EscopoQuantidadePainel = "acoes",
+        incluir_quantidade: bool = True,
     ) -> None:
         super().__init__(pai)
         self._config = config
         self._ao_aplicar = ao_aplicar
+        self._escopo_quantidade = escopo_quantidade
+        self._incluir_quantidade = incluir_quantidade
         self._modo_tema_inicial = config.carregar_modo_aparencia()
-        self._qtd_inicial = config.carregar()
+        if escopo_quantidade == "cripto":
+            self._qtd_inicial = config.carregar_quantidade_cripto()
+        else:
+            self._qtd_inicial = config.carregar()
         self._fonte_inicial = config.carregar_fonte_grid()
         self._auto_inicial = config.carregar_atualizacao_automatica()
 
-        self.title("Configuracoes do painel")
+        self.title(_TITULOS_ESCOPO.get(escopo_quantidade, "Configuracoes do painel"))
         self.configure(fg_color=CORES["fundo"])
         self.resizable(False, False)
         self.minsize(_LARGURA, _ALTURA)
@@ -106,10 +125,7 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             conteudo,
-            text=(
-                "Tema, quantidade de acoes, fonte das grids e atualizacao automatica "
-                "de cotacoes em todos os paineis."
-            ),
+            text=self._texto_descricao_configuracao(),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=400,
@@ -117,9 +133,36 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
         ).pack(anchor="w", padx=8, pady=(0, 12))
 
         self._montar_campo_tema(conteudo)
-        self._montar_campo_quantidade(conteudo)
+        if self._incluir_quantidade:
+            self._montar_campo_quantidade(conteudo)
         self._montar_campo_fonte(conteudo)
         self._montar_campo_atualizacao_automatica(conteudo)
+
+    def _texto_descricao_configuracao(self) -> str:
+        if not self._incluir_quantidade:
+            return (
+                "Tema, fonte das grids e atualizacao automatica de cotacoes "
+                "nos paineis que utilizam essas opcoes."
+            )
+        mapa: dict[EscopoQuantidadePainel, str] = {
+            "acoes": (
+                "Tema, quantidade de acoes, fonte das grids e atualizacao automatica "
+                "de cotacoes em todos os paineis."
+            ),
+            "cripto": (
+                "Tema, quantidade de criptos, fonte das grids e atualizacao automatica "
+                "de cotacoes."
+            ),
+            "fiis": (
+                "Tema, quantidade de FIIs, fonte das grids e atualizacao automatica "
+                "de cotacoes."
+            ),
+            "dividendos": (
+                "Tema, quantidade de empresas, fonte das grids e atualizacao automatica "
+                "de cotacoes."
+            ),
+        }
+        return mapa.get(self._escopo_quantidade, mapa["acoes"])
 
     def _montar_campo_tema(self, painel: ctk.CTkScrollableFrame) -> None:
         bloco = ctk.CTkFrame(painel, fg_color="transparent")
@@ -149,16 +192,39 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
         bloco = ctk.CTkFrame(painel, fg_color="transparent")
         bloco.pack(fill="x", padx=8, pady=(0, 12))
 
+        titulos_qtd: dict[EscopoQuantidadePainel, tuple[str, str]] = {
+            "acoes": (
+                "Quantidade de acoes (Em alta / Em queda / Todas)",
+                "Limite de linhas em cada aba do painel (1 a 100).",
+            ),
+            "cripto": (
+                "Quantidade de criptos (Em alta / Em queda / Todas)",
+                "Limite de linhas em cada aba do painel de criptomoedas (1 a 100).",
+            ),
+            "fiis": (
+                "Quantidade de FIIs (Em alta / Em queda / Todas)",
+                "Limite de linhas em cada aba do painel de fundos imobiliarios (1 a 100).",
+            ),
+            "dividendos": (
+                "Quantidade de empresas (Em alta / Em queda / Todas)",
+                "Limite de linhas em cada aba do painel de dividendos (1 a 100).",
+            ),
+        }
+        titulo_qtd, detalhe_qtd = titulos_qtd.get(
+            self._escopo_quantidade,
+            titulos_qtd["acoes"],
+        )
+
         ctk.CTkLabel(
             bloco,
-            text="Quantidade de acoes (Em alta / Em queda / Todas)",
+            text=titulo_qtd,
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w")
 
         ctk.CTkLabel(
             bloco,
-            text="Limite de linhas em cada aba do painel (1 a 100).",
+            text=detalhe_qtd,
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", pady=(2, 4))
@@ -203,8 +269,8 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
         ctk.CTkLabel(
             bloco,
             text=(
-                "Vale para o painel principal, criptomoedas, FIIs, dividendos, "
-                "favoritos e demais telas com cotacoes."
+                "Vale para o painel principal, criptomoedas, FIIs, dividendos e favoritos. "
+                "A tela de monitoramento possui configuracao propria de atualizacao."
             ),
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
@@ -262,11 +328,9 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
             barra,
             text="Cancelar",
             command=self._ao_fechar,
-            fg_color=CORES["superficie"],
-            hover_color=CORES["zebraEscura"],
-            border_width=1,
-            border_color=CORES["borda"],
-            text_color=CORES["texto"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=110,
         ).pack(side="right")
 
@@ -276,16 +340,23 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
             command=self._salvar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=110,
         ).pack(side="right", padx=(0, 8))
 
     def _salvar(self) -> None:
         modo = modo_de_rotulo(self._seletor_tema.get())
 
-        quantidade, erro_qtd = validar_quantidade_acoes(self._entrada_quantidade.get())
-        if erro_qtd:
-            messagebox.showwarning("Quantidade", erro_qtd, parent=self)
-            return
+        if self._incluir_quantidade:
+            if self._escopo_quantidade == "cripto":
+                quantidade, erro_qtd = validar_quantidade_cripto(self._entrada_quantidade.get())
+            else:
+                quantidade, erro_qtd = validar_quantidade_acoes(self._entrada_quantidade.get())
+            if erro_qtd:
+                messagebox.showwarning("Quantidade", erro_qtd, parent=self)
+                return
+        else:
+            quantidade = self._qtd_inicial
 
         rotulo_fonte = self._combo_fonte.get().strip()
         fonte_grid, erro_fonte = validar_fonte_grid(
@@ -311,7 +382,7 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
             return
 
         tema_alterado = modo != self._modo_tema_inicial
-        quantidade_alterada = quantidade != self._qtd_inicial
+        quantidade_alterada = self._incluir_quantidade and quantidade != self._qtd_inicial
         fonte_alterada = fonte_grid != self._fonte_inicial
         atualizacao_alterada = (
             habilitada != self._auto_inicial.habilitada
@@ -320,7 +391,10 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
 
         try:
             self._config.salvar_modo_aparencia(modo)
-            self._config.salvar(quantidade)
+            if self._escopo_quantidade == "cripto":
+                self._config.salvar_quantidade_cripto(quantidade)
+            else:
+                self._config.salvar(quantidade)
             self._config.salvar_fonte_grid(fonte_grid)
             self._config.salvar_atualizacao_automatica(habilitada, intervalo)
         except OSError:
@@ -350,8 +424,17 @@ def abrir_configuracao_painel(
     pai: ctk.CTk,
     config: ConfigPainelIni,
     ao_aplicar: Callable[[ResultadoConfiguracaoPainel], None],
+    *,
+    escopo_quantidade: EscopoQuantidadePainel = "acoes",
+    incluir_quantidade: bool = True,
 ) -> JanelaConfiguracaoPainel | None:
-    """Abre o modal de configuracao (tema, qtd acoes, fonte grid)."""
+    """Abre o modal de configuracao (tema, quantidade, fonte grid)."""
     if not pai.winfo_exists():
         return None
-    return JanelaConfiguracaoPainel(pai, config, ao_aplicar)
+    return JanelaConfiguracaoPainel(
+        pai,
+        config,
+        ao_aplicar,
+        escopo_quantidade=escopo_quantidade,
+        incluir_quantidade=incluir_quantidade,
+    )

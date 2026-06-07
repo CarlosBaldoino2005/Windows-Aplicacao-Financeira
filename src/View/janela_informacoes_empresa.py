@@ -70,6 +70,7 @@ class JanelaInformacoesEmpresa(ctk.CTkToplevel):
             command=self.destroy,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -141,6 +142,7 @@ class JanelaInformacoesEmpresa(ctk.CTkToplevel):
                 command=lambda: webbrowser.open(self._dados.site),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=200,
             ).pack(anchor="w", padx=12, pady=(4, 4))
 
@@ -151,6 +153,7 @@ class JanelaInformacoesEmpresa(ctk.CTkToplevel):
                 command=lambda: webbrowser.open(self._dados.site_ri),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=200,
             ).pack(anchor="w", padx=12, pady=(0, 8))
 

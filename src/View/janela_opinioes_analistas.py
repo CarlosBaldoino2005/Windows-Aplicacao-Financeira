@@ -60,6 +60,7 @@ class JanelaOpinioesAnalistas(ctk.CTkToplevel):
             command=self.destroy,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -286,5 +287,6 @@ def adicionar_botao_opinioes_analistas(card: ctk.CTkFrame, comando) -> None:
         font=ctk.CTkFont(size=12),
         fg_color=CORES["primaria"],
         hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         command=comando,
     ).pack(anchor="w", padx=10, pady=(0, 10))

@@ -4,7 +4,7 @@ from __future__ import annotations
 import webbrowser
 
 import customtkinter as ctk
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 from src.Controller.controlador_tesouro import ControladorTesouro
 from src.Model.titulo_tesouro import TituloTesouro
@@ -12,6 +12,7 @@ from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread
 from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_celula_prazo
+from src.View.hub_painel_config_helper import ConfiguracaoHubPainel
 from src.View.formatadores import formatar_moeda
 from src.View.janela_detalhes_tesouro import JanelaDetalhesTesouro
 from src.View.grid_ordenacao_helper import EstadoOrdenacaoColuna, LinhaTabelaOrdenavel
@@ -45,6 +46,14 @@ class JanelaHubTesouro(ctk.CTkToplevel):
         self._janela_detalhes: JanelaDetalhesTesouro | None = None
         self._scroll_tabela: ctk.CTkScrollableFrame | None = None
         self._ordenacao_tabela = EstadoOrdenacaoColuna()
+        self._atualizador_auto = None
+        self._config_hub = ConfiguracaoHubPainel(
+            self,
+            self._config_painel,
+            incluir_quantidade=False,
+            ao_remontar_layout=self._reconstruir_interface_apos_tema,
+            ao_reagendar_auto=self._reagendar_atualizacao_automatica,
+        )
 
         self.title("Tesouro Direto")
         self.configure(fg_color=CORES["fundo"])
@@ -76,12 +85,7 @@ class JanelaHubTesouro(ctk.CTkToplevel):
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         cabecalho.pack(fill="x")
 
-        ctk.CTkLabel(
-            cabecalho,
-            text="Tesouro Direto",
-            font=ctk.CTkFont(size=22, weight="bold"),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=20, pady=(12, 4))
+        self._config_hub.montar_titulo_com_engrenagem(cabecalho, "Tesouro Direto")
 
         ctk.CTkLabel(
             cabecalho,
@@ -110,8 +114,9 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             barra,
             text="Site oficial",
             command=lambda: webbrowser.open(URL_TESOURO_DIRETO),
-            fg_color=CORES["borda"],
-            hover_color=CORES["zebraEscura"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=100,
         ).pack(side="right", padx=(4, 12), pady=8)
 
@@ -119,8 +124,9 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             barra,
             text="Tesouro Transparente",
             command=lambda: webbrowser.open(URL_TESOURO_TRANSPARENTE),
-            fg_color=CORES["borda"],
-            hover_color=CORES["zebraEscura"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=160,
         ).pack(side="right", padx=4, pady=8)
 
@@ -130,6 +136,7 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             command=lambda: self._carregar_dados(forcar=True),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=100,
         ).pack(side="right", padx=4, pady=8)
 
@@ -154,6 +161,23 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             corner_radius=8,
         )
         self._label_aviso.pack(fill="x", padx=16, pady=(0, 12))
+
+    def _reagendar_atualizacao_automatica(self) -> None:
+        if self._atualizador_auto is not None:
+            self._atualizador_auto.reagendar()
+
+    def _reconstruir_interface_apos_tema(self) -> None:
+        familia = self._familia_selecionada
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._scroll_tabela = None
+        self._janela_detalhes = None
+        self._familia_selecionada = familia
+        self._config_hub.limpar_referencia_modal()
+        self.configure(fg_color=CORES["fundo"])
+        self._montar_layout()
+        self.after(200, self._carregar_dados)
+        self._reagendar_atualizacao_automatica()
 
     def _carregar_dados(self, forcar: bool = False, automatico: bool = False) -> None:
         if automatico and self._dados_buscando:

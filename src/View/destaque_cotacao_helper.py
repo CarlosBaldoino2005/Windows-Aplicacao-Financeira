@@ -35,6 +35,7 @@ class PainelDestaqueCotacao(ctk.CTkFrame):
             border_color=CORES["primaria"],
         )
         self._modo_multiplo = modo_multiplo
+        self._cotacao_atual: CotacaoResumo | None = None
         self._container = ctk.CTkFrame(self, fg_color="transparent")
         self._container.pack(fill="x", padx=14, pady=12)
         self.mostrar_carregando("Carregando cotacao atual...")
@@ -59,12 +60,18 @@ class PainelDestaqueCotacao(ctk.CTkFrame):
             justify="left",
         ).pack(anchor="w")
 
+    @property
+    def cotacao_atual(self) -> CotacaoResumo | None:
+        """Ultima cotacao exibida no painel (usada ao abrir monitoramento do grafico)."""
+        return self._cotacao_atual
+
     def mostrar_cotacao(
         self,
         cotacao: CotacaoResumo,
         taxa_usd_brl: float | None,
         aviso_cambio: str | None = None,
     ) -> None:
+        self._cotacao_atual = cotacao
         self._limpar()
         codigo = codigo_exibicao(cotacao.simbolo)
         tipo = rotulo_tipo_ativo(cotacao.simbolo)

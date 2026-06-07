@@ -3,3 +3,5 @@ customtkinter>=5.2.2
 Pillow>=10.0.0
 matplotlib>=3.8.0
 deep-translator>=1.11.4
+pywin32>=306
+plyer>=2.1.0

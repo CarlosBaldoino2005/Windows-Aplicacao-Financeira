@@ -48,6 +48,11 @@ CHAVE_VALOR_SIMULACAO_RENDA_FIXA = "valor_simulacao_renda_fixa"
 CHAVE_VALOR_DISPONIVEL_CALCULAR_QUANTIDADE = "valor_disponivel_calcular_quantidade"
 CHAVE_ATUALIZACAO_AUTOMATICA = "atualizacao_automatica"
 CHAVE_INTERVALO_ATUALIZACAO_SEGUNDOS = "atualizacao_automatica_intervalo_segundos"
+CHAVE_MONITORAMENTO_ATUALIZACAO_AUTOMATICA = "monitoramento_atualizacao_automatica"
+CHAVE_MONITORAMENTO_INTERVALO_ATUALIZACAO_SEGUNDOS = (
+    "monitoramento_atualizacao_intervalo_segundos"
+)
+CHAVE_MONITORAMENTO_PAUSADO = "monitoramento_pausado"
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
 VALOR_PADRAO_DISPONIVEL_CALCULAR_QUANTIDADE = 10000.0
@@ -136,6 +141,72 @@ class ConfigPainelIni:
         parser[SECAO_PAINEL][CHAVE_INTERVALO_ATUALIZACAO_SEGUNDOS] = str(
             intervalo_ok or self.padrao_intervalo_atualizacao_segundos()
         )
+        self._gravar(parser)
+
+    def carregar_atualizacao_automatica_monitoramento(self) -> OpcoesAtualizacaoAutomatica:
+        """Atualizacao periodica exclusiva da tela de monitoramento de precos."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_MONITORAMENTO_ATUALIZACAO_AUTOMATICA in secao:
+            habilitada, _ = validar_sim_nao_config(
+                secao.get(CHAVE_MONITORAMENTO_ATUALIZACAO_AUTOMATICA, ""),
+                padrao=self.padrao_atualizacao_automatica_habilitada(),
+            )
+            intervalo, _ = validar_intervalo_atualizacao_segundos(
+                secao.get(CHAVE_MONITORAMENTO_INTERVALO_ATUALIZACAO_SEGUNDOS, ""),
+                padrao=self.padrao_intervalo_atualizacao_segundos(),
+            )
+            return OpcoesAtualizacaoAutomatica(
+                habilitada=habilitada,
+                intervalo_segundos=intervalo or self.padrao_intervalo_atualizacao_segundos(),
+            )
+
+        habilitada = self.padrao_atualizacao_automatica_habilitada()
+        intervalo = self.padrao_intervalo_atualizacao_segundos()
+        self.salvar_atualizacao_automatica_monitoramento(habilitada, intervalo)
+        return OpcoesAtualizacaoAutomatica(habilitada=habilitada, intervalo_segundos=intervalo)
+
+    def salvar_atualizacao_automatica_monitoramento(
+        self,
+        habilitada: bool,
+        intervalo_segundos: int,
+    ) -> None:
+        intervalo_ok, _ = validar_intervalo_atualizacao_segundos(
+            str(intervalo_segundos),
+            padrao=self.padrao_intervalo_atualizacao_segundos(),
+        )
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_MONITORAMENTO_ATUALIZACAO_AUTOMATICA] = (
+            "sim" if habilitada else "nao"
+        )
+        parser[SECAO_PAINEL][CHAVE_MONITORAMENTO_INTERVALO_ATUALIZACAO_SEGUNDOS] = str(
+            intervalo_ok or self.padrao_intervalo_atualizacao_segundos()
+        )
+        self._gravar(parser)
+
+    def padrao_monitoramento_pausado(self) -> bool:
+        return False
+
+    def carregar_monitoramento_pausado(self) -> bool:
+        """Indica se o monitoramento esta pausado (sem atualizacao automatica de alertas)."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_MONITORAMENTO_PAUSADO in secao:
+            pausado, _ = validar_sim_nao_config(
+                secao.get(CHAVE_MONITORAMENTO_PAUSADO, ""),
+                padrao=self.padrao_monitoramento_pausado(),
+            )
+            return pausado
+
+        pausado = self.padrao_monitoramento_pausado()
+        self.salvar_monitoramento_pausado(pausado)
+        return pausado
+
+    def salvar_monitoramento_pausado(self, pausado: bool) -> None:
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_MONITORAMENTO_PAUSADO] = "sim" if pausado else "nao"
         self._gravar(parser)
 
     def carregar_valor_simulacao_renda_fixa(self) -> float:

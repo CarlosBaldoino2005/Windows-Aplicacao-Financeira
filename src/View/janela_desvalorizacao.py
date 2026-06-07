@@ -68,6 +68,7 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -115,6 +116,7 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
             command=self._buscar_desvalorizacao,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left")
 
         self._frame_datas = ctk.CTkFrame(cabecalho, fg_color="transparent")

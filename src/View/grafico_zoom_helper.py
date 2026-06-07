@@ -7,6 +7,7 @@ from typing import TypedDict
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+from src.View.botao_helper import estilo_botao_icone, estilo_botao_padrao
 from src.View.tema import CORES
 
 _FATOR_ZOOM = 0.82
@@ -334,9 +335,8 @@ def montar_botoes_zoom_grafico(
         width=34,
         height=28,
         font=ctk.CTkFont(size=16, weight="bold"),
-        fg_color=CORES["primaria"],
-        hover_color=CORES["primariaHover"],
         command=lambda: executar("menos"),
+        **estilo_botao_icone(),
     ).pack(side="left", padx=(0, 4))
 
     ctk.CTkButton(
@@ -345,20 +345,17 @@ def montar_botoes_zoom_grafico(
         width=34,
         height=28,
         font=ctk.CTkFont(size=16, weight="bold"),
-        fg_color=CORES["primaria"],
-        hover_color=CORES["primariaHover"],
         command=lambda: executar("mais"),
+        **estilo_botao_icone(),
     ).pack(side="left", padx=(0, 8))
 
     ctk.CTkButton(
         frame,
         text="Reset",
         width=64,
-        height=28,
         font=ctk.CTkFont(size=12),
-        fg_color=CORES["primaria"],
-        hover_color=CORES["primariaHover"],
         command=lambda: executar("reset"),
+        **estilo_botao_padrao(height=28),
     ).pack(side="left")
 
     ctk.CTkLabel(

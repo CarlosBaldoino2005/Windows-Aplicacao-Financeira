@@ -4,7 +4,7 @@ from __future__ import annotations
 import webbrowser
 
 import customtkinter as ctk
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 from src.Model.noticia_mercado import NoticiaMercado
 from src.Model.opcoes_fotos_noticias import OpcoesFotosNoticias
@@ -120,6 +120,7 @@ def _criar_card(
             command=lambda u=noticia.url: abrir_link_noticia(u, pai_janela),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="right", padx=(8, 0))
 
     partes_meta = []

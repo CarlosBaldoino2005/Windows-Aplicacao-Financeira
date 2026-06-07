@@ -1,7 +1,7 @@
 """Janela dedicada para comparar desempenho de ate 6 acoes."""
 from __future__ import annotations
 
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 import customtkinter as ctk
 
@@ -120,6 +120,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             command=self._pesquisar_acoes,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left")
 
         self._frame_resultados_busca = ctk.CTkScrollableFrame(
@@ -147,6 +148,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             command=self._adicionar_por_codigo,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left")
 
         self._label_chips = ctk.CTkLabel(
@@ -170,6 +172,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             command=self._limpar_lista,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(anchor="w", padx=12, pady=(0, 12))
 
         linha_periodo = ctk.CTkFrame(form, fg_color="transparent")
@@ -191,6 +194,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             command=self._executar_comparacao,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             height=36,
         ).pack(side="left")
 
@@ -220,6 +224,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -350,6 +355,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
                 command=lambda s=item.simbolo: self._adicionar_da_busca(s),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             ).pack(side="right", padx=8, pady=4)
 
     def _adicionar_da_busca(self, simbolo: str) -> None:

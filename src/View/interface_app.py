@@ -3,7 +3,9 @@ Interface desktop 100% Python (CustomTkinter + Matplotlib).
 Painel, graficos e comparacao de acoes.
 """
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
+
+from src.View import mensagem_helper as messagebox
 
 import customtkinter as ctk
 
@@ -25,6 +27,7 @@ from src.View.janela_configuracao_painel import (
     ResultadoConfiguracaoPainel,
     abrir_configuracao_painel,
 )
+from src.View.janela_monitoramento import JanelaMonitoramento, abrir_monitoramento
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     obter_simbolo_duplo_clique_treeview,
@@ -37,6 +40,15 @@ from src.Tool.atualizacao_automatica_helper import (
     notificar_mudanca_configuracao_atualizacao_automatica,
 )
 from src.Tool.icone_engrenagem_helper import criar_botao_engrenagem
+from src.Tool.icone_alerta_helper import criar_botao_alerta
+from src.Tool.alerta_monitoramento_helper import (
+    AlertaMonitoramentoItem,
+    aplicar_destaque_alerta_ui,
+    notificar_alertas_windows,
+    obter_alertas_monitoramento,
+    remover_destaque_alerta_ui,
+    widget_ainda_existe,
+)
 from src.Tool.janela_helper import (
     configurar_janela_maximizada,
     executar_em_thread,
@@ -68,6 +80,9 @@ class InterfaceApp(ctk.CTk):
         self._janela_cdb: JanelaHubRendaFixaBancaria | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._janela_configuracao: JanelaConfiguracaoPainel | None = None
+        self._janela_monitoramento: JanelaMonitoramento | None = None
+        self._botao_alerta_monitoramento: ctk.CTkButton | None = None
+        self._botao_monitoramento: ctk.CTkButton | None = None
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
         self._painel_buscando = False
@@ -88,6 +103,7 @@ class InterfaceApp(ctk.CTk):
             lambda: self._carregar_painel(automatico=True),
         )
         self._atualizador_auto.iniciar()
+        self.after(800, lambda: self._agendar_verificacao_alertas_monitoramento(notificar=True))
 
     def _salvar_monitor_principal(self, dispositivo: str) -> None:
         try:
@@ -125,10 +141,13 @@ class InterfaceApp(ctk.CTk):
         criar_botao_engrenagem(
             linha_topo,
             command=self._abrir_configuracao,
-            fg_color="transparent",
-            hover_color=CORES["primariaHover"],
-            text_color=CORES["texto"],
         ).pack(side="right")
+
+        self._botao_alerta_monitoramento = criar_botao_alerta(
+            linha_topo,
+            command=self._abrir_monitoramento,
+        )
+        self._botao_alerta_monitoramento.pack(side="right", padx=(0, 6))
 
         ctk.CTkLabel(
             cabecalho,
@@ -168,6 +187,67 @@ class InterfaceApp(ctk.CTk):
             self, self._config_painel, ao_aplicar
         )
 
+    def _abrir_monitoramento(self) -> None:
+        if self._janela_monitoramento is not None:
+            try:
+                if self._janela_monitoramento.winfo_exists():
+                    self._janela_monitoramento.focus_force()
+                    self._janela_monitoramento.lift()
+                    self._janela_monitoramento._atualizar_lista(forcar=True)
+                    return
+            except Exception:
+                pass
+
+        janela = abrir_monitoramento(self)
+        self._janela_monitoramento = janela
+        if janela is not None:
+            janela.bind(
+                "<Destroy>",
+                lambda _e: self._agendar_verificacao_alertas_monitoramento(notificar=False),
+                add="+",
+            )
+
+    def _agendar_verificacao_alertas_monitoramento(self, *, notificar: bool = False) -> None:
+        """Consulta limites do monitoramento e atualiza icone/botao (e notificacoes na abertura)."""
+        if not widget_ainda_existe(self):
+            return
+
+        def trabalho() -> tuple[list[AlertaMonitoramentoItem], bool]:
+            return obter_alertas_monitoramento()
+
+        def ao_concluir(
+            resultado: tuple[list[AlertaMonitoramentoItem], bool] | None,
+            erro: str | None,
+        ) -> None:
+            if erro or resultado is None:
+                return
+            alertas, monitoramento_ativo = resultado
+            self._aplicar_indicadores_alerta_monitoramento(alertas, monitoramento_ativo)
+            if notificar and monitoramento_ativo and alertas:
+                notificar_alertas_windows(alertas)
+
+        self._executar_em_thread(trabalho, ao_concluir)
+
+    def _aplicar_indicadores_alerta_monitoramento(
+        self,
+        alertas: list[AlertaMonitoramentoItem],
+        monitoramento_ativo: bool,
+    ) -> None:
+        if not widget_ainda_existe(self):
+            return
+
+        if monitoramento_ativo and alertas:
+            aplicar_destaque_alerta_ui(
+                self._botao_alerta_monitoramento,
+                self._botao_monitoramento,
+            )
+            return
+
+        remover_destaque_alerta_ui(
+            self._botao_alerta_monitoramento,
+            self._botao_monitoramento,
+        )
+
     def _processar_configuracao_painel(self, resultado: ResultadoConfiguracaoPainel) -> None:
         if resultado.tema_alterado:
             aplicar_modo_aparencia(resultado.modo_aparencia)
@@ -204,6 +284,7 @@ class InterfaceApp(ctk.CTk):
 
         self._reconstruindo_tema = False
         self._atualizador_auto.reagendar()
+        self.after(800, lambda: self._agendar_verificacao_alertas_monitoramento(notificar=False))
 
     def _montar_area_consultas(self) -> None:
         """Botoes de pesquisa e favoritos acima das abas de cotacoes."""
@@ -243,17 +324,22 @@ class InterfaceApp(ctk.CTk):
             ("Tesouros", self._abrir_hub_tesouro),
             ("LCI/LCA", self._abrir_hub_lci_lca),
             ("CDB", self._abrir_hub_cdb),
+            ("Monitoramento", self._abrir_monitoramento),
         ]
 
         for indice, (rotulo, acao) in enumerate(botoes_consultas):
-            ctk.CTkButton(
+            botao = ctk.CTkButton(
                 linha_botoes,
                 text=rotulo,
                 command=acao,
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+                text_color=CORES.get("textoInverso", "#FFFFFF"),
                 height=36,
-            ).grid(
+            )
+            if rotulo == "Monitoramento":
+                self._botao_monitoramento = botao
+            botao.grid(
                 row=indice // colunas,
                 column=indice % colunas,
                 padx=(0, 10),
@@ -279,6 +365,7 @@ class InterfaceApp(ctk.CTk):
             command=self._carregar_painel,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="right")
 
     def _montar_secao_cotacoes(self) -> None:

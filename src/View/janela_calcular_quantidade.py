@@ -137,6 +137,7 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
             command=self._calcular,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=180,
         ).pack(anchor="w", padx=16, pady=(0, 12))
 
@@ -169,6 +170,7 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
             command=self._usar_no_grafico,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=140,
             state="disabled",
         )
@@ -180,6 +182,7 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 

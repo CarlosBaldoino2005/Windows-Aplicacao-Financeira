@@ -4,7 +4,7 @@ from __future__ import annotations
 import webbrowser
 
 import customtkinter as ctk
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 from src.Controller.controlador_tesouro import ControladorTesouro
 from src.Model.simulacao_tesouro import ResultadoSimulacaoTesouro
@@ -209,6 +209,7 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
             ),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(anchor="w", padx=4, pady=(12, 8))
 
     def _montar_aba_simular(self, detalhes: DetalhesTituloTesouro) -> None:
@@ -251,6 +252,7 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
             command=self._executar_simulacao,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="left")
 

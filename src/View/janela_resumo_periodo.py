@@ -64,6 +64,7 @@ class JanelaResumoPeriodo(ctk.CTkToplevel):
             command=self.destroy,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 

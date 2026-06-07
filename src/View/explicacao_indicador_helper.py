@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
+from src.View.botao_helper import estilo_botao_icone, estilo_botao_padrao
 from src.View.tema import CORES
 
 
@@ -103,10 +104,8 @@ class GerenciadorExplicacaoIndicadores:
             painel,
             text="Fechar",
             width=80,
-            height=28,
             command=self.fechar_todos,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
+            **estilo_botao_padrao(height=28),
         ).pack(anchor="e", padx=10, pady=(0, 8))
 
         self._painel_aberto = painel
@@ -141,6 +140,5 @@ def adicionar_botao_explicacao_indicador(
         height=26,
         font=ctk.CTkFont(size=14, weight="bold"),
         command=lambda: gerenciador.alternar(card, rotulo, explicacao, calculo),
-        fg_color=CORES["primaria"],
-        hover_color=CORES["primariaHover"],
+        **estilo_botao_icone(),
     ).pack(side="right")

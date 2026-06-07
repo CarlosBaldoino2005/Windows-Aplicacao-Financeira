@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from tkinter import messagebox, ttk
+from tkinter import ttk
+
+from src.View import mensagem_helper as messagebox
 
 import customtkinter as ctk
 
@@ -12,13 +14,12 @@ from src.Model.periodos_mercado import PERIODOS_MERCADO, periodo_chave_por_rotul
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
-from src.Tool.validadores import validar_quantidade_acoes
+from src.View.hub_painel_config_helper import ConfiguracaoHubPainel
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_noticias_mercado import JanelaNoticiasMercado
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
-from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     definir_rotulo_coluna_variacao,
@@ -44,6 +45,16 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._carga_inicial_feita = False
         self._painel_buscando = False
+        self._atualizador_auto = None
+        self._config_hub = ConfiguracaoHubPainel(
+            self,
+            self._config_painel,
+            escopo_quantidade="acoes",
+            ao_recarregar=lambda: self._carregar_painel(),
+            ao_mudar_fonte=self._ao_mudar_fonte_grid,
+            ao_remontar_layout=self._reconstruir_interface_apos_tema,
+            ao_reagendar_auto=self._reagendar_atualizacao_automatica,
+        )
 
         self.title("Acoes por periodo")
         self.configure(fg_color=CORES["fundo"])
@@ -86,12 +97,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         cabecalho.pack(fill="x")
 
-        ctk.CTkLabel(
-            cabecalho,
-            text="Acoes por periodo",
-            font=ctk.CTkFont(size=22, weight="bold"),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=20, pady=(12, 4))
+        self._config_hub.montar_titulo_com_engrenagem(cabecalho, "Acoes por periodo")
 
         ctk.CTkLabel(
             cabecalho,
@@ -143,6 +149,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
                 command=comando,
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=170,
                 height=36,
             ).pack(side="left", padx=(0, 8))
@@ -166,6 +173,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
             command=self._carregar_painel,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=140,
         ).pack(side="left", padx=(0, 12))
 
@@ -189,12 +197,23 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         )
         self._label_status.pack(side="left")
 
-        criar_combo_fonte_grid(barra, self._config_painel, self._ao_mudar_fonte_grid)
+    def _reagendar_atualizacao_automatica(self) -> None:
+        if self._atualizador_auto is not None:
+            self._atualizador_auto.reagendar()
 
-        ctk.CTkLabel(barra, text="Qtd. acoes").pack(side="right", padx=(8, 4))
-        self._entrada_qtd = ctk.CTkEntry(barra, width=50, justify="center")
-        self._entrada_qtd.insert(0, str(qtd))
-        self._entrada_qtd.pack(side="right", padx=(0, 12))
+    def _reconstruir_interface_apos_tema(self) -> None:
+        recarregar = self._carga_inicial_feita
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._carga_inicial_feita = False
+        self._config_hub.limpar_referencia_modal()
+        self.configure(fg_color=CORES["fundo"])
+        self._montar_layout()
+        if recarregar:
+            self._carregar_painel()
+        else:
+            self.after(200, self._executar_carga_inicial)
+        self._reagendar_atualizacao_automatica()
 
     def _periodo_chave(self) -> str:
         return periodo_chave_por_rotulo(self._combo_periodo.get())
@@ -360,24 +379,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         if automatico and self._painel_buscando:
             return
 
-        if automatico:
-            quantidade = self._config_painel.carregar()
-            erro = None
-        else:
-            quantidade, erro = validar_quantidade_acoes(self._entrada_qtd.get())
-        if erro:
-            messagebox.showwarning("Quantidade", erro, parent=self)
-            return
-
-        if not automatico:
-            try:
-                self._config_painel.salvar(quantidade)
-            except OSError:
-                messagebox.showwarning(
-                    "Configuracao",
-                    "Nao foi possivel salvar dados/painel.ini.",
-                    parent=self,
-                )
+        quantidade = self._config_painel.carregar()
 
         periodo = self._periodo_chave()
         rotulo_periodo = self._combo_periodo.get()

@@ -27,6 +27,9 @@ from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
 from src.View.destaque_cotacao_helper import PainelDestaqueCotacao, iniciar_atualizacao_destaque
 from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
+from src.View.janela_adicionar_monitoramento import abrir_adicionar_monitoramento
+from src.Controller.controlador_monitoramento import ControladorMonitoramento
+from src.Tool.controlador_ativo_helper import inferir_tipo_ativo_monitoramento
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
@@ -44,6 +47,8 @@ from src.View.painel_comparacao_periodo import (
     payload_instrucao,
 )
 from src.View.tema import CORES
+from src.View import mensagem_helper as messagebox
+from src.View.formatadores import formatar_moeda, formatar_variacao
 
 PERIODOS = PERIODOS_MERCADO
 ALTURA_GRAFICO_PX = 480
@@ -74,6 +79,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._janela_calcular_quantidade: JanelaCalcularQuantidade | None = None
         self._janela_resumo_periodo: ctk.CTkToplevel | None = None
         self._janela_grafico_ampliado: ctk.CTkToplevel | None = None
+        self._janela_adicionar_monitoramento: ctk.CTkToplevel | None = None
+        self._controlador_monitoramento = ControladorMonitoramento()
         self._config_ini = ConfigPainelIni()
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
         self._dados_grafico_atual: dict | None = None
@@ -106,6 +113,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             "_janela_calcular_quantidade",
             "_janela_resumo_periodo",
             "_janela_grafico_ampliado",
+            "_janela_adicionar_monitoramento",
         ):
             janela = getattr(self, attr, None)
             if janela is not None:
@@ -130,6 +138,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 
@@ -180,6 +189,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             command=self._carregar_grafico,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left", padx=(0, 16))
 
         ctk.CTkLabel(barra, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
@@ -195,6 +205,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             command=self._abrir_calcular_quantidade,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=90,
         ).pack(side="left", padx=(0, 16))
 
@@ -204,6 +215,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             command=self._abrir_desvalorizacao,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=130,
         ).pack(side="left", padx=(0, 8))
 
@@ -213,6 +225,17 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             command=self._abrir_mais_detalhes,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=130,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            barra,
+            text="Monitoramento",
+            command=self._abrir_monitoramento,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=130,
         ).pack(side="left")
 
@@ -249,6 +272,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             command=self._abrir_resumo_periodo_ampliado,
             state="disabled",
         )
@@ -274,6 +298,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             command=self._abrir_grafico_ampliado,
             state="disabled",
         )
@@ -396,6 +421,63 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             except Exception:
                 pass
         self._janela_detalhes = JanelaDetalhesAcao(self, self._controlador, self._simbolo)
+
+    def _abrir_monitoramento(self) -> None:
+        if self._janela_adicionar_monitoramento is not None:
+            try:
+                if self._janela_adicionar_monitoramento.winfo_exists():
+                    self._janela_adicionar_monitoramento.focus_force()
+                    self._janela_adicionar_monitoramento.lift()
+                    return
+            except Exception:
+                pass
+
+        tipo = inferir_tipo_ativo_monitoramento(self._simbolo, self._controlador)
+        for item in self._controlador_monitoramento.listar_itens():
+            if item.simbolo == self._simbolo and item.tipo_ativo == tipo:
+                messagebox.showinfo(
+                    "Monitoramento",
+                    f"{codigo_exibicao(self._simbolo)} ja esta em monitoramento.\n"
+                    "Abra a tela de monitoramento pelo icone de alerta no painel principal.",
+                    parent=self,
+                )
+                return
+
+        cotacao = self._painel_destaque_cotacao.cotacao_atual
+        nome_ativo = cotacao.nome if cotacao else None
+        preco_atual_texto = None
+        preco_atual = None
+        moeda_ativo = "BRL"
+        if cotacao is not None:
+            preco_atual = cotacao.preco
+            moeda_ativo = cotacao.moeda
+            preco = formatar_moeda(cotacao.preco, cotacao.moeda)
+            variacao = formatar_variacao(
+                cotacao.variacao_valor,
+                cotacao.variacao_percentual,
+                cotacao.moeda,
+            )
+            preco_atual_texto = f"{preco}  ({variacao})"
+
+        def ao_salvar() -> None:
+            messagebox.showinfo(
+                "Monitoramento",
+                f"{codigo_exibicao(self._simbolo)} adicionado ao monitoramento.",
+                parent=self,
+            )
+
+        self._janela_adicionar_monitoramento = abrir_adicionar_monitoramento(
+            self,
+            self._controlador_monitoramento,
+            ao_salvar,
+            simbolo=self._simbolo,
+            tipo_ativo=tipo,
+            apenas_limites=True,
+            nome_ativo=nome_ativo,
+            preco_atual_texto=preco_atual_texto,
+            preco_atual=preco_atual,
+            moeda_ativo=moeda_ativo,
+        )
 
     def _ler_quantidade_cotas(self) -> tuple[int | None, str | None]:
         padrao = self._config_ini.padrao_cotas_grafico()

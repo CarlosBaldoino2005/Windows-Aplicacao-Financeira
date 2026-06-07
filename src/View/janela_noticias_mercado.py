@@ -115,6 +115,7 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             command=self._carregar_noticias,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=110,
         ).pack(side="right")
 
@@ -124,6 +125,7 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             command=self._abrir_pesquisa_noticias,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=110,
         ).pack(side="right", padx=(0, 8))
 
@@ -169,6 +171,7 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
 

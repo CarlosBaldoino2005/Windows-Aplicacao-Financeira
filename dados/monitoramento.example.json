@@ -1,0 +1,20 @@
+{
+  "itens": [
+    {
+      "id": "exemplo001",
+      "simbolo": "PETR4.SA",
+      "tipo_ativo": "acoes",
+      "valor_baixo": 30.0,
+      "valor_alto": 40.0,
+      "pausado": false
+    },
+    {
+      "id": "exemplo002",
+      "simbolo": "BTC-USD",
+      "tipo_ativo": "cripto",
+      "valor_baixo": null,
+      "valor_alto": 70000.0,
+      "pausado": true
+    }
+  ]
+}

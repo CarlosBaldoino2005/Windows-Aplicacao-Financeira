@@ -5,7 +5,7 @@ import webbrowser
 from typing import Literal
 
 import customtkinter as ctk
-from tkinter import messagebox
+from src.View import mensagem_helper as messagebox
 
 from src.Controller.controlador_renda_fixa_bancaria import ControladorRendaFixaBancaria
 from src.Model.oferta_renda_fixa_bancaria import OfertaRendaFixaBancaria
@@ -21,6 +21,7 @@ from src.Tool.simulacao_valor_ini_helper import (
 )
 from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_celula_prazo
 from src.View.formatadores import formatar_moeda, formatar_texto_opcional
+from src.View.hub_painel_config_helper import ConfiguracaoHubPainel
 from src.View.prazo_legivel_helper import adicionar_linha_prazo_legivel
 from src.View.grid_ordenacao_helper import EstadoOrdenacaoColuna, LinhaTabelaOrdenavel
 from src.View.tabela_detalhes_helper import renderizar_tabela_zebrada
@@ -62,6 +63,12 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
         self._check_apenas_emissor: ctk.CTkCheckBox | None = None
         self._url_comparador_ofertas: str = URL_MEELION_COMPARADOR
         self._mapa_prazo_slug: dict[str, str] = {}
+        self._config_hub = ConfiguracaoHubPainel(
+            self,
+            self._config_painel,
+            incluir_quantidade=False,
+            ao_remontar_layout=self._reconstruir_interface_apos_tema,
+        )
 
         titulo = "LCI / LCA" if modo == "lci_lca" else "CDB"
         self.title(titulo)
@@ -92,12 +99,7 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             else "Certificado de deposito bancario. Simule taxa liquida versus 100% CDI."
         )
 
-        ctk.CTkLabel(
-            cabecalho,
-            text=titulo,
-            font=ctk.CTkFont(size=22, weight="bold"),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=20, pady=(12, 4))
+        self._config_hub.montar_titulo_com_engrenagem(cabecalho, titulo)
 
         ctk.CTkLabel(
             cabecalho,
@@ -152,6 +154,21 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             fg_color=CORES.get("destaqueAvisoLegal", CORES["avisoFundo"]),
             corner_radius=8,
         ).pack(fill="x", padx=16, pady=(0, 12))
+
+    def _reconstruir_interface_apos_tema(self) -> None:
+        aba_atual = self._seletor_aba.get() if self._seletor_aba is not None else self._nomes_abas[0]
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._frames_por_aba = {}
+        self._frame_resultado_sim = None
+        self._scroll_ofertas = None
+        self._config_hub.limpar_referencia_modal()
+        self.configure(fg_color=CORES["fundo"])
+        self._montar_layout()
+        if aba_atual in self._nomes_abas:
+            self._seletor_aba.set(aba_atual)
+            self._trocar_aba(aba_atual)
+        self.after(150, self._carregar_indicadores)
 
     def _trocar_aba(self, nome: str) -> None:
         for frame in self._frames_por_aba.values():
@@ -238,6 +255,7 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             command=self._buscar_ofertas,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=130,
         ).pack(side="left", padx=(0, 8))
 
@@ -245,8 +263,9 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             linha_acoes,
             text="Ver mais na Meelion",
             command=lambda: webbrowser.open(self._url_comparador_ofertas),
-            fg_color=CORES["borda"],
-            hover_color=CORES["zebraEscura"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=160,
         ).pack(side="left")
 
@@ -448,8 +467,9 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
                 linha,
                 text="Site FGC",
                 command=lambda: webbrowser.open(URL_FGC),
-                fg_color=CORES["borda"],
-                hover_color=CORES["zebraEscura"],
+                fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=100,
             ).pack(side="left", padx=(0, 8))
 
@@ -561,6 +581,7 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             command=self._executar_simulacao,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(anchor="w", padx=4, pady=(12, 8))
 
         self._frame_resultado_sim = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -738,13 +759,15 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             command=lambda: webbrowser.open(URL_BCB),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             linha,
             text="FGC",
             command=lambda: webbrowser.open(URL_FGC),
-            fg_color=CORES["borda"],
-            hover_color=CORES["zebraEscura"],
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left")
 
     def _adicionar_secao(self, pai: ctk.CTkFrame, titulo: str) -> None:

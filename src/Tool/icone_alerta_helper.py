@@ -1,4 +1,4 @@
-"""Botao com icone de engrenagem para abrir configuracoes."""
+"""Botao com icone de alerta para abrir monitoramento."""
 from __future__ import annotations
 
 from typing import Any
@@ -7,12 +7,12 @@ import customtkinter as ctk
 
 from src.View.botao_helper import estilo_botao_icone
 
-# Glifo Settings (engrenagem) — Segoe MDL2 Assets (Windows).
-_GLIIFO_ENGRENAGEM = "\uE713"
+# Glifo StatusWarning — Segoe MDL2 Assets (Windows).
+_GLIIFO_ALERTA = "\uE814"
 _FONTE_ICONE = "Segoe MDL2 Assets"
 
 
-def criar_botao_engrenagem(
+def criar_botao_alerta(
     pai: ctk.CTkBaseClass,
     *,
     command: Any,
@@ -22,7 +22,7 @@ def criar_botao_engrenagem(
     width: int = 40,
     height: int = 40,
 ) -> ctk.CTkButton:
-    """Botao quadrado apenas com icone de engrenagem (fundo transparente)."""
+    """Botao quadrado com icone de alerta (fundo transparente)."""
     estilo = estilo_botao_icone()
     if fg_color is not None:
         estilo["fg_color"] = fg_color
@@ -33,7 +33,7 @@ def criar_botao_engrenagem(
 
     return ctk.CTkButton(
         pai,
-        text=_GLIIFO_ENGRENAGEM,
+        text=_GLIIFO_ALERTA,
         width=width,
         height=height,
         font=ctk.CTkFont(family=_FONTE_ICONE, size=20),

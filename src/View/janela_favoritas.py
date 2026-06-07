@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
+
+from src.View import mensagem_helper as messagebox
 from typing import Literal
 
 import customtkinter as ctk
@@ -24,7 +26,7 @@ from src.View.placeholders_ui import (
     PLACEHOLDER_CODIGO_ACAO,
     PLACEHOLDER_CODIGO_CRIPTO,
 )
-from src.View.grid_fonte_helper import criar_combo_fonte_grid
+from src.View.hub_painel_config_helper import ConfiguracaoHubPainel
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.grid_interacao_treeview_helper import liberar_interacao_treeview
 from src.View.tabela_mercado_helper import (
@@ -91,6 +93,15 @@ class JanelaFavoritas(ctk.CTkToplevel):
         self._tabela: ttk.Treeview | None = None
         self._grid_buscando = False
         self._grid_versao = 0
+        self._atualizador_auto = None
+        self._config_hub = ConfiguracaoHubPainel(
+            self,
+            self._config_painel,
+            incluir_quantidade=False,
+            ao_mudar_fonte=self._ao_mudar_fonte_grid,
+            ao_remontar_layout=self._reconstruir_interface_apos_tema,
+            ao_reagendar_auto=self._reagendar_atualizacao_automatica,
+        )
 
         self.title(_TITULOS_PAINEL[self._tipo_painel])
         self.configure(fg_color=CORES["fundo"])
@@ -126,12 +137,10 @@ class JanelaFavoritas(ctk.CTkToplevel):
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         cabecalho.pack(fill="x")
 
-        ctk.CTkLabel(
+        self._config_hub.montar_titulo_com_engrenagem(
             cabecalho,
-            text=_TITULOS_PAINEL[self._tipo_painel],
-            font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(12, 4))
+            _TITULOS_PAINEL[self._tipo_painel],
+        )
 
         ctk.CTkLabel(
             cabecalho,
@@ -162,6 +171,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
             command=self._pesquisar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkLabel(linha_add, text="ou codigo").pack(side="left", padx=(8, 8))
@@ -181,6 +191,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
             command=self._adicionar_codigo,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="left")
 
         self._frame_resultados = ctk.CTkScrollableFrame(
@@ -202,6 +213,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
             command=self._remover_selecionadas,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=150,
         ).pack(side="right", padx=(8, 0))
 
@@ -211,9 +223,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             command=lambda: self._atualizar_grid(forcar=True),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         ).pack(side="right")
-
-        criar_combo_fonte_grid(barra, self._config_painel, self._ao_mudar_fonte_grid)
 
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(fill="both", expand=True, padx=16, pady=(0, 8))
@@ -236,8 +247,23 @@ class JanelaFavoritas(ctk.CTkToplevel):
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
+
+    def _reagendar_atualizacao_automatica(self) -> None:
+        if self._atualizador_auto is not None:
+            self._atualizador_auto.reagendar()
+
+    def _reconstruir_interface_apos_tema(self) -> None:
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._tabela = None
+        self._config_hub.limpar_referencia_modal()
+        self.configure(fg_color=CORES["fundo"])
+        self._montar_interface()
+        self.after(250, lambda: self._atualizar_grid(forcar=True))
+        self._reagendar_atualizacao_automatica()
 
     def _limpar_resultados(self) -> None:
         for widget in self._frame_resultados.winfo_children():
@@ -316,6 +342,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
                 command=lambda s=item.simbolo: self._adicionar_favorito(s),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
             ).pack(side="right", padx=8, pady=4)
 
     def _normalizar_entrada(self, termo: str):
