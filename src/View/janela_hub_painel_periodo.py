@@ -1,7 +1,6 @@
 """Hub de acoes com painel em alta / queda / todas filtrado por periodo."""
 from __future__ import annotations
 
-import threading
 from datetime import datetime
 from tkinter import messagebox, ttk
 
@@ -11,7 +10,7 @@ from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.cotacao import CotacaoResumo
 from src.Model.periodos_mercado import PERIODOS_MERCADO, periodo_chave_por_rotulo
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.validadores import validar_quantidade_acoes
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_favoritas import JanelaFavoritas
@@ -345,14 +344,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         self._janela_grafico.title(f"Grafico — {codigo} ({rotulo})")
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho() -> None:
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _carregar_painel(self) -> None:
         quantidade, erro = validar_quantidade_acoes(self._entrada_qtd.get())

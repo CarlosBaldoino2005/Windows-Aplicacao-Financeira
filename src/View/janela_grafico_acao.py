@@ -1,7 +1,6 @@
 """Janela dedicada para grafico de historico de uma acao."""
 from __future__ import annotations
 
-import threading
 
 import customtkinter as ctk
 import numpy as np
@@ -12,7 +11,7 @@ from typing import Any
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.mascara_moeda_helper import aplicar_mascara_inteiro_ptbr, formatar_inteiro_ptbr
 from src.Tool.validadores import validar_quantidade_cotas
 from src.Service.cdi_servico import CdiServico
@@ -412,14 +411,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._atualizar_rotulo_painel_periodo()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho():
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _atualizar_destaque_cotacao(self) -> None:
         iniciar_atualizacao_destaque(

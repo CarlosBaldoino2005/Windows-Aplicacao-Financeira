@@ -1,14 +1,13 @@
 """Janela com principais noticias do mercado financeiro."""
 from __future__ import annotations
 
-import threading
 
 import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.noticia_mercado import NoticiaMercado
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.View.janela_pesquisa_noticias import JanelaPesquisaNoticias
 from src.View.noticias_fotos_helper import criar_combo_fotos_noticias
 from src.View.noticias_provedor_helper import (
@@ -198,14 +197,7 @@ class JanelaNoticiasMercado(ctk.CTkToplevel):
         self._carregar_noticias()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho() -> None:
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _carregar_noticias(self) -> None:
         self._label_status.configure(

@@ -1,7 +1,6 @@
 """Hub de fundos imobiliarios (mesma estrutura do painel Empresa + dividendos)."""
 from __future__ import annotations
 
-import threading
 from tkinter import messagebox, ttk
 
 import customtkinter as ctk
@@ -9,7 +8,7 @@ import customtkinter as ctk
 from src.Controller.controlador_fiis import ControladorFiis
 from src.Model.cotacao import CotacaoResumo
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.validadores import validar_quantidade_acoes
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_favoritas import JanelaFavoritas
@@ -293,14 +292,7 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
         self._janela_grafico.title(f"Grafico — {codigo}")
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho() -> None:
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _carregar_painel(self) -> None:
         quantidade, erro = validar_quantidade_acoes(self._entrada_qtd.get())

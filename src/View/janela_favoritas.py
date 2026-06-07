@@ -1,7 +1,6 @@
 """Janela de acoes favoritas com grid de cotacoes e persistencia local."""
 from __future__ import annotations
 
-import threading
 from datetime import datetime
 from tkinter import messagebox
 
@@ -10,7 +9,7 @@ from tkinter import ttk
 
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.placeholders_ui import (
     PLACEHOLDER_BUSCA_ACAO,
@@ -189,14 +188,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
             widget.destroy()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho():
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _pesquisar(self) -> None:
         termo = self._entrada_busca.get().strip()

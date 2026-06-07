@@ -383,6 +383,32 @@ def _posicionar_no_monitor_antes_maximizar(
     )
 
 
+def _maximizar_na_abertura_unica(
+    janela,
+    referencia,
+    area_trabalho: tuple[int, int, int, int] | None = None,
+) -> None:
+    """
+    Posiciona no monitor correto e maximiza uma unica vez.
+    Nao restaura nem redimensiona de novo — evita flicker na abertura.
+    """
+    ref = referencia or janela
+    _preparar_janela_visivel(janela, ref)
+    area = area_trabalho or _area_trabalho_referencia(ref)
+
+    if area is not None:
+        x, y, _, _ = area
+        posicionar_janela_na_area_trabalho(
+            janela,
+            x,
+            y,
+            _LARGURA_INICIAL_FILHA,
+            _ALTURA_INICIAL_FILHA,
+        )
+
+    _maximizar_janela_tk(janela)
+
+
 def restaurar_e_maximizar_janela(
     janela,
     referencia=None,
@@ -547,45 +573,46 @@ def configurar_janela_maximizada(
     ao_salvar_monitor: Callable[[str], None] | None = None,
 ) -> None:
     """
-    Na abertura: Restaurar, Maximizar e ao final garante o tamanho do monitor.
-    Executa uma vez; nao reajusta depois de carregada.
-    monitor_inicial + ao_salvar_monitor: monitor salvo no INI e gravacao ao fechar.
+    Maximiza a janela uma unica vez na abertura (monitor do pai ou do INI).
+    Nao reajusta depois — evita flicker ao minimizar/restaurar ou carregar dados.
     """
+    if getattr(janela, "_financeiro_abertura_maximizada", False):
+        if ao_apos_layout is not None:
+            agendar_na_ui(janela, ao_apos_layout)
+        return
+
     referencia = _resolver_janela_referencia(janela, janela_pai)
-    _maximizou_mapa = {"feito": False}
-    _abertura_concluida = {"feito": False}
-    area_inicial: tuple[int, int, int, int] | None = None
-    inicial_aplicado = {"feito": False}
-
+    area_salva: tuple[int, int, int, int] | None = None
     if monitor_inicial and referencia is janela:
-        monitor_resolvido = resolver_monitor_por_dispositivo(monitor_inicial)
-        if monitor_resolvido is not None:
-            area_inicial = monitor_resolvido.retangulo_trabalho()
-            aplicar_monitor_inicial(janela, monitor_inicial)
+        monitor = resolver_monitor_por_dispositivo(monitor_inicial)
+        if monitor is not None:
+            area_salva = monitor.retangulo_trabalho()
 
-    area_referencia = _area_trabalho_referencia(referencia)
+    estado = {"executado": False}
 
-    def restaurar_e_maximizar() -> None:
-        usar_area_salva = (
-            area_inicial is not None
-            and referencia is janela
-            and not inicial_aplicado["feito"]
-        )
-        area_alvo = area_inicial if usar_area_salva else area_referencia
-        restaurar_e_maximizar_janela(janela, referencia, area_trabalho=area_alvo)
-        if usar_area_salva:
-            inicial_aplicado["feito"] = True
-
-    def _concluir_abertura() -> None:
-        if _abertura_concluida["feito"]:
+    def executar_abertura() -> None:
+        if estado["executado"]:
+            return
+        if not janela_ui_ainda_ativa(janela):
             return
 
-        area_final = area_inicial if area_inicial and referencia is janela else area_referencia
-        _garantir_tamanho_monitor_final(janela, referencia, area_final)
+        estado["executado"] = True
+        janela._financeiro_abertura_maximizada = True
 
-        _abertura_concluida["feito"] = True
+        area_alvo = (
+            area_salva
+            if area_salva and referencia is janela
+            else _area_trabalho_referencia(referencia)
+        )
+        _maximizar_na_abertura_unica(janela, referencia, area_alvo)
+
         if ao_apos_layout is not None:
+            try:
+                janela.update_idletasks()
+            except Exception:
+                pass
             ao_apos_layout()
+
         if ao_salvar_monitor is not None:
             dispositivo = obter_dispositivo_monitor_janela(janela)
             if dispositivo:
@@ -594,33 +621,47 @@ def configurar_janela_maximizada(
                 except Exception:
                     pass
 
-    def finalizar_abertura(tentativa: int = 0) -> None:
-        """Repete maximizacao na abertura; depois nao reajusta mais."""
-        if _abertura_concluida["feito"]:
-            return
-
-        restaurar_e_maximizar()
-
-        if not _janela_abertura_ok(janela, referencia) and tentativa < _MAX_TENTATIVAS_ABERTURA:
-            atraso = _MS_ENTRE_TENTATIVAS_MAX + (tentativa * 60)
-            janela.after(atraso, lambda t=tentativa + 1: finalizar_abertura(t))
-            return
-
-        _concluir_abertura()
-
-    _preparar_janela_visivel(janela, referencia)
-    janela.after(0, restaurar_e_maximizar)
-    janela.after(80, restaurar_e_maximizar)
-    janela.after(200, restaurar_e_maximizar)
-    janela.after(_MS_FINALIZAR_ABERTURA, finalizar_abertura)
-
-    def ao_mapear(_evento=None) -> None:
-        if _maximizou_mapa["feito"] or _abertura_concluida["feito"]:
-            return
-        _maximizou_mapa["feito"] = True
-        janela.after(50, lambda: finalizar_abertura(0))
-
+    # Um unico agendamento apos o layout inicial (sem retries nem <Map>).
     try:
-        janela.bind("<Map>", ao_mapear, add="+")
+        janela.after(50, executar_abertura)
+    except (RuntimeError, Exception):
+        pass
+
+
+def janela_ui_ainda_ativa(janela) -> bool:
+    """Verifica se a janela Tk ainda existe e pode receber callbacks."""
+    try:
+        return bool(janela.winfo_exists())
+    except (RuntimeError, AttributeError):
+        return False
+    except Exception:
+        return False
+
+
+def agendar_na_ui(janela, callback) -> None:
+    """Agenda callback na thread principal, ignorando se a janela ja foi fechada."""
+    if not janela_ui_ainda_ativa(janela):
+        return
+    try:
+        janela.after(0, callback)
+    except RuntimeError:
+        pass
     except Exception:
         pass
+
+
+def executar_em_thread(janela, funcao, ao_concluir) -> None:
+    """
+    Executa funcao em thread de fundo e chama ao_concluir(resultado, erro) na UI.
+    Evita RuntimeError quando a janela e fechada antes do trabalho terminar.
+    """
+    import threading
+
+    def trabalho() -> None:
+        try:
+            resultado = funcao()
+            agendar_na_ui(janela, lambda r=resultado: ao_concluir(r, None))
+        except Exception as exc:
+            agendar_na_ui(janela, lambda e=exc: ao_concluir(None, str(e)))
+
+    threading.Thread(target=trabalho, daemon=True).start()

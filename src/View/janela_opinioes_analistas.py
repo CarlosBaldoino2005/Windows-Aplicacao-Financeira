@@ -1,12 +1,10 @@
 """Janela com opinioes e recomendacoes de analistas sobre a acao."""
 from __future__ import annotations
 
-import threading
-
 import customtkinter as ctk
 
 from src.Model.opinioes_analistas import OpinioesAnalistasPacote
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread
 from src.Tool.opinioes_analistas_helper import montar_opinioes_analistas
 from src.View.formatadores import formatar_moeda, formatar_texto_opcional
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
@@ -75,14 +73,11 @@ class JanelaOpinioesAnalistas(ctk.CTkToplevel):
             self._carregar_em_thread()
 
     def _carregar_em_thread(self) -> None:
-        def trabalho():
-            try:
-                pacote = montar_opinioes_analistas(self._simbolo, self._nome_empresa, self._moeda)
-                self.after(0, lambda: self._ao_carregar(pacote, None))
-            except Exception as exc:
-                self.after(0, lambda: self._ao_carregar(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(
+            self,
+            lambda: montar_opinioes_analistas(self._simbolo, self._nome_empresa, self._moeda),
+            self._ao_carregar,
+        )
 
     def _ao_carregar(self, pacote: OpinioesAnalistasPacote | None, erro: str | None) -> None:
         if erro:

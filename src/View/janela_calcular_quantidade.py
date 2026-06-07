@@ -1,11 +1,12 @@
 """Tela para calcular quantas acoes comprar com um valor em dinheiro."""
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
 from typing import Any
 
 import customtkinter as ctk
+
+from src.Tool.janela_helper import executar_em_thread
 
 from src.Tool.calcular_quantidade_helper import calcular_quantidade_por_valor
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
@@ -171,14 +172,7 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
         ).pack(side="right")
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho():
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _carregar_preco_atual(self) -> None:
         self._label_preco.configure(text="Buscando preco atual...")

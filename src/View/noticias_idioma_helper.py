@@ -11,6 +11,7 @@ from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.noticia_mercado import NoticiaMercado
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.imagem_noticia_helper import precarregar_imagens_noticias
+from src.Tool.janela_helper import agendar_na_ui, executar_em_thread
 from src.View.noticias_lista_helper import exibir_mensagem_lista, preencher_lista_noticias
 from src.View.tema import CORES
 
@@ -138,7 +139,7 @@ class ControladorExibicaoNoticiasIdioma:
 
             def thread_fotos() -> None:
                 trabalho_precarga()
-                self._janela.after(0, na_interface)
+                agendar_na_ui(self._janela, na_interface)
 
             threading.Thread(target=thread_fotos, daemon=True).start()
         else:
@@ -182,14 +183,7 @@ class ControladorExibicaoNoticiasIdioma:
                 text_color=CORES["sucesso"],
             )
 
-        def thread_trabalho() -> None:
-            try:
-                resultado = trabalho()
-                self._janela.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self._janela.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=thread_trabalho, daemon=True).start()
+        executar_em_thread(self._janela, trabalho, ao_concluir)
 
     def reexibir_apos_atualizar_lista(self) -> None:
         """Chamar apos carregar ou filtrar noticias, respeitando o modo atual."""

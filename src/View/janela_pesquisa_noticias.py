@@ -1,7 +1,6 @@
 """Janela para pesquisar noticias por acao, empresa ou assunto."""
 from __future__ import annotations
 
-import threading
 from tkinter import messagebox
 from typing import Any
 
@@ -9,7 +8,7 @@ import customtkinter as ctk
 
 from src.Model.noticia_mercado import NoticiaMercado
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.View.noticias_fotos_helper import criar_combo_fotos_noticias
 from src.View.noticias_provedor_helper import (
     criar_combo_provedor_noticias,
@@ -214,14 +213,7 @@ class JanelaPesquisaNoticias(ctk.CTkToplevel):
             self._executar_pesquisa()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho() -> None:
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _executar_pesquisa(self, termo_opcional: str | None = None) -> None:
         termo = (termo_opcional or self._entrada_busca.get()).strip()

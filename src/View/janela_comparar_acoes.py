@@ -1,13 +1,12 @@
 """Janela dedicada para comparar desempenho de ate 6 acoes."""
 from __future__ import annotations
 
-import threading
 from tkinter import messagebox
 
 import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.dividendos_helper import eh_pagadora_dividendos
 from src.Tool.fiis_helper import eh_fii
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
@@ -238,14 +237,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
             self._frame_datas.pack_forget()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho() -> None:
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _codigo_exibicao(self, simbolo: str) -> str:
         if self._modo_cripto:

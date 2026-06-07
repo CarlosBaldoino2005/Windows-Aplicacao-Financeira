@@ -1,14 +1,13 @@
 """Janela com informacoes fundamentais e financeiras da acao."""
 from __future__ import annotations
 
-import threading
 import webbrowser
 
 import customtkinter as ctk
 
 from typing import Any
 from src.Model.detalhes_acao import DetalhesAcao, LinhaDemonstrativo, PeriodoResultado
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.View.formatadores import (
     formatar_moeda,
     formatar_numero_grande,
@@ -251,14 +250,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                 frame.pack_forget()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho():
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _carregar_dados(self) -> None:
         def buscar():

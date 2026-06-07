@@ -2,7 +2,6 @@
 Interface desktop 100% Python (CustomTkinter + Matplotlib).
 Painel, graficos e comparacao de acoes.
 """
-import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -26,7 +25,11 @@ from src.View.tabela_mercado_helper import (
     reaplicar_fonte_em_tabelas,
 )
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_maximizada, obter_dispositivo_monitor_janela
+from src.Tool.janela_helper import (
+    configurar_janela_maximizada,
+    executar_em_thread,
+    obter_dispositivo_monitor_janela,
+)
 from src.Tool.validadores import validar_quantidade_acoes
 from src.View.tema import (
     CORES,
@@ -523,14 +526,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_painel_periodo = JanelaHubPainelPeriodo(self)
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho():
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _ler_quantidade_painel(self) -> tuple[int | None, str | None]:
         return validar_quantidade_acoes(self._entrada_quantidade_acoes.get())

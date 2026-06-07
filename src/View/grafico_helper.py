@@ -9,6 +9,7 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.lines import Line2D
 
+from src.Tool.janela_helper import agendar_na_ui
 from src.View.formatadores import formatar_moeda
 from src.View.grafico_zoom_helper import consumir_arraste_pan
 from src.View.tema import CORES
@@ -239,9 +240,9 @@ def _publicar_payload_com_cdi(
             copia_loading["acoes"][0]["cdi_carregando"] = True
         else:
             copia_loading["cdi_carregando"] = True
-        widget_raiz.after(0, lambda: ao_atualizar_comparacao(copia_loading))
+        agendar_na_ui(widget_raiz, lambda: ao_atualizar_comparacao(copia_loading))
         enriquecido = enriquecer_comparacao_com_cdi(deepcopy(payload))
-        widget_raiz.after(0, lambda p=enriquecido: ao_atualizar_comparacao(p))
+        agendar_na_ui(widget_raiz, lambda p=enriquecido: ao_atualizar_comparacao(p))
 
     threading.Thread(target=trabalho, daemon=True).start()
 

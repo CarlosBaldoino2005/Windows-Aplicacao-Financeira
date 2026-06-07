@@ -1,14 +1,13 @@
 """Tela que mostra a ultima desvalorizacao no periodo do grafico."""
 from __future__ import annotations
 
-import threading
 from typing import Any
 
 import customtkinter as ctk
 
 from src.Model.desvalorizacao import AnaliseDesvalorizacao, EventoDesvalorizacao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
-from src.Tool.janela_helper import configurar_janela_maximizada
+from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.View.formatadores import formatar_moeda, formatar_variacao
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
 from src.View.tema import CORES
@@ -153,14 +152,7 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
             self._frame_datas.pack_forget()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
-        def trabalho() -> None:
-            try:
-                resultado = funcao()
-                self.after(0, lambda: ao_concluir(resultado, None))
-            except Exception as exc:
-                self.after(0, lambda: ao_concluir(None, str(exc)))
-
-        threading.Thread(target=trabalho, daemon=True).start()
+        executar_em_thread(self, funcao, ao_concluir)
 
     def _buscar_desvalorizacao(self) -> None:
         self._label_status.configure(text="Buscando historico e analisando quedas...")
