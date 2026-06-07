@@ -6,9 +6,11 @@ import threading
 from collections.abc import Callable
 from copy import deepcopy
 
+import matplotlib.transforms as mtransforms
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 from matplotlib.ticker import FixedFormatter, FixedLocator, NullFormatter, NullLocator
 
 from src.Tool.janela_helper import agendar_na_ui
@@ -126,8 +128,13 @@ def _formatar_volume(volume: int | None) -> str:
     return f"{volume:,}".replace(",", ".")
 
 
+def _cor_guia_mouse_grafico() -> str:
+    return CORES.get("primariaHover", CORES["primaria"])
+
+
 def _criar_anotacao_tooltip(eixo):
-    """Cria caixa de tooltip com recorte desligado para nao cortar nas bordas."""
+    """Cria caixa de tooltip com borda tracejada e recorte desligado."""
+    cor = _cor_guia_mouse_grafico()
     return eixo.annotate(
         "",
         xy=(0, 0),
@@ -136,15 +143,131 @@ def _criar_anotacao_tooltip(eixo):
         bbox=dict(
             boxstyle="round,pad=0.5",
             fc=CORES.get("graficoTooltipFundo", CORES["infoFundo"]),
-            ec=CORES["primaria"],
+            ec=cor,
+            linestyle="--",
+            linewidth=1.2,
             alpha=0.98,
         ),
-        arrowprops=dict(arrowstyle="->", color=CORES["primaria"], lw=1),
+        arrowprops=dict(arrowstyle="-", color=cor, linestyle="--", lw=1),
         fontsize=9,
         color=CORES["texto"],
         annotation_clip=False,
         clip_on=False,
     )
+
+
+def _gesto_pan_ativo(canvas: FigureCanvasTkAgg) -> bool:
+    gesto = getattr(canvas, "_gesto_pan", None)
+    return bool(gesto and gesto.get("ativo"))
+
+
+def _criar_guia_mouse(eixo) -> dict:
+    """Linhas tracejadas, faixa vertical e marcador do ponto sob o mouse."""
+    cor = _cor_guia_mouse_grafico()
+    trans_vertical = mtransforms.blended_transform_factory(eixo.transData, eixo.transAxes)
+    trans_horizontal = mtransforms.blended_transform_factory(eixo.transAxes, eixo.transData)
+
+    retangulo = Rectangle(
+        (0, 0),
+        0.8,
+        1,
+        fill=True,
+        facecolor=cor,
+        edgecolor=cor,
+        linestyle="--",
+        linewidth=1.2,
+        alpha=0.14,
+        visible=False,
+        zorder=4,
+    )
+    linha_vertical = Line2D(
+        [0, 0],
+        [0, 1],
+        transform=trans_vertical,
+        color=cor,
+        linestyle="--",
+        linewidth=1.1,
+        alpha=0.9,
+        visible=False,
+        zorder=8,
+    )
+    linha_horizontal = Line2D(
+        [0, 1],
+        [0, 0],
+        transform=trans_horizontal,
+        color=cor,
+        linestyle="--",
+        linewidth=1.1,
+        alpha=0.9,
+        visible=False,
+        zorder=8,
+    )
+    marcador, = eixo.plot(
+        [],
+        [],
+        marker="o",
+        markersize=9,
+        markerfacecolor=cor,
+        markeredgecolor="#FFFFFF",
+        markeredgewidth=1.5,
+        linestyle="None",
+        visible=False,
+        zorder=9,
+    )
+    anotacao = _criar_anotacao_tooltip(eixo)
+    anotacao.set_visible(False)
+
+    eixo.add_patch(retangulo)
+    eixo.add_line(linha_vertical)
+    eixo.add_line(linha_horizontal)
+
+    return {
+        "retangulo": retangulo,
+        "linha_vertical": linha_vertical,
+        "linha_horizontal": linha_horizontal,
+        "marcador": marcador,
+        "anotacao": anotacao,
+    }
+
+
+def _esconder_guia_mouse(guia: dict, canvas: FigureCanvasTkAgg) -> None:
+    alterou = False
+    for chave in ("retangulo", "linha_vertical", "linha_horizontal", "marcador", "anotacao"):
+        artista = guia[chave]
+        if artista.get_visible():
+            artista.set_visible(False)
+            alterou = True
+    if alterou:
+        canvas.draw_idle()
+
+
+def _atualizar_guia_mouse(
+    guia: dict,
+    eixo,
+    canvas: FigureCanvasTkAgg,
+    x_ponto: float,
+    y_ponto: float,
+    texto: str,
+) -> None:
+    ylim = eixo.get_ylim()
+    guia["retangulo"].set_xy((x_ponto - 0.4, ylim[0]))
+    guia["retangulo"].set_height(ylim[1] - ylim[0])
+    guia["retangulo"].set_visible(True)
+
+    guia["linha_vertical"].set_data([x_ponto, x_ponto], [0, 1])
+    guia["linha_vertical"].set_visible(True)
+    guia["linha_horizontal"].set_data([0, 1], [y_ponto, y_ponto])
+    guia["linha_horizontal"].set_visible(True)
+
+    guia["marcador"].set_data([x_ponto], [y_ponto])
+    guia["marcador"].set_visible(True)
+
+    anotacao = guia["anotacao"]
+    anotacao.xy = (x_ponto, y_ponto)
+    anotacao.set_text(texto)
+    _posicionar_tooltip(anotacao, eixo, x_ponto, y_ponto)
+    anotacao.set_visible(True)
+    canvas.draw_idle()
 
 
 def _posicionar_tooltip(anotacao, eixo, x: float, y: float) -> None:
@@ -493,10 +616,11 @@ def configurar_tooltip_acao(
 ) -> None:
     def texto_tooltip(indice: int) -> str:
         p = pontos[indice]
+        data = _formatar_rotulo_data_eixo(p["data"])
+        valor = formatar_moeda(p["fechamento"], moeda)
         linhas = [
-            simbolo.replace(".SA", ""),
-            f"Data: {p['data']}",
-            f"Fechamento: {formatar_moeda(p['fechamento'], moeda)}",
+            f"Data: {data}",
+            f"Valor: {valor}",
         ]
         if p.get("abertura") is not None:
             linhas.append(f"Abertura: {formatar_moeda(p['abertura'], moeda)}")
@@ -514,27 +638,29 @@ def configurar_tooltip_comparacao(
     series: dict[str, list[dict]],
     simbolos: list[str],
 ) -> None:
-    anotacao = _criar_anotacao_tooltip(eixo)
-    anotacao.set_visible(False)
+    guia = _criar_guia_mouse(eixo)
 
     def texto_tooltip(indice_linha: int, indice_ponto: int) -> str:
         simbolo = simbolos[indice_linha]
         p = series[simbolo][indice_ponto]
         moeda = "BRL" if simbolo.endswith(".SA") else "USD"
+        data = _formatar_rotulo_data_eixo(p["data"])
+        valor = formatar_moeda(p["preco"], moeda)
         return "\n".join(
             [
                 simbolo.replace(".SA", ""),
-                f"Data: {p['data']}",
-                f"Preco: {formatar_moeda(p['preco'], moeda)}",
+                f"Data: {data}",
+                f"Valor: {valor}",
                 f"Indice relativo: {p['indice_relativo']:.2f}",
             ]
         )
 
     def ao_mover(evento):
+        if _gesto_pan_ativo(canvas):
+            _esconder_guia_mouse(guia, canvas)
+            return
         if evento.inaxes != eixo or evento.xdata is None or evento.ydata is None:
-            if anotacao.get_visible():
-                anotacao.set_visible(False)
-                canvas.draw_idle()
+            _esconder_guia_mouse(guia, canvas)
             return
 
         melhor_dist = float("inf")
@@ -558,29 +684,34 @@ def configurar_tooltip_comparacao(
 
         limiar = max((eixo.get_xlim()[1] - eixo.get_xlim()[0]) * 0.08, 0.5)
         if melhor_linha is None or melhor_dist > limiar:
-            if anotacao.get_visible():
-                anotacao.set_visible(False)
-                canvas.draw_idle()
+            _esconder_guia_mouse(guia, canvas)
             return
 
-        anotacao.xy = melhor_xy
-        anotacao.set_text(texto_tooltip(melhor_linha, melhor_indice))
-        _posicionar_tooltip(anotacao, eixo, melhor_xy[0], melhor_xy[1])
-        anotacao.set_visible(True)
-        canvas.draw_idle()
+        _atualizar_guia_mouse(
+            guia,
+            eixo,
+            canvas,
+            float(melhor_xy[0]),
+            float(melhor_xy[1]),
+            texto_tooltip(melhor_linha, melhor_indice),
+        )
+
+    def ao_sair(_evento) -> None:
+        _esconder_guia_mouse(guia, canvas)
 
     canvas.mpl_connect("motion_notify_event", ao_mover)
+    canvas.mpl_connect("axes_leave_event", ao_sair)
 
 
 def _configurar_tooltip(eixo, canvas, linha, texto_fn) -> None:
-    anotacao = _criar_anotacao_tooltip(eixo)
-    anotacao.set_visible(False)
+    guia = _criar_guia_mouse(eixo)
 
     def ao_mover(evento):
+        if _gesto_pan_ativo(canvas):
+            _esconder_guia_mouse(guia, canvas)
+            return
         if evento.inaxes != eixo or evento.xdata is None:
-            if anotacao.get_visible():
-                anotacao.set_visible(False)
-                canvas.draw_idle()
+            _esconder_guia_mouse(guia, canvas)
             return
 
         xs = np.array(linha.get_xdata(), dtype=float)
@@ -591,17 +722,15 @@ def _configurar_tooltip(eixo, canvas, linha, texto_fn) -> None:
         indice = int(np.argmin(np.abs(xs - evento.xdata)))
         limiar = max((eixo.get_xlim()[1] - eixo.get_xlim()[0]) * 0.05, 0.3)
         if abs(xs[indice] - evento.xdata) > limiar:
-            if anotacao.get_visible():
-                anotacao.set_visible(False)
-                canvas.draw_idle()
+            _esconder_guia_mouse(guia, canvas)
             return
 
         x_ponto = float(xs[indice])
         y_ponto = float(ys[indice])
-        anotacao.xy = (x_ponto, y_ponto)
-        anotacao.set_text(texto_fn(indice))
-        _posicionar_tooltip(anotacao, eixo, x_ponto, y_ponto)
-        anotacao.set_visible(True)
-        canvas.draw_idle()
+        _atualizar_guia_mouse(guia, eixo, canvas, x_ponto, y_ponto, texto_fn(indice))
+
+    def ao_sair(_evento) -> None:
+        _esconder_guia_mouse(guia, canvas)
 
     canvas.mpl_connect("motion_notify_event", ao_mover)
+    canvas.mpl_connect("axes_leave_event", ao_sair)
