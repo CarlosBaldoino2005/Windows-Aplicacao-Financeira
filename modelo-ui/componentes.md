@@ -31,8 +31,11 @@ Valores referem-se a `design-tokens.json`.
 
 - Cabecalho neutro (sem zebra).
 - Linhas zebradas: `zebraClara` / `zebraEscura`.
-- Linha selecionada: fundo `selecao`, texto `selecaoTexto`.
-- Hover de linha: leve destaque antes da selecao.
+- Linha selecionada e **hover**: mesmo fundo `selecao`, texto `selecaoTexto`.
+- **Clique simples:** alterna selecao da linha; multi-selecao quando aplicavel.
+- **Duplo clique:** acao na linha sob o cursor (`identify_row`), nunca na selecao desatualizada.
+- Detalhes e helper Python: `grid-interacao-treeview.md` e `templates/grid_interacao_treeview_helper.py`.
+- Ordenacao por coluna: regra `padrao-grid-ordenacao-python`.
 
 ## Mensagens (toast / alert)
 

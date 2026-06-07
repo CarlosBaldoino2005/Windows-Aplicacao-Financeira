@@ -13,7 +13,12 @@ from src.Tool.janela_helper import (
 )
 
 from src.Tool.calcular_quantidade_helper import calcular_quantidade_por_valor
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
+from src.Tool.simulacao_valor_ini_helper import (
+    configurar_entrada_valor_calcular_quantidade,
+    persistir_valor_calcular_quantidade_da_entrada,
+)
 from src.Tool.validadores import validar_valor_monetario_ptbr
 from src.View.formatadores import formatar_moeda
 from src.View.tema import CORES
@@ -51,6 +56,7 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
         self._preco_atual: float | None = None
         self._moeda = "BRL" if simbolo.endswith(".SA") else "USD"
         self._quantidade_calculada: int | None = None
+        self._config_ini = ConfigPainelIni()
 
         codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Calcular quantidade — {codigo}")
@@ -65,6 +71,7 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
         self.after(100, self._carregar_preco_atual)
 
     def _ao_fechar(self) -> None:
+        persistir_valor_calcular_quantidade_da_entrada(self._entrada_valor, self._config_ini)
         liberar_modal_janela_filha(self)
         self.destroy()
 
@@ -117,6 +124,11 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
         )
         self._entrada_valor.pack(anchor="w", padx=16, pady=(0, 12))
         aplicar_mascara_moeda_ptbr(self._entrada_valor, prefixo=prefixo_moeda)
+        configurar_entrada_valor_calcular_quantidade(
+            self._entrada_valor,
+            self._config_ini,
+            prefixo=prefixo_moeda,
+        )
         self._entrada_valor.bind("<Return>", lambda _e: self._calcular())
 
         ctk.CTkButton(
@@ -222,6 +234,8 @@ class JanelaCalcularQuantidade(ctk.CTkToplevel):
             self._label_resultado.configure(text="", text_color=CORES["texto"])
             self._label_status.configure(text=erro_valor, text_color=CORES["erro"])
             return
+
+        persistir_valor_calcular_quantidade_da_entrada(self._entrada_valor, self._config_ini)
 
         resultado = calcular_quantidade_por_valor(valor, self._preco_atual)
         self._quantidade_calculada = resultado.quantidade

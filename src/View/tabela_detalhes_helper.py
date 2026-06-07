@@ -147,17 +147,29 @@ def _configurar_hover_linha(
     cores_base: list[str],
 ) -> None:
     """Destaque azul na linha inteira ao passar o mouse (padrao global de grid)."""
+    contador = {"valor": 0}
 
-    def ao_entrar(_evento=None) -> None:
+    def aplicar_hover() -> None:
         linha.configure(fg_color=CORES["selecao"])
         for rotulo in rotulos:
             rotulo.configure(text_color=CORES["selecaoTexto"])
 
-    def ao_sair(_evento=None) -> None:
+    def remover_hover() -> None:
         linha.configure(fg_color=fundo_base)
         for rotulo, cor in zip(rotulos, cores_base, strict=True):
             rotulo.configure(text_color=cor)
 
+    def ao_entrar(_evento=None) -> None:
+        contador["valor"] += 1
+        if contador["valor"] == 1:
+            aplicar_hover()
+
+    def ao_sair(_evento=None) -> None:
+        contador["valor"] -= 1
+        if contador["valor"] <= 0:
+            contador["valor"] = 0
+            remover_hover()
+
     for widget in (linha, *rotulos):
-        widget.bind("<Enter>", ao_entrar)
-        widget.bind("<Leave>", ao_sair)
+        widget.bind("<Enter>", ao_entrar, add="+")
+        widget.bind("<Leave>", ao_sair, add="+")

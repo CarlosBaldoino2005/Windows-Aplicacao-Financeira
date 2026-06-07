@@ -12,6 +12,15 @@ from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.View.formatadores import formatar_moeda, formatar_variacao
 from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE
+from src.View.grid_interacao_treeview_helper import (
+    aplicar_destaque_estilo_treeview,
+    aplicar_destaque_tags_treeview,
+    configurar_interacao_treeview,
+    limpar_hover_treeview,
+    obter_simbolo_duplo_clique_treeview,
+    sincronizar_tags_selecao_treeview,
+    treeview_ainda_ativa,
+)
 from src.View.tema import CORES
 
 _COLUNAS_PADRAO = ("simbolo", "nome", "preco", "variacao")
@@ -36,9 +45,17 @@ def definir_rotulo_coluna_variacao(tabela: ttk.Treeview, rotulo: str) -> None:
     _atualizar_cabecalhos_ordenacao(tabela)
 
 
+def definir_rotulo_coluna_simbolo(tabela: ttk.Treeview, rotulo: str) -> None:
+    """Altera o cabecalho da coluna de ticker (ex.: FII em fundos imobiliarios)."""
+    tabela._rotulo_simbolo = rotulo  # type: ignore[attr-defined]
+    _atualizar_cabecalhos_ordenacao(tabela)
+
+
 def _rotulo_base_coluna(tabela: ttk.Treeview, coluna: str) -> str:
     if coluna == "variacao":
         return getattr(tabela, "_rotulo_variacao", _ROTULOS_COLUNA_BASE["variacao"])
+    if coluna == "simbolo":
+        return getattr(tabela, "_rotulo_simbolo", _ROTULOS_COLUNA_BASE["simbolo"])
     return _ROTULOS_COLUNA_BASE[coluna]
 
 
@@ -139,8 +156,7 @@ def criar_card_tabela(
 
     tabela.pack(fill="both", expand=expandir)
     aplicar_estilo_tabela(tabela, opcoes)
-    if ao_duplo_clique:
-        tabela.bind("<Double-1>", ao_duplo_clique)
+    configurar_interacao_treeview(tabela, ao_duplo_clique=ao_duplo_clique)
 
     label_vazio = ctk.CTkLabel(
         card,
@@ -164,6 +180,8 @@ def aplicar_estilo_tabela(
     opcoes_fonte: OpcoesFonteGrid | None = None,
 ) -> None:
     """Atualiza cores e fonte da grid (chamar apos trocar tema ou tamanho no INI)."""
+    if not treeview_ainda_ativa(tabela):
+        return
     opcoes = _resolver_opcoes(opcoes_fonte)
     estilo = ttk.Style()
     estilo.theme_use("clam")
@@ -181,9 +199,10 @@ def aplicar_estilo_tabela(
         foreground=CORES["texto"],
         font=(_FONTE_FAMILIA, opcoes.fonte_cabecalho_tree, "bold"),
     )
+    aplicar_destaque_estilo_treeview(estilo)
     tabela.tag_configure("par", background=CORES["zebraClara"])
     tabela.tag_configure("impar", background=CORES["zebraEscura"])
-    tabela.tag_configure("selecionado", background=CORES["selecao"], foreground=CORES["selecaoTexto"])
+    aplicar_destaque_tags_treeview(tabela)
 
     larguras = opcoes.larguras_colunas
     for coluna, largura in zip(_COLUNAS_PADRAO, larguras, strict=True):
@@ -202,7 +221,7 @@ def reaplicar_fonte_em_tabelas(tabelas: Iterable[ttk.Treeview]) -> None:
     """Reaplica fonte/colunas apos mudar pequeno/medio/grande no INI."""
     opcoes = _resolver_opcoes(None)
     for tabela in tabelas:
-        if tabela is not None:
+        if treeview_ainda_ativa(tabela):
             aplicar_estilo_tabela(tabela, opcoes)
 
 
@@ -212,6 +231,19 @@ def preencher_tabela(
     mensagem_vazio: str | None = None,
 ) -> None:
     """Preenche linhas com cotacao formatada em pt-BR."""
+    if not treeview_ainda_ativa(tabela):
+        return
+    try:
+        _preencher_tabela_interno(tabela, itens, mensagem_vazio)
+    except tk.TclError:
+        pass
+
+
+def _preencher_tabela_interno(
+    tabela: ttk.Treeview,
+    itens: list[CotacaoResumo],
+    mensagem_vazio: str | None = None,
+) -> None:
     _configurar_ordenacao_colunas(tabela)
     label_vazio = getattr(tabela, "_label_vazio", None)
     card_pai = getattr(tabela, "_card_pai", None)
@@ -221,6 +253,10 @@ def preencher_tabela(
     coluna_ord = getattr(tabela, "_coluna_ordenacao", None)
     descendente = getattr(tabela, "_ordenacao_desc", False)
     itens_exibir = _ordenar_cotacoes(itens, coluna_ord, descendente)
+
+    selecionados_antes = set(tabela.selection())
+    limpar_hover_treeview(tabela)
+    tabela._tags_zebra = {}  # type: ignore[attr-defined]
 
     for linha in tabela.get_children():
         tabela.delete(linha)
@@ -232,6 +268,7 @@ def preencher_tabela(
             label_vazio.pack(fill="x", padx=12, pady=(0, 12))
         if card_pai is not None:
             card_pai.configure(fg_color=CORES["superficie"])
+        tabela.selection_set()
         _atualizar_cabecalhos_ordenacao(tabela)
         return
 
@@ -242,6 +279,7 @@ def preencher_tabela(
 
     for i, item in enumerate(itens_exibir):
         tag = "par" if i % 2 == 0 else "impar"
+        tabela._tags_zebra[item.simbolo] = tag  # type: ignore[attr-defined]
         tabela.insert(
             "",
             "end",
@@ -255,4 +293,12 @@ def preencher_tabela(
             tags=(tag,),
         )
 
+    iids_visiveis = {item.simbolo for item in itens_exibir}
+    selecionados_depois = tuple(selecionados_antes & iids_visiveis)
+    if selecionados_depois:
+        tabela.selection_set(selecionados_depois)
+    else:
+        tabela.selection_set()
+
+    sincronizar_tags_selecao_treeview(tabela)
     _atualizar_cabecalhos_ordenacao(tabela)

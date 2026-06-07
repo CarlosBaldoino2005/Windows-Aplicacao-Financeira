@@ -2,14 +2,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from tkinter import messagebox
+import tkinter as tk
+from tkinter import messagebox, ttk
+from typing import Literal
 
 import customtkinter as ctk
-from tkinter import ttk
 
 from src.Controller.controlador_mercado import ControladorMercado
+from src.Service.favoritos_fiis_servico import FavoritosFiisServico
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
+from src.Tool.janela_helper import (
+    executar_em_thread,
+    configurar_janela_maximizada,
+    janela_ui_ainda_ativa,
+)
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.placeholders_ui import (
     PLACEHOLDER_BUSCA_ACAO,
@@ -21,10 +27,42 @@ from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
+    definir_rotulo_coluna_simbolo,
+    obter_simbolo_duplo_clique_treeview,
     preencher_tabela,
     reaplicar_fonte_em_tabelas,
+    treeview_ainda_ativa,
 )
 from src.View.tema import CORES
+
+TipoPainelFavoritos = Literal["acoes", "cripto", "fiis", "dividendos"]
+
+_TITULOS_PAINEL: dict[TipoPainelFavoritos, str] = {
+    "acoes": "Acoes favoritas",
+    "cripto": "Criptos favoritas",
+    "fiis": "FIIs favoritos",
+    "dividendos": "Empresas favoritas (dividendos)",
+}
+
+_DESCRICOES_PAINEL: dict[TipoPainelFavoritos, str] = {
+    "acoes": "Adicione acoes que deseja acompanhar. A lista fica salva neste computador.",
+    "cripto": "Adicione criptomoedas que deseja acompanhar. A lista fica salva neste computador.",
+    "fiis": (
+        "Adicione fundos imobiliarios (FIIs) que deseja acompanhar. "
+        "A lista fica salva em dados/favoritos_fiis.json neste computador."
+    ),
+    "dividendos": (
+        "Adicione empresas pagadoras de dividendos que deseja acompanhar. "
+        "FIIs ficam no painel Fundos imobiliarios (lista separada)."
+    ),
+}
+
+_TITULOS_GRID: dict[TipoPainelFavoritos, str] = {
+    "acoes": "Suas acoes favoritas (duplo clique abre o grafico)",
+    "cripto": "Suas criptos favoritas (duplo clique abre o grafico)",
+    "fiis": "Seus FIIs favoritos (duplo clique abre o grafico)",
+    "dividendos": "Suas empresas favoritas (duplo clique abre o grafico)",
+}
 
 
 class JanelaFavoritas(ctk.CTkToplevel):
@@ -35,15 +73,25 @@ class JanelaFavoritas(ctk.CTkToplevel):
         pai: ctk.CTk,
         controlador: ControladorMercado,
         modo_cripto: bool = False,
+        tipo_painel: TipoPainelFavoritos | None = None,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
-        self._modo_cripto = modo_cripto
+        if tipo_painel is not None:
+            self._tipo_painel = tipo_painel
+        elif modo_cripto:
+            self._tipo_painel = "cripto"
+        else:
+            self._tipo_painel = "acoes"
+        self._modo_cripto = self._tipo_painel == "cripto"
         self._config_painel = ConfigPainelIni()
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._tabela: ttk.Treeview | None = None
+        self._ids_atualizacao_grid: list[str] = []
+        self._grid_buscando = False
+        self._grid_versao = 0
 
-        self.title("Criptos favoritas" if modo_cripto else "Acoes favoritas")
+        self.title(_TITULOS_PAINEL[self._tipo_painel])
         self.configure(fg_color=CORES["fundo"])
         self.minsize(820, 560)
 
@@ -51,15 +99,33 @@ class JanelaFavoritas(ctk.CTkToplevel):
         configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
-        self.after(250, self._atualizar_grid)
+        self._agendar_atualizacao_grid(250)
+
+    def _agendar_atualizacao_grid(self, atraso_ms: int = 250) -> None:
+        if not janela_ui_ainda_ativa(self):
+            return
+        job_id = self.after(atraso_ms, lambda: self._atualizar_grid(forcar=False))
+        self._ids_atualizacao_grid.append(job_id)
+
+    def _cancelar_atualizacoes_grid_pendentes(self) -> None:
+        for job_id in self._ids_atualizacao_grid:
+            try:
+                self.after_cancel(job_id)
+            except (tk.TclError, ValueError):
+                pass
+        self._ids_atualizacao_grid.clear()
 
     def _ao_fechar(self) -> None:
+        self._grid_versao += 1
+        self._grid_buscando = False
+        self._cancelar_atualizacoes_grid_pendentes()
         if self._janela_grafico is not None:
             try:
                 if self._janela_grafico.winfo_exists():
                     self._janela_grafico._ao_fechar()
             except Exception:
                 pass
+        self._tabela = None
         self.destroy()
 
     def _montar_interface(self) -> None:
@@ -68,20 +134,18 @@ class JanelaFavoritas(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             cabecalho,
-            text="Criptos favoritas" if self._modo_cripto else "Acoes favoritas",
+            text=_TITULOS_PAINEL[self._tipo_painel],
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(12, 4))
 
         ctk.CTkLabel(
             cabecalho,
-            text=(
-                "Adicione criptomoedas que deseja acompanhar. A lista fica salva neste computador."
-                if self._modo_cripto
-                else "Adicione acoes que deseja acompanhar. A lista fica salva neste computador."
-            ),
+            text=_DESCRICOES_PAINEL[self._tipo_painel],
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
+            wraplength=860,
+            justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
         linha_add = ctk.CTkFrame(cabecalho, fg_color="transparent")
@@ -140,8 +204,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
 
         ctk.CTkButton(
             barra,
-            text="Remover selecionada",
-            command=self._remover_selecionada,
+            text="Remover selecionadas",
+            command=self._remover_selecionadas,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             width=150,
@@ -150,7 +214,7 @@ class JanelaFavoritas(ctk.CTkToplevel):
         ctk.CTkButton(
             barra,
             text="Atualizar cotacoes",
-            command=self._atualizar_grid,
+            command=lambda: self._atualizar_grid(forcar=True),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
         ).pack(side="right")
@@ -162,15 +226,13 @@ class JanelaFavoritas(ctk.CTkToplevel):
 
         self._tabela = criar_card_tabela(
             container,
-            (
-                "Suas criptos favoritas (duplo clique abre o grafico)"
-                if self._modo_cripto
-                else "Suas acoes favoritas (duplo clique abre o grafico)"
-            ),
+            _TITULOS_GRID[self._tipo_painel],
             altura=14,
             ao_duplo_clique=self._ao_duplo_clique,
             expandir=True,
         )
+        if self._tipo_painel == "fiis":
+            definir_rotulo_coluna_simbolo(self._tabela, "FII")
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
         rodape.pack(fill="x", padx=16, pady=(0, 12))
@@ -302,58 +364,105 @@ class JanelaFavoritas(ctk.CTkToplevel):
         )
         self._atualizar_grid()
 
-    def _remover_selecionada(self) -> None:
+    def _remover_selecionadas(self) -> None:
         if not self._tabela:
             return
         selecao = self._tabela.selection()
         if not selecao:
             aviso = (
-                "Selecione uma criptomoeda na lista."
+                "Selecione uma ou mais criptomoedas na lista."
                 if self._modo_cripto
-                else "Selecione uma acao na lista."
+                else "Selecione uma ou mais acoes na lista."
             )
             messagebox.showinfo("Remover", aviso, parent=self)
             return
 
-        simbolo = selecao[0]
-        ok, msg = self._controlador.remover_favorito(simbolo)
-        if not ok:
-            messagebox.showwarning("Favoritos", msg or "Nao foi possivel remover.", parent=self)
+        removidas: list[str] = []
+        erros: list[str] = []
+        for simbolo in selecao:
+            ok, msg = self._controlador.remover_favorito(simbolo)
+            if ok:
+                removidas.append(self._codigo_exibicao(simbolo))
+            elif msg:
+                erros.append(msg)
+
+        if erros and not removidas:
+            messagebox.showwarning("Favoritos", erros[0], parent=self)
             return
 
-        self._label_status.configure(
-            text=f"{self._codigo_exibicao(simbolo)} removida dos favoritos.",
-            text_color=CORES["sucesso"],
-        )
+        if removidas:
+            if len(removidas) == 1:
+                texto = f"{removidas[0]} removida dos favoritos."
+            else:
+                texto = f"{len(removidas)} favoritas removidas."
+            self._label_status.configure(text=texto, text_color=CORES["sucesso"])
+
+        if erros:
+            messagebox.showwarning(
+                "Favoritos",
+                "Algumas nao puderam ser removidas:\n" + "\n".join(erros[:3]),
+                parent=self,
+            )
+
         self._atualizar_grid()
 
     def _ao_mudar_fonte_grid(self) -> None:
         if self._tabela is not None:
             reaplicar_fonte_em_tabelas([self._tabela])
 
-    def _atualizar_grid(self) -> None:
-        if not self._tabela:
+    def _mensagem_lista_vazia(self) -> str:
+        if self._tipo_painel == "cripto":
+            return "Nenhuma cripto favorita. Use Buscar ou Adicionar acima."
+        if self._tipo_painel == "fiis":
+            return "Nenhum FII favorito. Use Buscar ou Adicionar acima."
+        if self._tipo_painel == "dividendos":
+            qtd_fiis = len(FavoritosFiisServico().listar())
+            if qtd_fiis > 0:
+                return (
+                    "Nenhuma empresa favorita neste painel. "
+                    f"Voce tem {qtd_fiis} FII(s) favorito(s) no painel "
+                    "Fundos imobiliarios — abra Favoritos por la."
+                )
+            return "Nenhuma empresa favorita. Use Buscar ou Adicionar acima."
+        return "Nenhuma acao favorita. Use Buscar ou Adicionar acima."
+
+    def _atualizar_grid(self, forcar: bool = False) -> None:
+        if not janela_ui_ainda_ativa(self) or not treeview_ainda_ativa(self._tabela):
             return
+
+        if self._grid_buscando and not forcar:
+            return
+
+        self._grid_versao += 1
+        versao = self._grid_versao
 
         simbolos = self._controlador.listar_simbolos_favoritos()
         if not simbolos:
+            self._grid_buscando = False
             preencher_tabela(self._tabela, [])
-            self._label_status.configure(
-                text=(
-                    "Nenhuma cripto favorita. Use Buscar ou Adicionar acima."
-                    if self._modo_cripto
-                    else "Nenhuma acao favorita. Use Buscar ou Adicionar acima."
-                ),
-                text_color=CORES["textoSecundario"],
-            )
+            if janela_ui_ainda_ativa(self):
+                self._label_status.configure(
+                    text=self._mensagem_lista_vazia(),
+                    text_color=CORES["textoSecundario"],
+                )
             return
 
-        self._label_status.configure(text="Atualizando cotacoes...")
+        self._grid_buscando = True
+        if janela_ui_ainda_ativa(self):
+            self._label_status.configure(
+                text="Atualizando cotacoes...",
+                text_color=CORES["textoSecundario"],
+            )
 
         def buscar():
             return self._controlador.obter_cotacoes_favoritas()
 
         def ao_concluir(resultado, erro):
+            if versao != self._grid_versao:
+                return
+            self._grid_buscando = False
+            if not janela_ui_ainda_ativa(self) or not treeview_ainda_ativa(self._tabela):
+                return
             if erro:
                 self._label_status.configure(text=erro, text_color=CORES["erro"])
                 return
@@ -362,6 +471,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
                 self._label_status.configure(text=msg_erro, text_color=CORES["erro"])
                 return
             preencher_tabela(self._tabela, cotacoes)
+            if self._tipo_painel == "fiis":
+                definir_rotulo_coluna_simbolo(self._tabela, "FII")
             hora = datetime.now().strftime("%H:%M:%S")
             self._label_status.configure(
                 text=f"{len(cotacoes)} favorita(s) — atualizado as {hora}",
@@ -371,11 +482,10 @@ class JanelaFavoritas(ctk.CTkToplevel):
         self._executar_em_thread(buscar, ao_concluir)
 
     def _ao_duplo_clique(self, evento) -> None:
-        widget = evento.widget
-        selecao = widget.selection()
-        if not selecao:
+        simbolo = obter_simbolo_duplo_clique_treeview(evento.widget, evento)
+        if not simbolo:
             return
-        self._abrir_grafico(selecao[0])
+        self._abrir_grafico(simbolo)
 
     def _abrir_grafico(self, simbolo: str) -> None:
         if self._janela_grafico is not None:

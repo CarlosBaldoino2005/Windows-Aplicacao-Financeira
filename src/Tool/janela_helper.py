@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -783,8 +784,19 @@ def agendar_na_ui(janela, callback) -> None:
     """Agenda callback na thread principal, ignorando se a janela ja foi fechada."""
     if not janela_ui_ainda_ativa(janela):
         return
+
+    def executar_com_seguranca() -> None:
+        if not janela_ui_ainda_ativa(janela):
+            return
+        try:
+            callback()
+        except tk.TclError:
+            pass
+        except RuntimeError:
+            pass
+
     try:
-        janela.after(0, callback)
+        janela.after(0, executar_com_seguranca)
     except RuntimeError:
         pass
     except Exception:

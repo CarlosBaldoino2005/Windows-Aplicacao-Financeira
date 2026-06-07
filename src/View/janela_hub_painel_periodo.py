@@ -21,6 +21,7 @@ from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     definir_rotulo_coluna_variacao,
+    obter_simbolo_duplo_clique_treeview,
     preencher_tabela as preencher_tabela_mercado,
     reaplicar_fonte_em_tabelas,
 )
@@ -316,10 +317,10 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         return False
 
     def _ao_duplo_clique(self, evento) -> None:
-        selecao = evento.widget.selection()
-        if not selecao:
+        simbolo = obter_simbolo_duplo_clique_treeview(evento.widget, evento)
+        if not simbolo:
             return
-        self._abrir_grafico(selecao[0])
+        self._abrir_grafico(simbolo)
 
     def _abrir_grafico(self, simbolo: str) -> None:
         if self._janela_grafico is not None:

@@ -69,3 +69,59 @@ def configurar_entrada_valor_simulacao(
     """Preenche com valor do INI e passa a gravar alteracoes automaticamente."""
     preencher_entrada_valor_simulacao(entry, config, prefixo)
     vincular_persistencia_valor_simulacao(entry, config)
+
+
+def preencher_entrada_valor_calcular_quantidade(
+    entry: ctk.CTkEntry,
+    config: ConfigPainelIni,
+    prefixo: str = "R$ ",
+) -> None:
+    """Preenche o valor disponivel salvo no INI (padrao R$ 10.000,00)."""
+    valor = config.carregar_valor_disponivel_calcular_quantidade()
+    entry.delete(0, "end")
+    entry.insert(0, texto_valor_simulacao_ptbr(valor, prefixo))
+
+
+def persistir_valor_calcular_quantidade_da_entrada(
+    entry: ctk.CTkEntry,
+    config: ConfigPainelIni,
+) -> bool:
+    """Grava no INI o valor disponivel se o campo for valido."""
+    valor, erro = validar_valor_monetario_ptbr(entry.get())
+    if erro or valor is None:
+        return False
+    try:
+        config.salvar_valor_disponivel_calcular_quantidade(valor)
+    except OSError:
+        return False
+    return True
+
+
+def vincular_persistencia_valor_calcular_quantidade(
+    entry: ctk.CTkEntry,
+    config: ConfigPainelIni,
+) -> None:
+    """Salva no INI quando o usuario altera o valor disponivel."""
+    timer_id: list[str | None] = [None]
+
+    def persistir(_evento=None) -> None:
+        persistir_valor_calcular_quantidade_da_entrada(entry, config)
+
+    def ao_soltar_tecla(_evento=None) -> None:
+        if timer_id[0] is not None:
+            entry.after_cancel(timer_id[0])
+        timer_id[0] = entry.after(600, persistir)
+
+    entry.bind("<FocusOut>", persistir, add="+")
+    entry.bind("<Return>", persistir, add="+")
+    entry.bind("<KeyRelease>", ao_soltar_tecla, add="+")
+
+
+def configurar_entrada_valor_calcular_quantidade(
+    entry: ctk.CTkEntry,
+    config: ConfigPainelIni,
+    prefixo: str = "R$ ",
+) -> None:
+    """Preenche valor disponivel do INI e grava alteracoes automaticamente."""
+    preencher_entrada_valor_calcular_quantidade(entry, config, prefixo)
+    vincular_persistencia_valor_calcular_quantidade(entry, config)

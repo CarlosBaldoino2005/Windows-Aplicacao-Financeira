@@ -23,6 +23,7 @@ from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
 from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
+    obter_simbolo_duplo_clique_treeview,
     preencher_tabela as preencher_tabela_mercado,
     reaplicar_fonte_em_tabelas,
 )
@@ -362,11 +363,10 @@ class InterfaceApp(ctk.CTk):
         reaplicar_fonte_em_tabelas(t for t in tabelas if t is not None)
 
     def _ao_duplo_clique_tabela(self, evento) -> None:
-        widget = evento.widget
-        selecao = widget.selection()
-        if not selecao:
+        simbolo = obter_simbolo_duplo_clique_treeview(evento.widget, evento)
+        if not simbolo:
             return
-        self._abrir_grafico_por_simbolo(selecao[0])
+        self._abrir_grafico_por_simbolo(simbolo)
 
     def _abrir_grafico_por_simbolo(self, simbolo: str) -> None:
         """Abre janela dedicada com grafico da acao (duplo clique no painel)."""

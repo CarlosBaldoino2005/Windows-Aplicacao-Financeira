@@ -129,6 +129,15 @@ def calcular_comparacao_acao_unica(
             moeda,
         )
         acao.update(resumo_div)
+        total_div_por_acao = float(acao.get("total_dividendos_periodo") or 0)
+        total_div_carteira = round(total_div_por_acao * qtd, 2)
+        acao["total_dividendos_carteira"] = total_div_carteira
+        acao["resultado_com_dividendos"] = round(resultado_total + total_div_carteira, 2)
+        acao["lucro_com_dividendos"] = acao["resultado_com_dividendos"] >= 0
+    else:
+        acao["total_dividendos_carteira"] = 0.0
+        acao["resultado_com_dividendos"] = resultado_total
+        acao["lucro_com_dividendos"] = resultado_total >= 0
 
     payload = {
         "tipo": "completo",
@@ -391,7 +400,7 @@ class PainelComparacaoPeriodo:
                     "Valor no final",
                     formatar_moeda(float(acao["valor_fim_total"]), moeda),
                 )
-            if acao.get("resultado_total") is not None:
+            if acao.get("resultado_total") is not None and acao.get("resultado_com_dividendos") is None:
                 res = float(acao["resultado_total"])
                 lucro = acao.get("lucro", res >= 0)
                 rotulo_res = "Lucro" if lucro else "Prejuizo"
@@ -405,6 +414,9 @@ class PainelComparacaoPeriodo:
             PainelComparacaoPeriodo._exibir_bloco_cdi(card, acao, moeda)
 
         PainelComparacaoPeriodo._exibir_bloco_dividendos(card, acao, moeda)
+
+        if acao.get("quantidade_cotas") and acao.get("resultado_total") is not None:
+            PainelComparacaoPeriodo._exibir_resumo_total_periodo(card, acao, moeda)
 
         if acao.get("preco_inicio") is not None and acao.get("preco_fim") is not None:
             rotulo_preco = "Preco por acao" if acao.get("quantidade_cotas") else "Preco fechamento"
@@ -454,31 +466,46 @@ class PainelComparacaoPeriodo:
         ).pack(anchor="w", padx=10, pady=(8, 4))
 
         if acao.get("houve_dividendo_no_periodo"):
+            qtd = max(1, int(acao.get("quantidade_cotas") or 1))
+            qtd_texto = f"{qtd:,} acoes".replace(",", ".")
             for item in acao.get("dividendos_no_periodo") or []:
+                valor_acao = float(item.valor_por_cota)
+                valor_pago = round(valor_acao * qtd, 2)
                 PainelComparacaoPeriodo._linha_metrica(
                     bloco,
                     item.data_pagamento,
-                    formatar_moeda(float(item.valor_por_cota), moeda) + " / acao",
+                    "",
+                    CORES["texto"],
+                )
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    "Valor por acao",
+                    formatar_moeda(valor_acao, moeda),
                     CORES["sucesso"],
+                    indentar=True,
+                )
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    qtd_texto,
+                    formatar_moeda(valor_pago, moeda),
+                    CORES["sucesso"],
+                    indentar=True,
                 )
             total = float(acao.get("total_dividendos_periodo") or 0)
             if total > 0:
+                total_carteira = float(acao.get("total_dividendos_carteira") or round(total * qtd, 2))
                 PainelComparacaoPeriodo._linha_metrica(
                     bloco,
-                    "Total no periodo",
-                    formatar_moeda(total, moeda) + " por acao",
+                    "Total por acao no periodo",
+                    formatar_moeda(total, moeda),
                     CORES["sucesso"],
                 )
-                qtd = max(1, int(acao.get("quantidade_cotas") or 1))
-                if qtd > 1:
-                    total_carteira = round(total * qtd, 2)
-                    rotulo_qtd = f"Total no periodo ({qtd:,} acoes)".replace(",", ".")
-                    PainelComparacaoPeriodo._linha_metrica(
-                        bloco,
-                        rotulo_qtd,
-                        formatar_moeda(total_carteira, moeda),
-                        CORES["sucesso"],
-                    )
+                PainelComparacaoPeriodo._linha_metrica(
+                    bloco,
+                    f"Total pago ({qtd_texto})",
+                    formatar_moeda(total_carteira, moeda),
+                    CORES["sucesso"],
+                )
         else:
             data_ult = acao.get("ultimo_dividendo_data") or acao.get("ultimo_dividendo_global_data")
             valor_ult = acao.get("ultimo_dividendo_valor")
@@ -507,6 +534,66 @@ class PainelComparacaoPeriodo:
                     wraplength=PainelComparacaoPeriodo._largura_texto(420),
                     justify="left",
                 ).pack(anchor="w", padx=10, pady=(0, 8))
+
+    @staticmethod
+    def _exibir_resumo_total_periodo(card: ctk.CTkFrame, acao: dict, moeda: str) -> None:
+        resultado_preco = float(acao.get("resultado_total") or 0)
+        total_div = float(acao.get("total_dividendos_carteira") or 0)
+        resultado_total = float(acao.get("resultado_com_dividendos", resultado_preco + total_div))
+        lucro_total = acao.get("lucro_com_dividendos", resultado_total >= 0)
+
+        bloco = ctk.CTkFrame(
+            card,
+            fg_color=CORES.get("destaqueResumo", CORES["superficie"]),
+            corner_radius=8,
+            border_width=1,
+            border_color=CORES["primaria"],
+        )
+        bloco.pack(fill="x", padx=10, pady=(8, 10))
+
+        ctk.CTkLabel(
+            bloco,
+            text="Resumo total no periodo",
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12), weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=10, pady=(8, 4))
+
+        rotulo_preco = "Valorizacao" if resultado_preco >= 0 else "Desvalorizacao"
+        cor_preco = CORES["sucesso"] if resultado_preco >= 0 else CORES["erro"]
+        PainelComparacaoPeriodo._linha_metrica(
+            bloco,
+            rotulo_preco,
+            formatar_moeda(abs(resultado_preco), moeda),
+            cor_preco,
+        )
+        PainelComparacaoPeriodo._linha_metrica(
+            bloco,
+            "Dividendos recebidos",
+            formatar_moeda(total_div, moeda),
+            CORES["sucesso"] if total_div > 0 else CORES["textoSecundario"],
+        )
+
+        sinal = "+" if resultado_total >= 0 else "-"
+        rotulo_final = "Lucro total" if lucro_total else "Prejuizo total"
+        cor_final = CORES["sucesso"] if lucro_total else CORES["erro"]
+        PainelComparacaoPeriodo._linha_metrica(
+            bloco,
+            rotulo_final,
+            f"{sinal} {formatar_moeda(abs(resultado_total), moeda)}",
+            cor_final,
+        )
+
+        ctk.CTkLabel(
+            bloco,
+            text=(
+                "Valorizacao/desvalorizacao da acao + dividendos pagos no periodo "
+                "(com base na quantidade informada)."
+            ),
+            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(10)),
+            text_color=CORES["textoSecundario"],
+            wraplength=PainelComparacaoPeriodo._largura_texto(420),
+            justify="left",
+        ).pack(anchor="w", padx=10, pady=(2, 8))
 
     @staticmethod
     def _exibir_faixa_cdi_periodo(container: ctk.CTkFrame, dados: dict) -> None:
@@ -619,10 +706,13 @@ class PainelComparacaoPeriodo:
         rotulo: str,
         valor: str,
         cor_valor: str | None = None,
+        *,
+        indentar: bool = False,
     ) -> None:
         linha = ctk.CTkFrame(pai, fg_color="transparent")
         linha.pack(fill="x", padx=10, pady=3)
         largura_rotulo = 140 if PainelComparacaoPeriodo._modo_amplo else 110
+        padx_rotulo = 18 if indentar else 0
         ctk.CTkLabel(
             linha,
             text=rotulo,
@@ -630,12 +720,13 @@ class PainelComparacaoPeriodo:
             text_color=CORES["textoSecundario"],
             width=largura_rotulo,
             anchor="w",
-        ).pack(side="left")
-        ctk.CTkLabel(
-            linha,
-            text=valor,
-            font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12), weight="bold"),
-            text_color=cor_valor or CORES["texto"],
-            anchor="w",
-            justify="left",
-        ).pack(side="left", fill="x", expand=True)
+        ).pack(side="left", padx=(padx_rotulo, 0))
+        if valor:
+            ctk.CTkLabel(
+                linha,
+                text=valor,
+                font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12), weight="bold"),
+                text_color=cor_valor or CORES["texto"],
+                anchor="w",
+                justify="left",
+            ).pack(side="left", fill="x", expand=True)
