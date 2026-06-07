@@ -16,7 +16,7 @@ from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
     configurar_interacao_treeview,
-    limpar_hover_treeview,
+    liberar_interacao_treeview,
     obter_simbolo_duplo_clique_treeview,
     sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
@@ -255,7 +255,7 @@ def _preencher_tabela_interno(
     itens_exibir = _ordenar_cotacoes(itens, coluna_ord, descendente)
 
     selecionados_antes = set(tabela.selection())
-    limpar_hover_treeview(tabela)
+    liberar_interacao_treeview(tabela)
     tabela._tags_zebra = {}  # type: ignore[attr-defined]
 
     for linha in tabela.get_children():

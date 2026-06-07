@@ -8,6 +8,8 @@ from tkinter import messagebox
 
 from src.Controller.controlador_tesouro import ControladorTesouro
 from src.Model.titulo_tesouro import TituloTesouro
+from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread
 from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_celula_prazo
 from src.View.formatadores import formatar_moeda
@@ -36,7 +38,9 @@ class JanelaHubTesouro(ctk.CTkToplevel):
     def __init__(self, pai: ctk.CTk) -> None:
         super().__init__(pai)
         self._controlador = ControladorTesouro()
+        self._config_painel = ConfigPainelIni()
         self._titulos: list[TituloTesouro] = []
+        self._dados_buscando = False
         self._familia_selecionada = "Todos"
         self._janela_detalhes: JanelaDetalhesTesouro | None = None
         self._scroll_tabela: ctk.CTkScrollableFrame | None = None
@@ -51,8 +55,15 @@ class JanelaHubTesouro(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(200, self._carregar_dados)
+        self._atualizador_auto = GerenciadorAtualizacaoAutomatica(
+            self,
+            self._config_painel,
+            lambda: self._carregar_dados(automatico=True),
+        )
+        self._atualizador_auto.iniciar()
 
     def _ao_fechar(self) -> None:
+        self._atualizador_auto.parar()
         if self._janela_detalhes is not None:
             try:
                 if self._janela_detalhes.winfo_exists():
@@ -144,16 +155,22 @@ class JanelaHubTesouro(ctk.CTkToplevel):
         )
         self._label_aviso.pack(fill="x", padx=16, pady=(0, 12))
 
-    def _carregar_dados(self, forcar: bool = False) -> None:
+    def _carregar_dados(self, forcar: bool = False, automatico: bool = False) -> None:
+        if automatico and self._dados_buscando:
+            return
+
+        self._dados_buscando = True
         self._label_status.configure(text="Baixando cotacoes oficiais do Tesouro...")
 
         def tarefa():
             return self._controlador.obter_painel(forcar_atualizacao=forcar)
 
         def ao_concluir(resultado, erro_thread):
+            self._dados_buscando = False
             if erro_thread:
                 self._label_status.configure(text=f"Erro: {erro_thread}")
-                messagebox.showerror("Tesouro Direto", erro_thread, parent=self)
+                if not automatico:
+                    messagebox.showerror("Tesouro Direto", erro_thread, parent=self)
                 return
             if resultado is None:
                 return
@@ -161,7 +178,8 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             painel, erro = resultado
             if erro:
                 self._label_status.configure(text=erro)
-                messagebox.showerror("Tesouro Direto", erro, parent=self)
+                if not automatico:
+                    messagebox.showerror("Tesouro Direto", erro, parent=self)
                 return
             if painel is None:
                 self._label_status.configure(text="Nenhum titulo disponivel.")

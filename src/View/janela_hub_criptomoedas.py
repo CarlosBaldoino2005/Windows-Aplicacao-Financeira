@@ -8,6 +8,7 @@ import customtkinter as ctk
 from src.Controller.controlador_cripto import ControladorCripto
 from src.Model.cotacao import CotacaoResumo
 from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.validadores import validar_quantidade_cripto
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
@@ -38,6 +39,7 @@ class JanelaHubCriptomoedas(ctk.CTkToplevel):
         self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._carga_inicial_feita = False
+        self._painel_buscando = False
 
         self.title("Criptomoedas")
         self.configure(fg_color=CORES["fundo"])
@@ -48,8 +50,15 @@ class JanelaHubCriptomoedas(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(200, self._executar_carga_inicial)
+        self._atualizador_auto = GerenciadorAtualizacaoAutomatica(
+            self,
+            self._config_painel,
+            lambda: self._carregar_painel(automatico=True),
+        )
+        self._atualizador_auto.iniciar()
 
     def _ao_fechar(self) -> None:
+        self._atualizador_auto.parar()
         for attr in (
             "_janela_pesquisa",
             "_janela_favoritas",
@@ -287,30 +296,41 @@ class JanelaHubCriptomoedas(ctk.CTkToplevel):
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         executar_em_thread(self, funcao, ao_concluir)
 
-    def _carregar_painel(self) -> None:
-        quantidade, erro = validar_quantidade_cripto(self._entrada_qtd.get())
+    def _carregar_painel(self, automatico: bool = False) -> None:
+        if automatico and self._painel_buscando:
+            return
+
+        if automatico:
+            quantidade = self._config_painel.carregar_quantidade_cripto()
+            erro = None
+        else:
+            quantidade, erro = validar_quantidade_cripto(self._entrada_qtd.get())
         if erro:
             messagebox.showwarning("Quantidade", erro, parent=self)
             return
 
-        try:
-            self._config_painel.salvar_quantidade_cripto(quantidade)
-        except OSError:
-            messagebox.showwarning(
-                "Configuracao",
-                "Nao foi possivel salvar dados/painel.ini.",
-                parent=self,
-            )
+        if not automatico:
+            try:
+                self._config_painel.salvar_quantidade_cripto(quantidade)
+            except OSError:
+                messagebox.showwarning(
+                    "Configuracao",
+                    "Nao foi possivel salvar dados/painel.ini.",
+                    parent=self,
+                )
 
+        self._painel_buscando = True
         self._label_status.configure(text=f"Carregando ate {quantidade} criptos...")
 
         def buscar():
             return self._controlador.obter_painel(quantidade)
 
         def ao_concluir(dados, erro):
+            self._painel_buscando = False
             if erro:
                 self._label_status.configure(text=f"Erro: {erro}", text_color=CORES["erro"])
-                messagebox.showerror("Erro", erro, parent=self)
+                if not automatico:
+                    messagebox.showerror("Erro", erro, parent=self)
                 return
             self._preencher(self._tabela_alta, dados["em_alta"], "Nenhuma cripto em alta agora.")
             self._preencher(self._tabela_queda, dados["em_queda"], "Nenhuma cripto em queda agora.")

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from collections.abc import Callable
+
 import yfinance as yf
 
 from src.Model.cripto_universo import CRIPTOMOEDAS_MONITORADAS, NOMES_CRIPTO
@@ -63,7 +65,7 @@ class DetalhesCriptoServico:
         return detalhes
 
     def _montar_indicadores(self, info: dict, moeda: str) -> list[tuple[str, str]]:
-        campos: list[tuple[str, str, object]] = [
+        campos: list[tuple[str, str, Callable[[object], str]]] = [
             ("Preco atual", "regularMarketPrice", lambda v: formatar_moeda(float(v), moeda)),
             ("Variacao do dia", "regularMarketChangePercent", lambda v: f"{float(v):.2f}%"),
             ("Capitalizacao de mercado", "marketCap", lambda v: formatar_numero_grande(float(v), moeda)),
@@ -77,7 +79,7 @@ class DetalhesCriptoServico:
             ("Minimo historico", "allTimeLow", lambda v: formatar_moeda(float(v), moeda)),
             ("Media volume (10 dias)", "averageVolume10days", lambda v: formatar_numero_grande(float(v), moeda)),
             ("Media volume", "averageVolume", lambda v: formatar_numero_grande(float(v), moeda)),
-            ("Variacao 52 semanas", "52WeekChange", formatar_percentual),
+            ("Variacao 52 semanas", "52WeekChange", lambda v: formatar_percentual(float(v))),
             ("Preco de abertura", "regularMarketOpen", lambda v: formatar_moeda(float(v), moeda)),
             ("Preco anterior", "regularMarketPreviousClose", lambda v: formatar_moeda(float(v), moeda)),
             ("Algoritmo", "algorithm", str),

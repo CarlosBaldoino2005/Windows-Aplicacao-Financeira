@@ -1,0 +1,19 @@
+{
+  "include": ["src"],
+  "exclude": [
+    "**/venv",
+    "**/.venv",
+    "**/__pycache__",
+    "**/node_modules",
+    "mobile",
+    "api",
+    ".idea",
+    "log",
+    "dist",
+    "build",
+    "modelo-ui"
+  ],
+  "extraPaths": ["."],
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "off"
+}

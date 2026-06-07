@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypedDict
 
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -13,6 +14,20 @@ _MIN_FRACAO_EIXO_X = 0.04
 _MIN_FRACAO_EIXO_Y = 0.08
 _LIMIAR_PX_ARRASTE = 6
 _FRACAO_ZOOM_PARA_ARRASTE = 0.985
+
+
+class GestoPan(TypedDict):
+    """Estado do arraste (pan) no grafico Matplotlib."""
+
+    ativo: bool
+    houve_movimento: bool
+    botao: int | None
+    xdata: float | None
+    ydata: float | None
+    xlim: tuple[float, float] | None
+    ylim: tuple[float, float] | None
+    x_px: int | None
+    y_px: int | None
 
 
 def houve_arraste_pan(canvas: FigureCanvasTkAgg) -> bool:
@@ -39,8 +54,8 @@ class ControleZoomGrafico:
         self._eixo = eixo
         self._xlim_base: tuple[float, float] | None = None
         self._ylim_base: tuple[float, float] | None = None
-        self._ids_eventos: list[int] = []
-        self._gesto = {
+        self._ids_eventos: list[tuple[str, int]] = []
+        self._gesto: GestoPan = {
             "ativo": False,
             "houve_movimento": False,
             "botao": None,
@@ -112,23 +127,25 @@ class ControleZoomGrafico:
                     return
 
             self._gesto["houve_movimento"] = True
-            xlim = self._gesto["xlim"]
-            ylim = self._gesto["ylim"]
+            xlim_atual = self._gesto["xlim"]
+            ylim_atual = self._gesto["ylim"]
+            xdata_inicio = self._gesto["xdata"]
+            ydata_inicio = self._gesto["ydata"]
             if (
-                xlim is None
-                or ylim is None
-                or self._gesto["xdata"] is None
-                or self._gesto["ydata"] is None
+                xlim_atual is None
+                or ylim_atual is None
+                or xdata_inicio is None
+                or ydata_inicio is None
             ):
                 return
 
-            dx = float(self._gesto["xdata"]) - float(evento.xdata)
-            dy = float(self._gesto["ydata"]) - float(evento.ydata)
+            dx = float(xdata_inicio) - float(evento.xdata)
+            dy = float(ydata_inicio) - float(evento.ydata)
             self._aplicar_deslocamento(
-                xlim[0] + dx,
-                xlim[1] + dx,
-                ylim[0] + dy,
-                ylim[1] + dy,
+                xlim_atual[0] + dx,
+                xlim_atual[1] + dx,
+                ylim_atual[0] + dy,
+                ylim_atual[1] + dy,
             )
             self._definir_cursor("fleur")
 

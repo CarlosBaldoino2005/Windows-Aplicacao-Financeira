@@ -59,10 +59,9 @@ def buscar_historico_ultimo_intervalo_disponivel(
             return None
 
         ultima = serie_bruta.index.max()
-        if hasattr(ultima, "to_pydatetime"):
-            ultima_dt = ultima.to_pydatetime()
-        else:
-            ultima_dt = ultima
+        ultima_dt = _normalizar_datetime_indice(ultima)
+        if ultima_dt is None:
+            return None
 
         if periodo_chave != "personalizado" or not (data_inicio and data_fim):
             dias = _DIAS_POR_PERIODO.get(periodo_chave, 31)
@@ -129,7 +128,6 @@ def _extrair_close(simbolo: str, dados) -> pd.Series | None:
         return None
 
     if isinstance(dados.columns, pd.MultiIndex):
-        niveis = dados.columns.names or ()
         for nivel in ("Ticker", 1, -1):
             try:
                 tickers = dados.columns.get_level_values(nivel)
@@ -145,7 +143,8 @@ def _extrair_close(simbolo: str, dados) -> pd.Series | None:
             if "Close" in dados.columns.get_level_values(0):
                 close = dados["Close"]
                 if isinstance(close, pd.DataFrame) and simbolo in close.columns:
-                    return close[simbolo].dropna()
+                    serie = close[simbolo].dropna()
+                    return serie if isinstance(serie, pd.Series) else None
         except (KeyError, ValueError):
             pass
         return None
@@ -155,10 +154,27 @@ def _extrair_close(simbolo: str, dados) -> pd.Series | None:
     return None
 
 
+def _normalizar_datetime_indice(valor) -> datetime | None:
+    """Converte indice pandas/yfinance em datetime para calculos de periodo."""
+    if valor is None:
+        return None
+    try:
+        if pd.isna(valor):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(valor, datetime):
+        return valor
+    if hasattr(valor, "to_pydatetime"):
+        convertido = valor.to_pydatetime()
+        return convertido if isinstance(convertido, datetime) else None
+    return None
+
+
 def _pontos_de_serie(serie: pd.Series) -> list[PontoHistorico]:
     pontos: list[PontoHistorico] = []
     for indice, valor in serie.items():
-        if valor != valor:
+        if pd.isna(valor):
             continue
         data_obj = indice.to_pydatetime() if hasattr(indice, "to_pydatetime") else indice
         pontos.append(

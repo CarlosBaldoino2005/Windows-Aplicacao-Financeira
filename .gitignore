@@ -10,6 +10,7 @@ config.local.*
 *.token
 venv/
 .venv/
+.idea/
 __pycache__/
 *.pyc
 log/

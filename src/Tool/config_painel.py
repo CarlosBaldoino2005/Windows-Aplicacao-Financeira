@@ -4,7 +4,13 @@ from __future__ import annotations
 from configparser import ConfigParser
 from pathlib import Path
 
-from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
+from src.Model.opcoes_atualizacao_automatica import (
+    ATUALIZACAO_AUTOMATICA_HABILITADA_PADRAO,
+    INTERVALO_MAXIMO_SEGUNDOS,
+    INTERVALO_MINIMO_SEGUNDOS,
+    INTERVALO_PADRAO_SEGUNDOS,
+    OpcoesAtualizacaoAutomatica,
+)
 from src.Model.cripto_universo import QUANTIDADE_PADRAO_CRIPTO
 from src.Tool.registrador_log import RegistradorLog
 from src.Model.opcoes_fonte_grid import FONTE_GRID_PADRAO, OpcoesFonteGrid
@@ -12,10 +18,12 @@ from src.Model.opcoes_fotos_noticias import FOTOS_PADRAO, OpcoesFotosNoticias
 from src.Tool.validadores import (
     validar_fonte_grid,
     validar_fotos_noticias,
+    validar_intervalo_atualizacao_segundos,
     validar_modo_aparencia,
     validar_quantidade_acoes,
     validar_quantidade_cotas,
     validar_quantidade_cripto,
+    validar_sim_nao_config,
 )
 from src.Model.provedores_noticias import (
     CATEGORIA_CRIPTO,
@@ -38,6 +46,8 @@ CHAVE_FONTE_GRID = "fonte_grid"
 CHAVE_QUANTIDADE_CRIPTO = "quantidade_cripto"
 CHAVE_VALOR_SIMULACAO_RENDA_FIXA = "valor_simulacao_renda_fixa"
 CHAVE_VALOR_DISPONIVEL_CALCULAR_QUANTIDADE = "valor_disponivel_calcular_quantidade"
+CHAVE_ATUALIZACAO_AUTOMATICA = "atualizacao_automatica"
+CHAVE_INTERVALO_ATUALIZACAO_SEGUNDOS = "atualizacao_automatica_intervalo_segundos"
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
 VALOR_PADRAO_DISPONIVEL_CALCULAR_QUANTIDADE = 10000.0
@@ -81,6 +91,52 @@ class ConfigPainelIni:
 
     def padrao_valor_disponivel_calcular_quantidade(self) -> float:
         return VALOR_PADRAO_DISPONIVEL_CALCULAR_QUANTIDADE
+
+    def padrao_atualizacao_automatica_habilitada(self) -> bool:
+        return ATUALIZACAO_AUTOMATICA_HABILITADA_PADRAO
+
+    def padrao_intervalo_atualizacao_segundos(self) -> int:
+        return INTERVALO_PADRAO_SEGUNDOS
+
+    def carregar_atualizacao_automatica(self) -> OpcoesAtualizacaoAutomatica:
+        """Atualizacao periodica global de cotacoes (painel, hubs e favoritos)."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_ATUALIZACAO_AUTOMATICA in secao:
+            habilitada, _ = validar_sim_nao_config(
+                secao.get(CHAVE_ATUALIZACAO_AUTOMATICA, ""),
+                padrao=self.padrao_atualizacao_automatica_habilitada(),
+            )
+            intervalo, _ = validar_intervalo_atualizacao_segundos(
+                secao.get(CHAVE_INTERVALO_ATUALIZACAO_SEGUNDOS, ""),
+                padrao=self.padrao_intervalo_atualizacao_segundos(),
+            )
+            return OpcoesAtualizacaoAutomatica(
+                habilitada=habilitada,
+                intervalo_segundos=intervalo or self.padrao_intervalo_atualizacao_segundos(),
+            )
+
+        habilitada = self.padrao_atualizacao_automatica_habilitada()
+        intervalo = self.padrao_intervalo_atualizacao_segundos()
+        self.salvar_atualizacao_automatica(habilitada, intervalo)
+        return OpcoesAtualizacaoAutomatica(habilitada=habilitada, intervalo_segundos=intervalo)
+
+    def salvar_atualizacao_automatica(
+        self,
+        habilitada: bool,
+        intervalo_segundos: int,
+    ) -> None:
+        intervalo_ok, _ = validar_intervalo_atualizacao_segundos(
+            str(intervalo_segundos),
+            padrao=self.padrao_intervalo_atualizacao_segundos(),
+        )
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_ATUALIZACAO_AUTOMATICA] = "sim" if habilitada else "nao"
+        parser[SECAO_PAINEL][CHAVE_INTERVALO_ATUALIZACAO_SEGUNDOS] = str(
+            intervalo_ok or self.padrao_intervalo_atualizacao_segundos()
+        )
+        self._gravar(parser)
 
     def carregar_valor_simulacao_renda_fixa(self) -> float:
         """Valor padrao para simulacoes de renda fixa (LCI, LCA, CDB, Tesouro)."""

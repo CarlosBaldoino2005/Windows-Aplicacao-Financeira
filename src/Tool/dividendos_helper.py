@@ -53,7 +53,7 @@ def extrair_pagamentos_dividendos(
 
     pagamentos: list[PagamentoDividendo] = []
     for indice, valor in serie.sort_index(ascending=False).items():
-        if valor != valor or float(valor) <= 0:
+        if pd.isna(valor) or float(valor) <= 0:
             continue
         data_obj = _normalizar_data(indice)
         pagamentos.append(
@@ -130,10 +130,11 @@ def _serie_dividendos_bruta(ticker: yf.Ticker) -> pd.Series | None:
     try:
         acoes = ticker.actions
         if acoes is not None and not acoes.empty and "Dividends" in acoes.columns:
-            coluna = acoes["Dividends"].dropna()
-            coluna = coluna[coluna > 0]
-            if not coluna.empty:
-                return coluna
+            bruto = acoes["Dividends"].dropna()
+            if isinstance(bruto, pd.Series):
+                coluna = bruto[bruto > 0]
+                if not coluna.empty:
+                    return coluna
     except Exception:
         pass
 

@@ -70,8 +70,20 @@ class ProvedorYahooChart:
         )
         if not dados:
             return None
+        if not isinstance(dados, dict):
+            return None
         try:
-            return dados["chart"]["result"][0]["meta"]
+            chart = dados.get("chart")
+            if not isinstance(chart, dict):
+                return None
+            resultados = chart.get("result")
+            if not isinstance(resultados, list) or not resultados:
+                return None
+            primeiro = resultados[0]
+            if not isinstance(primeiro, dict):
+                return None
+            meta = primeiro.get("meta")
+            return meta if isinstance(meta, dict) else None
         except (KeyError, IndexError, TypeError):
             return None
 
@@ -82,8 +94,20 @@ class ProvedorYahooChart:
             return None
 
         try:
-            resultado = dados["chart"]["result"][0]
-            meta = resultado["meta"]
+            if not isinstance(dados, dict):
+                return None
+            chart = dados.get("chart")
+            if not isinstance(chart, dict):
+                return None
+            resultados = chart.get("result")
+            if not isinstance(resultados, list) or not resultados:
+                return None
+            resultado = resultados[0]
+            if not isinstance(resultado, dict):
+                return None
+            meta = resultado.get("meta")
+            if not isinstance(meta, dict):
+                return None
             preco = float(meta["regularMarketPrice"])
             anterior = float(meta.get("chartPreviousClose") or meta.get("previousClose") or preco)
             variacao = preco - anterior

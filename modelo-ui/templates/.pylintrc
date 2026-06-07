@@ -1,0 +1,9 @@
+[MAIN]
+py-version=3.14
+jobs=0
+
+[MESSAGES CONTROL]
+disable=all
+
+[REPORTS]
+score=no

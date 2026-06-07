@@ -10,6 +10,7 @@ from src.Controller.controlador_mercado import ControladorMercado
 from src.Model.cotacao import CotacaoResumo
 from src.Model.periodos_mercado import PERIODOS_MERCADO, periodo_chave_por_rotulo
 from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.validadores import validar_quantidade_acoes
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
@@ -42,6 +43,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._carga_inicial_feita = False
+        self._painel_buscando = False
 
         self.title("Acoes por periodo")
         self.configure(fg_color=CORES["fundo"])
@@ -52,8 +54,15 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(200, self._executar_carga_inicial)
+        self._atualizador_auto = GerenciadorAtualizacaoAutomatica(
+            self,
+            self._config_painel,
+            lambda: self._carregar_painel(automatico=True),
+        )
+        self._atualizador_auto.iniciar()
 
     def _ao_fechar(self) -> None:
+        self._atualizador_auto.parar()
         for attr in (
             "_janela_pesquisa",
             "_janela_favoritas",
@@ -347,26 +356,35 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         executar_em_thread(self, funcao, ao_concluir)
 
-    def _carregar_painel(self) -> None:
-        quantidade, erro = validar_quantidade_acoes(self._entrada_qtd.get())
+    def _carregar_painel(self, automatico: bool = False) -> None:
+        if automatico and self._painel_buscando:
+            return
+
+        if automatico:
+            quantidade = self._config_painel.carregar()
+            erro = None
+        else:
+            quantidade, erro = validar_quantidade_acoes(self._entrada_qtd.get())
         if erro:
             messagebox.showwarning("Quantidade", erro, parent=self)
             return
 
-        try:
-            self._config_painel.salvar(quantidade)
-        except OSError:
-            messagebox.showwarning(
-                "Configuracao",
-                "Nao foi possivel salvar dados/painel.ini.",
-                parent=self,
-            )
+        if not automatico:
+            try:
+                self._config_painel.salvar(quantidade)
+            except OSError:
+                messagebox.showwarning(
+                    "Configuracao",
+                    "Nao foi possivel salvar dados/painel.ini.",
+                    parent=self,
+                )
 
         periodo = self._periodo_chave()
         rotulo_periodo = self._combo_periodo.get()
         self._periodo_rotulo_atual = rotulo_periodo
         self._atualizar_titulos_abas()
 
+        self._painel_buscando = True
         self._label_status.configure(
             text=f"Calculando variacao no periodo {rotulo_periodo} para ate {quantidade} acoes..."
         )
@@ -383,15 +401,18 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
             )
 
         def ao_concluir(resultado, erro_thread):
+            self._painel_buscando = False
             if erro_thread:
                 self._label_status.configure(text=erro_thread, text_color=CORES["erro"])
-                messagebox.showerror("Erro", erro_thread, parent=self)
+                if not automatico:
+                    messagebox.showerror("Erro", erro_thread, parent=self)
                 return
 
             dados, msg_erro = resultado
             if msg_erro:
                 self._label_status.configure(text=msg_erro, text_color=CORES["erro"])
-                messagebox.showwarning("Painel por periodo", msg_erro, parent=self)
+                if not automatico:
+                    messagebox.showwarning("Painel por periodo", msg_erro, parent=self)
                 return
 
             rotulo_var = f"Var. no periodo ({dados['periodo_rotulo']})"

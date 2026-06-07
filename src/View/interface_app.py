@@ -20,7 +20,11 @@ from src.View.janela_hub_tesouro import JanelaHubTesouro
 from src.View.janela_hub_renda_fixa_bancaria import JanelaHubRendaFixaBancaria
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
-from src.View.grid_fonte_helper import criar_combo_fonte_grid
+from src.View.janela_configuracao_painel import (
+    JanelaConfiguracaoPainel,
+    ResultadoConfiguracaoPainel,
+    abrir_configuracao_painel,
+)
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     obter_simbolo_duplo_clique_treeview,
@@ -28,6 +32,11 @@ from src.View.tabela_mercado_helper import (
     reaplicar_fonte_em_tabelas,
 )
 from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.atualizacao_automatica_helper import (
+    GerenciadorAtualizacaoAutomatica,
+    notificar_mudanca_configuracao_atualizacao_automatica,
+)
+from src.Tool.icone_engrenagem_helper import criar_botao_engrenagem
 from src.Tool.janela_helper import (
     configurar_janela_maximizada,
     executar_em_thread,
@@ -37,9 +46,6 @@ from src.Tool.validadores import validar_quantidade_acoes
 from src.View.tema import (
     CORES,
     aplicar_modo_aparencia,
-    modo_de_rotulo,
-    obter_modo_aparencia,
-    rotulo_modo_aparencia,
 )
 
 class InterfaceApp(ctk.CTk):
@@ -61,8 +67,10 @@ class InterfaceApp(ctk.CTk):
         self._janela_lci_lca: JanelaHubRendaFixaBancaria | None = None
         self._janela_cdb: JanelaHubRendaFixaBancaria | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
+        self._janela_configuracao: JanelaConfiguracaoPainel | None = None
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
+        self._painel_buscando = False
 
         self._configurar_aparencia()
         self._montar_layout()
@@ -74,6 +82,12 @@ class InterfaceApp(ctk.CTk):
             ao_salvar_monitor=self._salvar_monitor_principal,
         )
         self._agendar_carga_inicial_painel()
+        self._atualizador_auto = GerenciadorAtualizacaoAutomatica(
+            self,
+            self._config_painel,
+            lambda: self._carregar_painel(automatico=True),
+        )
+        self._atualizador_auto.iniciar()
 
     def _salvar_monitor_principal(self, dispositivo: str) -> None:
         try:
@@ -82,6 +96,7 @@ class InterfaceApp(ctk.CTk):
             pass
 
     def _ao_fechar(self) -> None:
+        self._atualizador_auto.parar()
         dispositivo = obter_dispositivo_monitor_janela(self)
         if dispositivo:
             self._salvar_monitor_principal(dispositivo)
@@ -107,19 +122,13 @@ class InterfaceApp(ctk.CTk):
             text_color=CORES["texto"],
         ).pack(side="left")
 
-        self._seletor_tema = ctk.CTkSegmentedButton(
+        criar_botao_engrenagem(
             linha_topo,
-            values=["Claro", "Escuro"],
-            command=self._ao_alterar_modo_aparencia,
-            fg_color=CORES["borda"],
-            selected_color=CORES["primaria"],
-            selected_hover_color=CORES["primariaHover"],
-            unselected_color=CORES["superficie"],
-            unselected_hover_color=CORES["zebraEscura"],
+            command=self._abrir_configuracao,
+            fg_color="transparent",
+            hover_color=CORES["primariaHover"],
             text_color=CORES["texto"],
-        )
-        self._seletor_tema.set(rotulo_modo_aparencia(obter_modo_aparencia()))
-        self._seletor_tema.pack(side="right")
+        ).pack(side="right")
 
         ctk.CTkLabel(
             cabecalho,
@@ -141,32 +150,52 @@ class InterfaceApp(ctk.CTk):
         )
         aviso.pack(fill="x", padx=16, pady=(0, 12))
 
-    def _ao_alterar_modo_aparencia(self, rotulo: str) -> None:
-        if self._reconstruindo_tema:
+    def _abrir_configuracao(self) -> None:
+        """Abre modal para tema, quantidade de acoes e fonte das grids."""
+        if self._janela_configuracao is not None:
+            try:
+                if self._janela_configuracao.winfo_exists():
+                    self._janela_configuracao.focus_force()
+                    self._janela_configuracao.lift()
+                    return
+            except Exception:
+                pass
+
+        def ao_aplicar(resultado: ResultadoConfiguracaoPainel) -> None:
+            self._processar_configuracao_painel(resultado)
+
+        self._janela_configuracao = abrir_configuracao_painel(
+            self, self._config_painel, ao_aplicar
+        )
+
+    def _processar_configuracao_painel(self, resultado: ResultadoConfiguracaoPainel) -> None:
+        if resultado.tema_alterado:
+            aplicar_modo_aparencia(resultado.modo_aparencia)
+            self._reconstruir_interface_apos_tema()
+            if resultado.atualizacao_alterada:
+                notificar_mudanca_configuracao_atualizacao_automatica()
             return
-        modo = modo_de_rotulo(rotulo)
-        if modo == obter_modo_aparencia():
-            return
-        self._config_painel.salvar_modo_aparencia(modo)
-        aplicar_modo_aparencia(modo)
-        self._reconstruir_interface_apos_tema()
+
+        if resultado.quantidade_alterada:
+            self._carregar_painel()
+        elif resultado.fonte_alterada:
+            self._ao_mudar_fonte_grid()
+
+        if resultado.atualizacao_alterada:
+            notificar_mudanca_configuracao_atualizacao_automatica()
 
     def _reconstruir_interface_apos_tema(self) -> None:
         """Remonta a tela principal para aplicar as novas cores."""
         self._reconstruindo_tema = True
-        qtd_painel = self._entrada_quantidade_acoes.get().strip() if hasattr(self, "_entrada_quantidade_acoes") else ""
         recarregar_painel = self._carga_inicial_painel_feita
 
         for widget in self.winfo_children():
             widget.destroy()
 
         self._carga_inicial_painel_feita = False
+        self._janela_configuracao = None
         self.configure(fg_color=CORES["fundo"])
         self._montar_layout()
-
-        if qtd_painel:
-            self._entrada_quantidade_acoes.delete(0, "end")
-            self._entrada_quantidade_acoes.insert(0, qtd_painel)
 
         if recarregar_painel:
             self._carregar_painel()
@@ -174,6 +203,7 @@ class InterfaceApp(ctk.CTk):
             self._agendar_carga_inicial_painel()
 
         self._reconstruindo_tema = False
+        self._atualizador_auto.reagendar()
 
     def _montar_area_consultas(self) -> None:
         """Botoes de pesquisa e favoritos acima das abas de cotacoes."""
@@ -251,13 +281,6 @@ class InterfaceApp(ctk.CTk):
             hover_color=CORES["primariaHover"],
         ).pack(side="right")
 
-        criar_combo_fonte_grid(barra, self._config_painel, self._ao_mudar_fonte_grid)
-
-        ctk.CTkLabel(barra, text="Qtd. acoes").pack(side="right", padx=(8, 4))
-        self._entrada_quantidade_acoes = ctk.CTkEntry(barra, width=50, justify="center")
-        self._entrada_quantidade_acoes.insert(0, str(qtd_ini))
-        self._entrada_quantidade_acoes.pack(side="right", padx=(0, 12))
-
     def _montar_secao_cotacoes(self) -> None:
         """Abas Em alta / Em queda / Todas sem CTkTabview (evita conteudo empilhado e oculto)."""
         self._secao_cotacoes = ctk.CTkFrame(self, fg_color=CORES["fundo"])
@@ -332,7 +355,7 @@ class InterfaceApp(ctk.CTk):
     def _agendar_carga_inicial_painel(self) -> None:
         """Carrega alta, queda e todas automaticamente ao abrir o sistema."""
         self.after(150, self._executar_carga_inicial_painel)
-        self.bind("<Map>", self._ao_janela_exibida, add="+")
+        self.bind("<Map>", self._ao_janela_exibida, add=True)
 
     def _ao_janela_exibida(self, _evento=None) -> None:
         self._executar_carga_inicial_painel()
@@ -525,22 +548,31 @@ class InterfaceApp(ctk.CTk):
         executar_em_thread(self, funcao, ao_concluir)
 
     def _ler_quantidade_painel(self) -> tuple[int | None, str | None]:
-        return validar_quantidade_acoes(self._entrada_quantidade_acoes.get())
+        return validar_quantidade_acoes(str(self._config_painel.carregar()))
 
-    def _carregar_painel(self) -> None:
-        quantidade, erro_qtd = self._ler_quantidade_painel()
+    def _carregar_painel(self, automatico: bool = False) -> None:
+        if automatico and self._painel_buscando:
+            return
+
+        if automatico:
+            quantidade = self._config_painel.carregar()
+            erro_qtd = None
+        else:
+            quantidade, erro_qtd = self._ler_quantidade_painel()
         if erro_qtd:
             messagebox.showwarning("Quantidade", erro_qtd)
             return
 
-        try:
-            self._config_painel.salvar(quantidade)
-        except OSError:
-            messagebox.showwarning(
-                "Configuracao",
-                "Nao foi possivel salvar dados/painel.ini. As cotacoes serao atualizadas mesmo assim.",
-            )
+        if not automatico:
+            try:
+                self._config_painel.salvar(quantidade)
+            except OSError:
+                messagebox.showwarning(
+                    "Configuracao",
+                    "Nao foi possivel salvar dados/painel.ini. As cotacoes serao atualizadas mesmo assim.",
+                )
 
+        self._painel_buscando = True
         self._label_status_painel.configure(
             text=f"Carregando ate {quantidade} acoes em cada aba..."
         )
@@ -549,9 +581,11 @@ class InterfaceApp(ctk.CTk):
             return self._controlador.obter_painel(quantidade)
 
         def ao_concluir(dados, erro):
+            self._painel_buscando = False
             if erro:
                 self._label_status_painel.configure(text=f"Erro: {erro}", text_color=CORES["erro"])
-                messagebox.showerror("Erro", erro)
+                if not automatico:
+                    messagebox.showerror("Erro", erro)
                 return
             self._preencher_tabela(
                 self._tabela_alta,

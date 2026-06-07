@@ -77,9 +77,9 @@ def aplicar_mascara_moeda_ptbr(
         if not entry.get().strip():
             entry.insert(0, prefixo.strip())
 
-    entry.bind("<KeyPress>", ao_pressionar_tecla, add="+")
-    entry.bind("<KeyRelease>", ao_soltar_tecla, add="+")
-    entry.bind("<FocusIn>", ao_focar, add="+")
+    entry.bind("<KeyPress>", ao_pressionar_tecla, add=True)
+    entry.bind("<KeyRelease>", ao_soltar_tecla, add=True)
+    entry.bind("<FocusIn>", ao_focar, add=True)
 
 
 def formatar_inteiro_ptbr(valor: int) -> str:
@@ -121,5 +121,5 @@ def aplicar_mascara_inteiro_ptbr(entry: ctk.CTkEntry) -> None:
         entry.insert(0, texto)
         entry.icursor("end")
 
-    entry.bind("<KeyPress>", _tecla_permitida_mascara, add="+")
-    entry.bind("<KeyRelease>", ao_soltar_tecla, add="+")
+    entry.bind("<KeyPress>", _tecla_permitida_mascara, add=True)
+    entry.bind("<KeyRelease>", ao_soltar_tecla, add=True)

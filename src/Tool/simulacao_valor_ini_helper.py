@@ -56,9 +56,9 @@ def vincular_persistencia_valor_simulacao(
             entry.after_cancel(timer_id[0])
         timer_id[0] = entry.after(600, persistir)
 
-    entry.bind("<FocusOut>", persistir, add="+")
-    entry.bind("<Return>", persistir, add="+")
-    entry.bind("<KeyRelease>", ao_soltar_tecla, add="+")
+    entry.bind("<FocusOut>", persistir, add=True)
+    entry.bind("<Return>", persistir, add=True)
+    entry.bind("<KeyRelease>", ao_soltar_tecla, add=True)
 
 
 def configurar_entrada_valor_simulacao(
@@ -112,9 +112,9 @@ def vincular_persistencia_valor_calcular_quantidade(
             entry.after_cancel(timer_id[0])
         timer_id[0] = entry.after(600, persistir)
 
-    entry.bind("<FocusOut>", persistir, add="+")
-    entry.bind("<Return>", persistir, add="+")
-    entry.bind("<KeyRelease>", ao_soltar_tecla, add="+")
+    entry.bind("<FocusOut>", persistir, add=True)
+    entry.bind("<Return>", persistir, add=True)
+    entry.bind("<KeyRelease>", ao_soltar_tecla, add=True)
 
 
 def configurar_entrada_valor_calcular_quantidade(

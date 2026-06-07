@@ -50,7 +50,7 @@ def adicionar_cabecalho_tabela(
             def _clicar(_evento=None, coluna=indice_coluna) -> None:
                 ao_clicar_coluna(coluna)
 
-            rotulo.bind("<Button-1>", _clicar, add="+")
+            rotulo.bind("<Button-1>", _clicar, add=True)
             try:
                 rotulo.configure(cursor="hand2")
             except Exception:
@@ -131,7 +131,7 @@ def adicionar_linha_zebrada(
 
     if ao_duplo_clique is not None:
         for widget in (linha, *rotulos):
-            widget.bind("<Double-1>", lambda _e: ao_duplo_clique(), add="+")
+            widget.bind("<Double-1>", lambda _e: ao_duplo_clique(), add=True)
             try:
                 widget.configure(cursor="hand2")
             except Exception:
@@ -171,5 +171,5 @@ def _configurar_hover_linha(
             remover_hover()
 
     for widget in (linha, *rotulos):
-        widget.bind("<Enter>", ao_entrar, add="+")
-        widget.bind("<Leave>", ao_sair, add="+")
+        widget.bind("<Enter>", ao_entrar, add=True)
+        widget.bind("<Leave>", ao_sair, add=True)

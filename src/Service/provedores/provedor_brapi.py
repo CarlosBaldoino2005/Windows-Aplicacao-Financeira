@@ -71,10 +71,17 @@ class ProvedorBrapi:
         codigo = codigo_brapi(simbolo)
         url = f"{URL_BASE}/quote/{quote(codigo)}?range={cfg['range']}&interval={cfg['interval']}"
         dados = requisicao_json(url, self._log)
-        if not dados or not dados.get("results"):
+        if not isinstance(dados, dict) or not dados.get("results"):
             return None
 
-        historico = dados["results"][0].get("historicalDataPrice") or []
+        resultados = dados["results"]
+        if not isinstance(resultados, list) or not resultados:
+            return None
+        primeiro = resultados[0]
+        if not isinstance(primeiro, dict):
+            return None
+
+        historico = primeiro.get("historicalDataPrice") or []
         pontos: list[PontoHistorico] = []
 
         for barra in historico:
@@ -106,7 +113,8 @@ class ProvedorBrapi:
         if not eh_acao_b3(simbolo):
             return None
         codigo = codigo_brapi(simbolo)
-        return requisicao_json(f"{URL_BASE}/quote/{quote(codigo)}", self._log)
+        dados = requisicao_json(f"{URL_BASE}/quote/{quote(codigo)}", self._log)
+        return dados if isinstance(dados, dict) else None
 
     @staticmethod
     def _item_para_resumo(simbolo: str, item: dict) -> CotacaoResumo | None:

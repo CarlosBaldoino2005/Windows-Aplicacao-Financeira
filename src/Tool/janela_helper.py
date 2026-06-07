@@ -694,7 +694,7 @@ def _registrar_filha_modal_no_pai(pai, filha) -> None:
         if filha in lista:
             lista.remove(filha)
 
-    filha.bind("<Destroy>", _remover_filha, add="+")
+    filha.bind("<Destroy>", _remover_filha, add=True)
 
 
 def _redirecionar_foco_para_filha(filha, pai) -> None:
@@ -707,7 +707,7 @@ def _redirecionar_foco_para_filha(filha, pai) -> None:
         agendar_na_ui(filha, lambda: _aplicar_grab_modal(filha, pai))
 
     try:
-        pai.bind("<FocusIn>", _ao_focar_pai, add="+")
+        pai.bind("<FocusIn>", _ao_focar_pai, add=True)
     except Exception:
         pass
 
@@ -738,7 +738,7 @@ def configurar_janela_filha_modal(janela, janela_pai=None) -> None:
         _aplicar_grab_modal(janela, pai)
 
     try:
-        janela.bind("<Map>", _aplicar_ao_exibir, add="+")
+        janela.bind("<Map>", _aplicar_ao_exibir, add=True)
     except Exception:
         pass
     agendar_na_ui(janela, _aplicar_ao_exibir)

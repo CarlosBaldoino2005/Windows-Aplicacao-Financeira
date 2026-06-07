@@ -115,20 +115,41 @@ def restaurar_tag_linha_treeview(tabela: ttk.Treeview, iid: str) -> None:
 def _cancelar_toggle_clique_pendente(tabela: ttk.Treeview) -> None:
     job = getattr(tabela, "_toggle_clique_agendado", None)
     if job:
-        try:
-            tabela.after_cancel(job)
-        except (tk.TclError, ValueError):
-            pass
+        alvo = getattr(tabela, "_toggle_after_alvo", None)
+        if alvo is None:
+            try:
+                alvo = tabela.winfo_toplevel()
+            except tk.TclError:
+                alvo = None
+        if alvo is not None:
+            try:
+                if alvo.winfo_exists():
+                    alvo.after_cancel(job)
+            except (tk.TclError, ValueError, RuntimeError):
+                pass
     tabela._toggle_clique_agendado = None  # type: ignore[attr-defined]
     tabela._toggle_clique_iid = None  # type: ignore[attr-defined]
+    tabela._toggle_after_alvo = None  # type: ignore[attr-defined]
+
+
+def liberar_interacao_treeview(tabela: ttk.Treeview | None) -> None:
+    """Cancela timers pendentes ao fechar janela ou recarregar a grid."""
+    if tabela is None:
+        return
+    _cancelar_toggle_clique_pendente(tabela)
+    if treeview_ainda_ativa(tabela):
+        limpar_hover_treeview(tabela)
 
 
 def _executar_toggle_clique_pendente(tabela: ttk.Treeview, iid: str) -> None:
     tabela._toggle_clique_agendado = None  # type: ignore[attr-defined]
     tabela._toggle_clique_iid = None  # type: ignore[attr-defined]
+    tabela._toggle_after_alvo = None  # type: ignore[attr-defined]
     if not treeview_ainda_ativa(tabela) or not iid:
         return
     try:
+        if not tabela.exists(iid):
+            return
         selecionados = set(tabela.selection())
         if iid in selecionados:
             selecionados.remove(iid)
@@ -176,9 +197,9 @@ def configurar_hover_treeview(tabela: ttk.Treeview) -> None:
             return
         sincronizar_tags_selecao_treeview(tabela)
 
-    tabela.bind("<Motion>", ao_mover_mouse, add="+")
-    tabela.bind("<Leave>", ao_sair_mouse, add="+")
-    tabela.bind("<<TreeviewSelect>>", ao_mudar_selecao, add="+")
+    tabela.bind("<Motion>", ao_mover_mouse, add=True)
+    tabela.bind("<Leave>", ao_sair_mouse, add=True)
+    tabela.bind("<<TreeviewSelect>>", ao_mudar_selecao, add=True)
 
 
 def configurar_selecao_clique_treeview(tabela: ttk.Treeview) -> None:
@@ -202,8 +223,10 @@ def configurar_selecao_clique_treeview(tabela: ttk.Treeview) -> None:
                 return "break"
 
             _cancelar_toggle_clique_pendente(tabela)
+            alvo = tabela.winfo_toplevel()
             tabela._toggle_clique_iid = iid  # type: ignore[attr-defined]
-            tabela._toggle_clique_agendado = tabela.after(  # type: ignore[attr-defined]
+            tabela._toggle_after_alvo = alvo  # type: ignore[attr-defined]
+            tabela._toggle_clique_agendado = alvo.after(  # type: ignore[attr-defined]
                 _DELAY_TOGGLE_CLIQUE_MS,
                 lambda linha=iid: _executar_toggle_clique_pendente(tabela, linha),
             )
@@ -247,3 +270,15 @@ def configurar_interacao_treeview(
     configurar_selecao_clique_treeview(tabela)
     if ao_duplo_clique is not None:
         configurar_duplo_clique_treeview(tabela, ao_duplo_clique)
+
+    def ao_destruir_grid(_evento=None) -> None:
+        _cancelar_toggle_clique_pendente(tabela)
+
+    tabela.bind("<Destroy>", ao_destruir_grid, add=True)
+
+
+if __name__ == "__main__":
+    print(
+        "Helper de interacao de grid — importe em telas com Treeview.\n"
+        "Para abrir o app Financeiro, use executar.bat na raiz do projeto."
+    )

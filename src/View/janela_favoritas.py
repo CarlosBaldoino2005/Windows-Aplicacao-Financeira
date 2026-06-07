@@ -11,6 +11,7 @@ import customtkinter as ctk
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Service.favoritos_fiis_servico import FavoritosFiisServico
 from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import (
     executar_em_thread,
     configurar_janela_maximizada,
@@ -25,6 +26,7 @@ from src.View.placeholders_ui import (
 )
 from src.View.grid_fonte_helper import criar_combo_fonte_grid
 from src.View.janela_grafico_acao import JanelaGraficoAcao
+from src.View.grid_interacao_treeview_helper import liberar_interacao_treeview
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     definir_rotulo_coluna_simbolo,
@@ -87,7 +89,6 @@ class JanelaFavoritas(ctk.CTkToplevel):
         self._config_painel = ConfigPainelIni()
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._tabela: ttk.Treeview | None = None
-        self._ids_atualizacao_grid: list[str] = []
         self._grid_buscando = False
         self._grid_versao = 0
 
@@ -99,26 +100,19 @@ class JanelaFavoritas(ctk.CTkToplevel):
         configurar_janela_maximizada(self)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
-        self._agendar_atualizacao_grid(250)
-
-    def _agendar_atualizacao_grid(self, atraso_ms: int = 250) -> None:
-        if not janela_ui_ainda_ativa(self):
-            return
-        job_id = self.after(atraso_ms, lambda: self._atualizar_grid(forcar=False))
-        self._ids_atualizacao_grid.append(job_id)
-
-    def _cancelar_atualizacoes_grid_pendentes(self) -> None:
-        for job_id in self._ids_atualizacao_grid:
-            try:
-                self.after_cancel(job_id)
-            except (tk.TclError, ValueError):
-                pass
-        self._ids_atualizacao_grid.clear()
+        self.after(250, lambda: self._atualizar_grid(forcar=False))
+        self._atualizador_auto = GerenciadorAtualizacaoAutomatica(
+            self,
+            self._config_painel,
+            lambda: self._atualizar_grid(forcar=False),
+        )
+        self._atualizador_auto.iniciar()
 
     def _ao_fechar(self) -> None:
+        self._atualizador_auto.parar()
         self._grid_versao += 1
         self._grid_buscando = False
-        self._cancelar_atualizacoes_grid_pendentes()
+        liberar_interacao_treeview(self._tabela)
         if self._janela_grafico is not None:
             try:
                 if self._janela_grafico.winfo_exists():

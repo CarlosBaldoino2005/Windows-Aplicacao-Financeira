@@ -277,6 +277,44 @@ def validar_quantidade_cotas(
     return valor, None
 
 
+def validar_sim_nao_config(
+    texto: str,
+    padrao: bool = False,
+) -> tuple[bool, str | None]:
+    """Interpreta sim/nao para opcoes do painel.ini."""
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    limpo = str(texto).strip().lower()
+    if limpo in ("sim", "s", "1", "true", "verdadeiro", "ligado", "on"):
+        return True, None
+    if limpo in ("nao", "não", "n", "0", "false", "falso", "desligado", "off"):
+        return False, None
+    return padrao, "Informe Sim ou Nao."
+
+
+def validar_intervalo_atualizacao_segundos(
+    texto: str,
+    padrao: int = 60,
+    minimo: int = 10,
+    maximo: int = 3600,
+) -> tuple[int | None, str | None]:
+    """Valida intervalo da atualizacao automatica (10 a 3600 segundos)."""
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    limpo = str(texto).strip()
+    if not limpo.isdigit():
+        return None, "Informe apenas numeros no intervalo em segundos."
+
+    valor = int(limpo)
+    if valor < minimo:
+        return None, f"O intervalo minimo e {minimo} segundos."
+    if valor > maximo:
+        return None, f"O intervalo maximo e {maximo} segundos."
+    return valor, None
+
+
 def validar_valor_monetario_ptbr(texto: str) -> tuple[float | None, str | None]:
     """Valida valor em reais/dolares no formato pt-BR (ex.: R$ 1.234,56)."""
     if not texto or not str(texto).strip():

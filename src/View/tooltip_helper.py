@@ -216,9 +216,9 @@ def vincular_tooltip_indicador(widgets: list, titulo: str, explicacao: str) -> N
             widget.configure(cursor="question_arrow")
         except Exception:
             pass
-        widget.bind("<Enter>", tooltip.mostrar, add="+")
-        widget.bind("<Leave>", tooltip.esconder, add="+")
-        widget.bind("<ButtonPress>", tooltip.forcar_esconder, add="+")
+        widget.bind("<Enter>", tooltip.mostrar, add=True)
+        widget.bind("<Leave>", tooltip.esconder, add=True)
+        widget.bind("<ButtonPress>", tooltip.forcar_esconder, add=True)
 
     # Ao rolar a lista, remove tooltips que ficariam flutuando na tela.
     try:
@@ -227,7 +227,7 @@ def vincular_tooltip_indicador(widgets: list, titulo: str, explicacao: str) -> N
             nome_classe = type(pai).__name__
             if nome_classe == "CTkScrollableFrame":
                 for evento in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
-                    pai.bind(evento, tooltip.forcar_esconder, add="+")
+                    pai.bind(evento, tooltip.forcar_esconder, add=True)
                 break
             pai = getattr(pai, "master", None)
     except Exception:
