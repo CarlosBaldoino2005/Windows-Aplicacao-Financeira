@@ -16,6 +16,7 @@ from src.View.janela_hub_criptomoedas import JanelaHubCriptomoedas
 from src.View.janela_hub_empresas_dividendos import JanelaHubEmpresasDividendos
 from src.View.janela_hub_fundos_imobiliarios import JanelaHubFundosImobiliarios
 from src.View.janela_hub_painel_periodo import JanelaHubPainelPeriodo
+from src.View.janela_hub_tesouro import JanelaHubTesouro
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
 from src.View.grid_fonte_helper import criar_combo_fonte_grid
@@ -54,6 +55,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_dividendos: JanelaHubEmpresasDividendos | None = None
         self._janela_fiis: JanelaHubFundosImobiliarios | None = None
         self._janela_painel_periodo: JanelaHubPainelPeriodo | None = None
+        self._janela_tesouro: JanelaHubTesouro | None = None
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
@@ -204,6 +206,7 @@ class InterfaceApp(ctk.CTk):
             ("Empresa + dividendos", self._abrir_hub_empresas_dividendos),
             ("Fundos imobiliarios", self._abrir_hub_fundos_imobiliarios),
             ("Acoes por periodo", self._abrir_hub_painel_periodo),
+            ("Tesouros", self._abrir_hub_tesouro),
         ]
 
         for indice, (rotulo, acao) in enumerate(botoes_consultas):
@@ -475,6 +478,19 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_painel_periodo = JanelaHubPainelPeriodo(self)
+
+    def _abrir_hub_tesouro(self) -> None:
+        """Abre (ou foca) o painel do Tesouro Direto."""
+        if self._janela_tesouro is not None:
+            try:
+                if self._janela_tesouro.winfo_exists():
+                    self._janela_tesouro.focus_force()
+                    self._janela_tesouro.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_tesouro = JanelaHubTesouro(self)
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         executar_em_thread(self, funcao, ao_concluir)

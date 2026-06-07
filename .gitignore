@@ -18,6 +18,7 @@ dados/favoritos_cripto.json
 dados/favoritos_dividendos.json
 dados/favoritos_fiis.json
 dados/painel.ini
+dados/cache_tesouro_precos.csv
 *.log
 dist/
 build/

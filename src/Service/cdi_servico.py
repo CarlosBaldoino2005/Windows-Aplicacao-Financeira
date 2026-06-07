@@ -104,6 +104,74 @@ class CdiServico:
             "dias_uteis": dias_uteis,
         }
 
+    def calcular_rendimento_ate_vencimento(
+        self,
+        valor_inicial: float,
+        texto_data_inicio: str,
+        texto_data_fim: str,
+    ) -> dict | None:
+        """
+        CDI historico (BCB) ate hoje e, se o vencimento for futuro,
+        projeta o restante com a media anualizada dos ultimos ~90 dias uteis.
+        """
+        data_ini = _parse_data_texto(texto_data_inicio)
+        data_fim = _parse_data_texto(texto_data_fim)
+        if data_ini is None or data_fim is None or data_fim < data_ini:
+            return None
+        if valor_inicial <= 0:
+            return None
+
+        hoje = date.today()
+        data_historico_fim = min(data_fim, hoje)
+
+        valor = float(valor_inicial)
+        dias_uteis = 0
+        taxas = self._buscar_taxas_periodo(data_ini, data_historico_fim)
+        if not taxas and data_historico_fim >= data_ini:
+            taxas = self._buscar_taxas_periodo(
+                date(data_ini.year, 1, 1),
+                data_historico_fim,
+            )
+
+        for data_taxa, taxa_pct in taxas:
+            if data_ini <= data_taxa <= data_historico_fim:
+                valor *= 1.0 + taxa_pct / 100.0
+                dias_uteis += 1
+
+        projecao = False
+        if data_fim > data_ini:
+            taxas_ref = self._buscar_taxas_periodo(date(hoje.year, 1, 1), hoje)
+            if not taxas_ref:
+                taxas_ref = taxas
+            taxas_recentes = [taxa for _, taxa in (taxas_ref or [])[-60:]]
+            if taxas_recentes:
+                media_diaria = sum(taxas_recentes) / len(taxas_recentes)
+                taxa_aa = ((1.0 + media_diaria / 100.0) ** 252 - 1.0) * 100.0
+                if dias_uteis == 0:
+                    dias_projecao = (data_fim - data_ini).days
+                elif data_fim > hoje:
+                    dias_projecao = (data_fim - hoje).days
+                else:
+                    dias_projecao = 0
+                if dias_projecao > 0 and taxa_aa > 0:
+                    if dias_uteis == 0:
+                        valor = float(valor_inicial)
+                    valor *= (1.0 + taxa_aa / 100.0) ** (dias_projecao / 365.25)
+                    projecao = True
+
+        if dias_uteis == 0 and not projecao:
+            return None
+
+        rendimento = valor - valor_inicial
+        resultado = {
+            "valor_fim": round(valor, 2),
+            "rendimento": round(rendimento, 2),
+            "rendimento_pct": round((valor / valor_inicial - 1.0) * 100.0, 2),
+            "dias_uteis": dias_uteis,
+            "projecao_futura": projecao,
+        }
+        return resultado
+
     def fatores_cdi_acumulados(self, textos_data: list[str]) -> list[float] | None:
         """Fator multiplicador do CDI desde a 1ª data ate cada data da lista (1.0 no inicio)."""
         datas: list[date] = []
