@@ -1,6 +1,7 @@
 """Tooltip e selecao de periodo por clique nos graficos Matplotlib."""
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable
 from copy import deepcopy
@@ -8,6 +9,7 @@ from copy import deepcopy
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.lines import Line2D
+from matplotlib.ticker import FixedFormatter, FixedLocator, NullFormatter, NullLocator
 
 from src.Tool.janela_helper import agendar_na_ui
 from src.View.formatadores import formatar_moeda
@@ -74,6 +76,48 @@ def aplicar_tema_matplotlib(eixo, figura=None) -> None:
         moldura.set_edgecolor(cor_borda)
         for texto in legenda.get_texts():
             texto.set_color(cor_texto)
+
+
+def _formatar_rotulo_data_eixo(texto: str) -> str:
+    """Exibe so dd/mm/aaaa no eixo (remove hora 00:00 duplicada visualmente)."""
+    limpo = str(texto or "").strip()
+    if re.match(r"^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}", limpo):
+        return limpo[:10]
+    return limpo
+
+
+def configurar_rotulos_eixo_x(
+    eixo,
+    labels: list[str],
+    *,
+    rotacao: int = 25,
+    tamanho_fonte: int = 8,
+    max_rotulos: int = 10,
+) -> None:
+    """
+    Define rotulos espacados no eixo X com FixedLocator (evita ticks duplicados).
+    """
+    quantidade = len(labels)
+    if quantidade == 0:
+        return
+
+    rotulos = [_formatar_rotulo_data_eixo(item) for item in labels]
+    if quantidade <= max_rotulos:
+        posicoes = list(range(quantidade))
+    else:
+        passo = max(1, quantidade // max_rotulos)
+        posicoes = list(range(0, quantidade, passo))
+        if posicoes[-1] != quantidade - 1:
+            posicoes.append(quantidade - 1)
+
+    rotulos_posicoes = [rotulos[indice] for indice in posicoes]
+    eixo.xaxis.set_major_locator(FixedLocator(posicoes))
+    eixo.xaxis.set_major_formatter(FixedFormatter(rotulos_posicoes))
+    eixo.xaxis.set_minor_locator(NullLocator())
+    eixo.xaxis.set_minor_formatter(NullFormatter())
+    eixo.tick_params(axis="x", rotation=rotacao, labelsize=tamanho_fonte)
+    for rotulo in eixo.get_xticklabels():
+        rotulo.set_ha("right")
 
 
 def _formatar_volume(volume: int | None) -> str:

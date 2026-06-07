@@ -14,6 +14,7 @@ from src.View.grafico_helper import (
     COR_LINHA_CDI,
     _publicar_payload_com_cdi,
     aplicar_tema_matplotlib,
+    configurar_rotulos_eixo_x,
     configurar_selecao_periodo,
     configurar_selecao_periodo_comparacao,
     configurar_tooltip_acao,
@@ -157,8 +158,7 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         if valores_cdi:
             rotulo_eixo = "Preco da acao e equivalente em 100% CDI"
         eixo.set_ylabel(rotulo_eixo, fontsize=12)
-        eixo.set_xticks(indices)
-        eixo.set_xticklabels(labels, rotation=25, ha="right", fontsize=9)
+        configurar_rotulos_eixo_x(eixo, labels, rotacao=25, tamanho_fonte=9)
         eixo.grid(True, alpha=0.3, color=CORES["borda"])
         aplicar_tema_matplotlib(eixo, figura)
         figura.subplots_adjust(bottom=0.2, left=0.08, right=0.96, top=0.9)

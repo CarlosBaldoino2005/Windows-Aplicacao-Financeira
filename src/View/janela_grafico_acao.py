@@ -19,6 +19,7 @@ from src.View.grafico_helper import (
     COR_LINHA_CDI,
     TEXTO_INSTRUCAO_GRAFICO_ACAO,
     aplicar_tema_matplotlib,
+    configurar_rotulos_eixo_x,
     configurar_selecao_periodo,
     configurar_tooltip_acao,
 )
@@ -45,6 +46,8 @@ from src.View.painel_comparacao_periodo import (
 from src.View.tema import CORES
 
 PERIODOS = PERIODOS_MERCADO
+ALTURA_GRAFICO_PX = 480
+
 
 class JanelaGraficoAcao(ctk.CTkToplevel):
     """Tela ampla com periodo, grafico, tooltip e selecao de intervalo."""
@@ -75,6 +78,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
         self._dados_grafico_atual: dict | None = None
         self._controle_zoom = None
+        self._carregando_grafico = False
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Grafico — {codigo}")
@@ -226,10 +230,17 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         )
-        self._label_status.pack(anchor="w", padx=16, pady=(0, 4))
+        self._label_status.pack(anchor="w", padx=16, pady=(0, 8))
 
-        barra_resumo = ctk.CTkFrame(cabecalho, fg_color="transparent")
-        barra_resumo.pack(fill="x", padx=16, pady=(0, 4))
+        self._area_rolagem = ctk.CTkScrollableFrame(
+            self,
+            fg_color=CORES["fundo"],
+            label_text="Resumo e grafico — role para ver o grafico completo",
+        )
+        self._area_rolagem.pack(fill="both", expand=True, padx=0, pady=0)
+
+        barra_resumo = ctk.CTkFrame(self._area_rolagem, fg_color="transparent")
+        barra_resumo.pack(fill="x", padx=16, pady=(8, 4))
         self._btn_resumo_ampliado = ctk.CTkButton(
             barra_resumo,
             text="Ver resumo ampliado",
@@ -244,15 +255,15 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._btn_resumo_ampliado.pack(side="right")
 
         self._frame_painel_periodo = ctk.CTkScrollableFrame(
-            cabecalho,
+            self._area_rolagem,
             height=240,
             fg_color=CORES["fundo"],
             label_text="Resumo do periodo selecionado no grafico",
         )
-        self._frame_painel_periodo.pack(fill="x", padx=16, pady=(0, 12))
+        self._frame_painel_periodo.pack(fill="x", padx=16, pady=(0, 8))
         self._exibir_resumo_periodo(self._payload_resumo_periodo)
 
-        barra_grafico = ctk.CTkFrame(self, fg_color="transparent")
+        barra_grafico = ctk.CTkFrame(self._area_rolagem, fg_color="transparent")
         barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
         montar_botoes_zoom_grafico(barra_grafico, lambda: self._controle_zoom)
         self._btn_grafico_ampliado = ctk.CTkButton(
@@ -268,8 +279,14 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
         self._btn_grafico_ampliado.pack(side="right")
 
-        self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
-        self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
+        self._frame_grafico = ctk.CTkFrame(
+            self._area_rolagem,
+            fg_color=CORES["superficie"],
+            corner_radius=12,
+            height=ALTURA_GRAFICO_PX,
+        )
+        self._frame_grafico.pack(fill="x", padx=16, pady=(8, 16))
+        self._frame_grafico.pack_propagate(False)
 
     def _aplicar_periodo_inicial(self) -> None:
         if self._periodo_inicial:
@@ -422,15 +439,21 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
 
     def _carregar_grafico(self) -> None:
+        if self._carregando_grafico:
+            return
+        self._carregando_grafico = True
+        self._manter_rolagem_no_topo()
         self._atualizar_destaque_cotacao()
         quantidade, erro_qtd = self._ler_quantidade_cotas()
         if erro_qtd:
+            self._carregando_grafico = False
             self._label_status.configure(text=erro_qtd, text_color=CORES["erro"])
             return
         if quantidade is not None:
             try:
                 self._config_ini.salvar_quantidade_cotas_grafico(quantidade)
             except OSError:
+                self._carregando_grafico = False
                 self._label_status.configure(
                     text="Nao foi possivel salvar a quantidade no painel.ini.",
                     text_color=CORES["erro"],
@@ -449,6 +472,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             )
 
         def ao_concluir(resultado, erro):
+            self._carregando_grafico = False
             if erro:
                 self._label_status.configure(text=erro, text_color=CORES["erro"])
                 return
@@ -502,6 +526,13 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         pontos_tooltip: list[dict],
         valores_cdi: list[float] | None = None,
     ) -> None:
+        if self._canvas is not None:
+            try:
+                self._canvas.get_tk_widget().destroy()
+            except Exception:
+                pass
+            self._canvas = None
+
         for widget in self._frame_grafico.winfo_children():
             widget.destroy()
 
@@ -509,10 +540,11 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             import matplotlib.pyplot as plt
 
             plt.close(self._figura)
+            self._figura = None
             self._controle_zoom = None
 
         largura_px = max(400, self._frame_grafico.winfo_width() - 16)
-        altura_px = max(300, self._frame_grafico.winfo_height() - 16)
+        altura_px = max(350, ALTURA_GRAFICO_PX - 16)
         dpi = 100
         figura = Figure(
             figsize=(largura_px / dpi, altura_px / dpi),
@@ -548,8 +580,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         if valores_cdi:
             rotulo_eixo = "Preco da acao e equivalente em 100% CDI"
         eixo.set_ylabel(rotulo_eixo, fontsize=11)
-        eixo.set_xticks(indices)
-        eixo.set_xticklabels(labels, rotation=25, ha="right", fontsize=8)
+        configurar_rotulos_eixo_x(eixo, labels)
         eixo.grid(True, alpha=0.3, color=CORES["borda"])
         aplicar_tema_matplotlib(eixo, figura)
         figura.subplots_adjust(bottom=0.22, left=0.08, right=0.96, top=0.9)
@@ -594,6 +625,24 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         atualizar_estado_botao_grafico_ampliado(self._btn_grafico_ampliado, True)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
         self.after(250, lambda: self._ajustar_grafico_ao_redimensionar(0))
+        self._agendar_rolagem_no_topo()
+
+    def _agendar_rolagem_no_topo(self) -> None:
+        """Reaplica rolagem no topo apos pack/redraw do matplotlib."""
+        self._manter_rolagem_no_topo()
+        self.after_idle(self._manter_rolagem_no_topo)
+        for atraso in (50, 120, 280, 450):
+            self.after(atraso, self._manter_rolagem_no_topo)
+
+    def _manter_rolagem_no_topo(self) -> None:
+        """Mantem a area rolavel no inicio apos atualizar o grafico."""
+        try:
+            canvas = getattr(self._area_rolagem, "_parent_canvas", None)
+            if canvas is not None:
+                canvas.update_idletasks()
+                canvas.yview_moveto(0.0)
+        except Exception:
+            pass
 
     def _ajustar_grafico_ao_redimensionar(self, tentativa: int = 0) -> None:
         """Redimensiona o matplotlib apos a janela abrir maximizada."""
@@ -604,13 +653,14 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         try:
             self._frame_grafico.update_idletasks()
             largura_px = max(400, self._frame_grafico.winfo_width() - 16)
-            altura_px = max(300, self._frame_grafico.winfo_height() - 16)
+            altura_px = max(350, ALTURA_GRAFICO_PX - 16)
             if largura_px < 500 and tentativa < 40:
                 self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
                 return
             dpi = self._figura.get_dpi()
             self._figura.set_size_inches(largura_px / dpi, altura_px / dpi, forward=True)
             self._canvas.draw()
+            self._manter_rolagem_no_topo()
         except Exception:
             pass
 
