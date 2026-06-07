@@ -36,7 +36,9 @@ CHAVE_MODO_APARENCIA = "modo_aparencia"
 CHAVE_FOTOS_NOTICIAS = "fotos_noticias"
 CHAVE_FONTE_GRID = "fonte_grid"
 CHAVE_QUANTIDADE_CRIPTO = "quantidade_cripto"
+CHAVE_VALOR_SIMULACAO_RENDA_FIXA = "valor_simulacao_renda_fixa"
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
+VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
 NOME_ARQUIVO = "painel.ini"
 
 
@@ -71,6 +73,27 @@ class ConfigPainelIni:
 
     def padrao_quantidade_cripto(self) -> int:
         return QUANTIDADE_PADRAO_CRIPTO
+
+    def padrao_valor_simulacao_renda_fixa(self) -> float:
+        return VALOR_PADRAO_SIMULACAO_RENDA_FIXA
+
+    def carregar_valor_simulacao_renda_fixa(self) -> float:
+        """Valor padrao para simulacoes de renda fixa (LCI, LCA, CDB, Tesouro)."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_VALOR_SIMULACAO_RENDA_FIXA in secao:
+            return self._ler_valor_simulacao(secao.get(CHAVE_VALOR_SIMULACAO_RENDA_FIXA))
+        valor = self.padrao_valor_simulacao_renda_fixa()
+        self.salvar_valor_simulacao_renda_fixa(valor)
+        return valor
+
+    def salvar_valor_simulacao_renda_fixa(self, valor: float) -> None:
+        if valor <= 0:
+            return
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_VALOR_SIMULACAO_RENDA_FIXA] = f"{round(valor, 2):.2f}"
+        self._gravar(parser)
 
     def carregar_quantidade_cripto(self) -> int:
         """Quantidade de criptos nas abas Em alta, Em queda e Todas."""
@@ -332,3 +355,12 @@ class ConfigPainelIni:
         if erro or valor is None:
             return self.padrao_cotas_grafico()
         return valor
+
+    def _ler_valor_simulacao(self, texto: str) -> float:
+        try:
+            valor = float(str(texto or "").strip().replace(",", "."))
+        except ValueError:
+            return self.padrao_valor_simulacao_renda_fixa()
+        if valor <= 0:
+            return self.padrao_valor_simulacao_renda_fixa()
+        return round(valor, 2)

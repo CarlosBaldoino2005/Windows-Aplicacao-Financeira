@@ -104,16 +104,33 @@ class CdiServico:
             "dias_uteis": dias_uteis,
         }
 
+    def obter_cdi_anualizado_estimado(self) -> float | None:
+        """Estima CDI a.a. com base na media dos ultimos ~60 dias uteis (BCB)."""
+        hoje = date.today()
+        taxas = self._buscar_taxas_periodo(date(hoje.year, 1, 1), hoje)
+        if not taxas:
+            return None
+        recentes = [taxa for _, taxa in taxas[-60:]]
+        if not recentes:
+            return None
+        media_diaria = sum(recentes) / len(recentes)
+        return round(((1.0 + media_diaria / 100.0) ** 252 - 1.0) * 100.0, 2)
+
     def calcular_rendimento_ate_vencimento(
         self,
         valor_inicial: float,
         texto_data_inicio: str,
         texto_data_fim: str,
+        multiplicador_cdi: float = 1.0,
     ) -> dict | None:
         """
         CDI historico (BCB) ate hoje e, se o vencimento for futuro,
         projeta o restante com a media anualizada dos ultimos ~90 dias uteis.
+        multiplicador_cdi: ex. 0.95 para 95% CDI, 1.1 para 110% CDI.
         """
+        if multiplicador_cdi <= 0:
+            return None
+
         data_ini = _parse_data_texto(texto_data_inicio)
         data_fim = _parse_data_texto(texto_data_fim)
         if data_ini is None or data_fim is None or data_fim < data_ini:
@@ -123,6 +140,7 @@ class CdiServico:
 
         hoje = date.today()
         data_historico_fim = min(data_fim, hoje)
+        mult = float(multiplicador_cdi)
 
         valor = float(valor_inicial)
         dias_uteis = 0
@@ -135,7 +153,7 @@ class CdiServico:
 
         for data_taxa, taxa_pct in taxas:
             if data_ini <= data_taxa <= data_historico_fim:
-                valor *= 1.0 + taxa_pct / 100.0
+                valor *= 1.0 + (taxa_pct * mult) / 100.0
                 dias_uteis += 1
 
         projecao = False
@@ -146,7 +164,7 @@ class CdiServico:
             taxas_recentes = [taxa for _, taxa in (taxas_ref or [])[-60:]]
             if taxas_recentes:
                 media_diaria = sum(taxas_recentes) / len(taxas_recentes)
-                taxa_aa = ((1.0 + media_diaria / 100.0) ** 252 - 1.0) * 100.0
+                taxa_aa = ((1.0 + media_diaria / 100.0) ** 252 - 1.0) * 100.0 * mult
                 if dias_uteis == 0:
                     dias_projecao = (data_fim - data_ini).days
                 elif data_fim > hoje:
@@ -169,6 +187,7 @@ class CdiServico:
             "rendimento_pct": round((valor / valor_inicial - 1.0) * 100.0, 2),
             "dias_uteis": dias_uteis,
             "projecao_futura": projecao,
+            "multiplicador_cdi": mult,
         }
         return resultado
 

@@ -9,6 +9,7 @@ from tkinter import messagebox
 from src.Controller.controlador_tesouro import ControladorTesouro
 from src.Model.titulo_tesouro import TituloTesouro
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread
+from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_celula_prazo
 from src.View.formatadores import formatar_moeda
 from src.View.janela_detalhes_tesouro import JanelaDetalhesTesouro
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
@@ -232,10 +233,11 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             return
 
         for indice, titulo in enumerate(filtrados):
+            prazo_venc = montar_prazo_legivel(data_fim=titulo.data_vencimento)
             valores = [
                 titulo.familia,
                 titulo.tipo_titulo,
-                titulo.data_vencimento_texto,
+                montar_texto_celula_prazo(prazo_venc),
                 self._formatar_taxa(titulo.taxa_venda),
                 self._formatar_taxa(titulo.taxa_compra),
                 formatar_moeda(titulo.pu_venda) if titulo.pu_venda is not None else "—",

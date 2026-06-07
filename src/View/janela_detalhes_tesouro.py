@@ -10,9 +10,16 @@ from src.Controller.controlador_tesouro import ControladorTesouro
 from src.Model.simulacao_tesouro import ResultadoSimulacaoTesouro
 from src.Model.tesouro_informacoes import InformacoesFamiliaTesouro
 from src.Model.titulo_tesouro import DetalhesTituloTesouro
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
+from src.Tool.simulacao_valor_ini_helper import (
+    configurar_entrada_valor_simulacao,
+    persistir_valor_simulacao_da_entrada,
+)
+from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_bloco_periodo
 from src.View.formatadores import formatar_moeda, formatar_texto_opcional
+from src.View.prazo_legivel_helper import adicionar_linha_prazo_legivel
 from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
 from src.View.tema import CORES
 
@@ -31,6 +38,7 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
         super().__init__(pai)
         self._controlador = controlador
         self._identificador = identificador
+        self._config_painel = ConfigPainelIni()
         self._detalhes: DetalhesTituloTesouro | None = None
         self._frames_por_aba: dict[str, ctk.CTkFrame] = {}
         self._container_abas: ctk.CTkFrame | None = None
@@ -125,12 +133,13 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
 
             self._detalhes = detalhes
             titulo = detalhes.titulo
-            self.title(f"Tesouro — {titulo.familia} ({titulo.data_vencimento_texto})")
+            prazo_venc = montar_prazo_legivel(data_fim=titulo.data_vencimento)
+            self.title(f"Tesouro — {titulo.familia} ({prazo_venc.titulo})")
             self._label_titulo.configure(text=titulo.tipo_titulo)
             self._label_subtitulo.configure(
                 text=(
-                    f"Familia: {titulo.familia}  |  Vencimento: {titulo.data_vencimento_texto}  |  "
-                    f"Cotacao: {titulo.data_base_texto}"
+                    f"Familia: {titulo.familia}  |  Vencimento: {prazo_venc.titulo}  |  "
+                    f"{prazo_venc.descricao}  |  Cotacao: {titulo.data_base_texto}"
                 )
             )
             info_familia = self._controlador.obter_informacoes_familia(titulo.familia)
@@ -153,6 +162,7 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
         titulo = detalhes.titulo
 
         self._adicionar_secao(scroll, "Precos e taxas (manha)")
+        prazo_venc = montar_prazo_legivel(data_fim=titulo.data_vencimento)
         linhas = [
             ("Taxa de venda", self._formatar_taxa(titulo.taxa_venda)),
             ("Taxa de compra", self._formatar_taxa(titulo.taxa_compra)),
@@ -160,10 +170,10 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
             ("PU compra", formatar_moeda(titulo.pu_compra) if titulo.pu_compra else "—"),
             ("PU base", formatar_moeda(titulo.pu_base) if titulo.pu_base else "—"),
             ("Data base", titulo.data_base_texto),
-            ("Data vencimento", titulo.data_vencimento_texto),
         ]
         for rotulo, valor in linhas:
             self._adicionar_linha_info(scroll, rotulo, valor)
+        adicionar_linha_prazo_legivel(scroll, "Data vencimento", prazo_venc)
 
         if detalhes.volatilidade_indicativa_pct is not None:
             self._adicionar_secao(scroll, "Volatilidade indicativa (ultimos 90 dias)")
@@ -207,10 +217,11 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
         titulo = detalhes.titulo
 
         self._adicionar_secao(scroll, "Simular investimento ate o vencimento")
+        prazo_sim = montar_prazo_legivel(data_fim=titulo.data_vencimento)
+        adicionar_linha_prazo_legivel(scroll, "Periodo", prazo_sim)
         self._adicionar_texto(
             scroll,
-            f"Periodo: hoje ate {titulo.data_vencimento_texto} "
-            f"(taxa de referencia: {self._formatar_taxa(titulo.taxa_venda)}). "
+            f"Taxa de referencia: {self._formatar_taxa(titulo.taxa_venda)}. "
             "Compare o Tesouro com 100% CDI no mesmo intervalo, ja descontando IR estimado.",
         )
 
@@ -231,6 +242,7 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
         )
         self._entrada_valor_simulacao.pack(side="left", padx=(0, 8))
         aplicar_mascara_moeda_ptbr(self._entrada_valor_simulacao)
+        configurar_entrada_valor_simulacao(self._entrada_valor_simulacao, self._config_painel)
         self._entrada_valor_simulacao.bind("<Return>", lambda _e: self._executar_simulacao())
 
         ctk.CTkButton(
@@ -261,6 +273,8 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
             return
 
         valor_texto = self._entrada_valor_simulacao.get()
+        if self._entrada_valor_simulacao is not None:
+            persistir_valor_simulacao_da_entrada(self._entrada_valor_simulacao, self._config_painel)
         identificador = self._identificador
 
         for widget in self._frame_resultado_simulacao.winfo_children():
@@ -300,13 +314,19 @@ class JanelaDetalhesTesouro(ctk.CTkToplevel):
         if self._frame_resultado_simulacao is None:
             return
 
+        prazo = montar_prazo_legivel(
+            dias=sim.dias_periodo,
+            data_fim=sim.data_fim_texto,
+            data_inicio=sim.data_inicio_texto,
+        )
         self._adicionar_bloco_destaque(
             self._frame_resultado_simulacao,
             "Periodo",
-            (
-                f"De {sim.data_inicio_texto} ate {sim.data_fim_texto} "
-                f"({sim.dias_periodo} dias). Taxa: {sim.taxa_tesouro_rotulo}."
+            montar_texto_bloco_periodo(
+                prazo,
+                complemento=f"Taxa: {sim.taxa_tesouro_rotulo}.",
             ),
+            valor_destaque=prazo.titulo,
         )
 
         for obs in sim.observacoes:
