@@ -22,7 +22,8 @@ from src.Tool.simulacao_valor_ini_helper import (
 from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_celula_prazo
 from src.View.formatadores import formatar_moeda, formatar_texto_opcional
 from src.View.prazo_legivel_helper import adicionar_linha_prazo_legivel
-from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
+from src.View.grid_ordenacao_helper import EstadoOrdenacaoColuna, LinhaTabelaOrdenavel
+from src.View.tabela_detalhes_helper import renderizar_tabela_zebrada
 from src.View.tema import CORES
 
 ModoHub = Literal["lci_lca", "cdb"]
@@ -54,6 +55,7 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
         self._label_indicadores_status: ctk.CTkLabel | None = None
         self._ofertas: list[OfertaRendaFixaBancaria] = []
         self._scroll_ofertas: ctk.CTkScrollableFrame | None = None
+        self._ordenacao_ofertas = EstadoOrdenacaoColuna()
         self._label_status_ofertas: ctk.CTkLabel | None = None
         self._combo_distribuidor: ctk.CTkComboBox | None = None
         self._combo_prazo: ctk.CTkComboBox | None = None
@@ -330,8 +332,6 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
         for widget in self._scroll_ofertas.winfo_children():
             widget.destroy()
 
-        adicionar_cabecalho_tabela(self._scroll_ofertas, _COLUNAS_OFERTAS)
-
         if not self._ofertas:
             ctk.CTkLabel(
                 self._scroll_ofertas,
@@ -341,29 +341,47 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             ).pack(pady=24)
             return
 
-        for indice, oferta in enumerate(self._ofertas):
+        linhas: list[LinhaTabelaOrdenavel] = []
+        for oferta in self._ofertas:
             prazo_venc = montar_prazo_legivel(
                 dias=oferta.dias_ate_vencimento,
                 data_fim=oferta.data_vencimento_texto,
             )
-            valores = [
-                oferta.tipo,
-                oferta.emissor[:36] + ("…" if len(oferta.emissor) > 36 else ""),
-                oferta.taxa_rotulo,
-                montar_texto_celula_prazo(prazo_venc),
-                formatar_moeda(oferta.investimento_minimo)
-                if oferta.investimento_minimo is not None
-                else "—",
-                f"{oferta.taxa_liquida_aa:.2f}%".replace(".", ",")
-                if oferta.taxa_liquida_aa is not None
-                else "—",
-            ]
-            adicionar_linha_zebrada(
-                self._scroll_ofertas,
-                valores,
-                indice,
-                ao_duplo_clique=lambda item=oferta: self._aplicar_oferta_na_simulacao(item),
+            linhas.append(
+                LinhaTabelaOrdenavel(
+                    valores=[
+                        oferta.tipo,
+                        oferta.emissor[:36] + ("…" if len(oferta.emissor) > 36 else ""),
+                        oferta.taxa_rotulo,
+                        montar_texto_celula_prazo(prazo_venc),
+                        formatar_moeda(oferta.investimento_minimo)
+                        if oferta.investimento_minimo is not None
+                        else "—",
+                        f"{oferta.taxa_liquida_aa:.2f}%".replace(".", ",")
+                        if oferta.taxa_liquida_aa is not None
+                        else "—",
+                    ],
+                    chaves=[
+                        oferta.tipo,
+                        oferta.emissor.lower(),
+                        oferta.percentual_cdi
+                        if oferta.percentual_cdi is not None
+                        else oferta.taxa_prefixada_aa,
+                        prazo_venc.dias_totais,
+                        oferta.investimento_minimo if oferta.investimento_minimo is not None else -1.0,
+                        oferta.taxa_liquida_aa if oferta.taxa_liquida_aa is not None else -1.0,
+                    ],
+                    ao_duplo_clique=lambda item=oferta: self._aplicar_oferta_na_simulacao(item),
+                )
             )
+
+        renderizar_tabela_zebrada(
+            self._scroll_ofertas,
+            _COLUNAS_OFERTAS,
+            linhas,
+            self._ordenacao_ofertas,
+            self._preencher_tabela_ofertas,
+        )
 
     def _aplicar_oferta_na_simulacao(self, oferta: OfertaRendaFixaBancaria) -> None:
         if self._modo == "lci_lca" and self._combo_produto is not None:

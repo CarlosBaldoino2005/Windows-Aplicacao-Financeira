@@ -7,6 +7,12 @@ import customtkinter as ctk
 
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
+from src.View.grid_ordenacao_helper import (
+    EstadoOrdenacaoColuna,
+    LinhaTabelaOrdenavel,
+    ordenar_linhas_tabela,
+    titulo_coluna_ordenada,
+)
 from src.View.tema import CORES
 
 
@@ -20,20 +26,70 @@ def adicionar_cabecalho_tabela(
     pai: ctk.CTkFrame,
     colunas: list[str],
     opcoes_fonte: OpcoesFonteGrid | None = None,
+    estado_ordenacao: EstadoOrdenacaoColuna | None = None,
+    ao_clicar_coluna: Callable[[int], None] | None = None,
 ) -> None:
-    """Cabecalho neutro (sem zebrado), no padrao global de grids."""
+    """Cabecalho neutro; clique na coluna ordena quando estado_ordenacao e callback forem informados."""
     opcoes = _resolver_opcoes(opcoes_fonte)
     linha = ctk.CTkFrame(pai, fg_color=CORES["primaria"], corner_radius=6)
     linha.pack(fill="x", padx=2, pady=(2, 0))
 
     for indice, texto in enumerate(colunas):
         linha.columnconfigure(indice, weight=1)
-        ctk.CTkLabel(
+        rotulo_texto = titulo_coluna_ordenada(texto, indice, estado_ordenacao)
+        rotulo = ctk.CTkLabel(
             linha,
-            text=texto,
+            text=rotulo_texto,
             font=ctk.CTkFont(size=opcoes.fonte_cabecalho_ctk, weight="bold"),
             text_color=CORES["textoInverso"],
-        ).grid(row=0, column=indice, padx=8, pady=opcoes.padding_celula_y, sticky="w")
+        )
+        rotulo.grid(row=0, column=indice, padx=8, pady=opcoes.padding_celula_y, sticky="w")
+        if ao_clicar_coluna is not None:
+            indice_coluna = indice
+
+            def _clicar(_evento=None, coluna=indice_coluna) -> None:
+                ao_clicar_coluna(coluna)
+
+            rotulo.bind("<Button-1>", _clicar, add="+")
+            try:
+                rotulo.configure(cursor="hand2")
+            except Exception:
+                pass
+
+
+def renderizar_tabela_zebrada(
+    pai: ctk.CTkFrame,
+    colunas: list[str],
+    linhas: list[LinhaTabelaOrdenavel],
+    estado_ordenacao: EstadoOrdenacaoColuna,
+    ao_mudar_ordenacao: Callable[[], None],
+    opcoes_fonte: OpcoesFonteGrid | None = None,
+    largura_wrap: int | None = None,
+) -> None:
+    """Desenha cabecalho ordenavel e linhas zebradas ja ordenadas."""
+
+    def _clicar_coluna(indice: int) -> None:
+        estado_ordenacao.alternar(indice)
+        ao_mudar_ordenacao()
+
+    adicionar_cabecalho_tabela(
+        pai,
+        colunas,
+        opcoes_fonte,
+        estado_ordenacao,
+        _clicar_coluna,
+    )
+    linhas_ordenadas = ordenar_linhas_tabela(linhas, estado_ordenacao)
+    for indice, linha in enumerate(linhas_ordenadas):
+        adicionar_linha_zebrada(
+            pai,
+            linha.valores,
+            indice,
+            cores_celulas=linha.cores_celulas,
+            largura_wrap=largura_wrap,
+            opcoes_fonte=opcoes_fonte,
+            ao_duplo_clique=linha.ao_duplo_clique,
+        )
 
 
 def adicionar_linha_zebrada(

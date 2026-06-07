@@ -11,9 +11,16 @@ from src.Model.cotacao import CotacaoResumo
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.View.formatadores import formatar_moeda, formatar_variacao
+from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE
 from src.View.tema import CORES
 
 _COLUNAS_PADRAO = ("simbolo", "nome", "preco", "variacao")
+_ROTULOS_COLUNA_BASE = {
+    "simbolo": "Acao",
+    "nome": "Nome",
+    "preco": "Preco",
+    "variacao": "Variacao",
+}
 _FONTE_FAMILIA = "Segoe UI"
 
 
@@ -25,7 +32,79 @@ def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
 
 def definir_rotulo_coluna_variacao(tabela: ttk.Treeview, rotulo: str) -> None:
     """Altera o cabecalho da coluna de variacao (ex.: periodo selecionado)."""
-    tabela.heading("variacao", text=rotulo)
+    tabela._rotulo_variacao = rotulo  # type: ignore[attr-defined]
+    _atualizar_cabecalhos_ordenacao(tabela)
+
+
+def _rotulo_base_coluna(tabela: ttk.Treeview, coluna: str) -> str:
+    if coluna == "variacao":
+        return getattr(tabela, "_rotulo_variacao", _ROTULOS_COLUNA_BASE["variacao"])
+    return _ROTULOS_COLUNA_BASE[coluna]
+
+
+def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
+    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
+    descendente = getattr(tabela, "_ordenacao_desc", False)
+    for coluna in _COLUNAS_PADRAO:
+        texto = _rotulo_base_coluna(tabela, coluna)
+        if coluna_ativa == coluna:
+            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
+        tabela.heading(
+            coluna,
+            text=texto,
+            command=lambda c=coluna: _alternar_ordenacao_tabela(tabela, c),
+        )
+
+
+def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
+    if getattr(tabela, "_ordenacao_configurada", False):
+        return
+    tabela._ordenacao_configurada = True  # type: ignore[attr-defined]
+    tabela._coluna_ordenacao = None  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = False  # type: ignore[attr-defined]
+    tabela._rotulo_variacao = _ROTULOS_COLUNA_BASE["variacao"]  # type: ignore[attr-defined]
+    tabela._itens_originais: list[CotacaoResumo] = []  # type: ignore[attr-defined]
+
+    for coluna in _COLUNAS_PADRAO:
+        tabela.heading(
+            coluna,
+            text=_ROTULOS_COLUNA_BASE[coluna],
+            command=lambda c=coluna: _alternar_ordenacao_tabela(tabela, c),
+        )
+
+
+def _alternar_ordenacao_tabela(tabela: ttk.Treeview, coluna: str) -> None:
+    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
+        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
+    else:
+        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+        tabela._ordenacao_desc = False  # type: ignore[attr-defined]
+
+    itens = list(getattr(tabela, "_itens_originais", []))
+    mensagem_vazio = getattr(tabela, "_mensagem_vazio_atual", None)
+    preencher_tabela(tabela, itens, mensagem_vazio)
+
+
+def _ordenar_cotacoes(
+    itens: list[CotacaoResumo],
+    coluna: str | None,
+    descendente: bool,
+) -> list[CotacaoResumo]:
+    if not coluna or not itens:
+        return itens
+
+    def chave(item: CotacaoResumo):
+        if coluna == "simbolo":
+            return item.simbolo.lower()
+        if coluna == "nome":
+            return item.nome.lower()
+        if coluna == "preco":
+            return item.preco
+        if coluna == "variacao":
+            return item.variacao_percentual
+        return ""
+
+    return sorted(itens, key=chave, reverse=descendente)
 
 
 def criar_card_tabela(
@@ -56,10 +135,7 @@ def criar_card_tabela(
     frame_tabela.pack(fill="both", expand=expandir, padx=12, pady=(0, 12))
 
     tabela = ttk.Treeview(frame_tabela, columns=_COLUNAS_PADRAO, show="headings", height=altura)
-    tabela.heading("simbolo", text="Acao")
-    tabela.heading("nome", text="Nome")
-    tabela.heading("preco", text="Preco")
-    tabela.heading("variacao", text="Variacao")
+    _configurar_ordenacao_colunas(tabela)
 
     tabela.pack(fill="both", expand=expandir)
     aplicar_estilo_tabela(tabela, opcoes)
@@ -136,19 +212,27 @@ def preencher_tabela(
     mensagem_vazio: str | None = None,
 ) -> None:
     """Preenche linhas com cotacao formatada em pt-BR."""
+    _configurar_ordenacao_colunas(tabela)
     label_vazio = getattr(tabela, "_label_vazio", None)
     card_pai = getattr(tabela, "_card_pai", None)
+    tabela._itens_originais = list(itens)  # type: ignore[attr-defined]
+    tabela._mensagem_vazio_atual = mensagem_vazio  # type: ignore[attr-defined]
+
+    coluna_ord = getattr(tabela, "_coluna_ordenacao", None)
+    descendente = getattr(tabela, "_ordenacao_desc", False)
+    itens_exibir = _ordenar_cotacoes(itens, coluna_ord, descendente)
 
     for linha in tabela.get_children():
         tabela.delete(linha)
 
-    if not itens:
+    if not itens_exibir:
         if label_vazio is not None:
             texto = mensagem_vazio or "Nenhum registro no momento."
             label_vazio.configure(text=texto)
             label_vazio.pack(fill="x", padx=12, pady=(0, 12))
         if card_pai is not None:
             card_pai.configure(fg_color=CORES["superficie"])
+        _atualizar_cabecalhos_ordenacao(tabela)
         return
 
     if label_vazio is not None:
@@ -156,7 +240,7 @@ def preencher_tabela(
 
     aplicar_estilo_tabela(tabela)
 
-    for i, item in enumerate(itens):
+    for i, item in enumerate(itens_exibir):
         tag = "par" if i % 2 == 0 else "impar"
         tabela.insert(
             "",
@@ -170,3 +254,5 @@ def preencher_tabela(
             ),
             tags=(tag,),
         )
+
+    _atualizar_cabecalhos_ordenacao(tabela)

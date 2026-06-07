@@ -9,7 +9,8 @@ from src.Model.desvalorizacao import AnaliseDesvalorizacao, EventoDesvalorizacao
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.View.formatadores import formatar_moeda, formatar_variacao
-from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
+from src.View.grid_ordenacao_helper import EstadoOrdenacaoColuna, LinhaTabelaOrdenavel
+from src.View.tabela_detalhes_helper import renderizar_tabela_zebrada
 from src.View.tema import CORES
 
 PERIODOS = PERIODOS_MERCADO
@@ -31,6 +32,8 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
         self._controlador = controlador
         self._simbolo = simbolo
         self._modo_cripto = simbolo.endswith("-USD")
+        self._ordenacao_eventos = EstadoOrdenacaoColuna()
+        self._analise_eventos: AnaliseDesvalorizacao | None = None
 
         codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Desvalorizacao — {codigo}")
@@ -286,11 +289,26 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
         analise: AnaliseDesvalorizacao,
         destacar_ultima: bool = False,
     ) -> None:
+        self._analise_eventos = analise
+        self._destacar_ultimo_evento = destacar_ultima
+
         tabela = ctk.CTkFrame(self._painel, fg_color="transparent")
         tabela.pack(fill="x", padx=12, pady=(0, 12))
+        self._frame_tabela_eventos = tabela
+        self._redesenhar_tabela_eventos()
+
+    def _redesenhar_tabela_eventos(self) -> None:
+        analise = self._analise_eventos
+        tabela = getattr(self, "_frame_tabela_eventos", None)
+        if analise is None or tabela is None:
+            return
+
+        for widget in tabela.winfo_children():
+            widget.destroy()
 
         colunas = ("Pico", "Fundo", "Preco pico", "Preco fundo", "Queda %", "Pregões")
-        adicionar_cabecalho_tabela(tabela, colunas)
+        linhas: list[LinhaTabelaOrdenavel] = []
+        destacar_ultima = getattr(self, "_destacar_ultimo_evento", False)
 
         for indice, evento in enumerate(analise.eventos):
             valores = [
@@ -305,4 +323,25 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
             cores = [CORES["texto"]] * 4 + [cor_queda, CORES["texto"]]
             if destacar_ultima and indice == len(analise.eventos) - 1:
                 cores = [CORES["primaria"]] * len(valores)
-            adicionar_linha_zebrada(tabela, valores, indice, cores_celulas=cores)
+            linhas.append(
+                LinhaTabelaOrdenavel(
+                    valores=valores,
+                    chaves=[
+                        evento.data_pico,
+                        evento.data_fundo,
+                        evento.preco_pico,
+                        evento.preco_fundo,
+                        evento.variacao_percentual,
+                        evento.pregões,
+                    ],
+                    cores_celulas=cores,
+                )
+            )
+
+        renderizar_tabela_zebrada(
+            tabela,
+            list(colunas),
+            linhas,
+            self._ordenacao_eventos,
+            self._redesenhar_tabela_eventos,
+        )

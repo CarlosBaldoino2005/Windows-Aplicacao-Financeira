@@ -12,7 +12,8 @@ from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thr
 from src.Tool.formatar_prazo_helper import montar_prazo_legivel, montar_texto_celula_prazo
 from src.View.formatadores import formatar_moeda
 from src.View.janela_detalhes_tesouro import JanelaDetalhesTesouro
-from src.View.tabela_detalhes_helper import adicionar_cabecalho_tabela, adicionar_linha_zebrada
+from src.View.grid_ordenacao_helper import EstadoOrdenacaoColuna, LinhaTabelaOrdenavel
+from src.View.tabela_detalhes_helper import renderizar_tabela_zebrada
 from src.View.tema import CORES
 
 URL_TESOURO_DIRETO = "https://www.tesourodireto.com.br/"
@@ -39,6 +40,7 @@ class JanelaHubTesouro(ctk.CTkToplevel):
         self._familia_selecionada = "Todos"
         self._janela_detalhes: JanelaDetalhesTesouro | None = None
         self._scroll_tabela: ctk.CTkScrollableFrame | None = None
+        self._ordenacao_tabela = EstadoOrdenacaoColuna()
 
         self.title("Tesouro Direto")
         self.configure(fg_color=CORES["fundo"])
@@ -217,8 +219,6 @@ class JanelaHubTesouro(ctk.CTkToplevel):
         for widget in self._scroll_tabela.winfo_children():
             widget.destroy()
 
-        adicionar_cabecalho_tabela(self._scroll_tabela, self._COLUNAS)
-
         filtrados = self._titulos
         if self._familia_selecionada != "Todos":
             filtrados = [t for t in self._titulos if t.familia == self._familia_selecionada]
@@ -232,23 +232,40 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             ).pack(pady=24)
             return
 
-        for indice, titulo in enumerate(filtrados):
+        linhas: list[LinhaTabelaOrdenavel] = []
+        for titulo in filtrados:
             prazo_venc = montar_prazo_legivel(data_fim=titulo.data_vencimento)
-            valores = [
-                titulo.familia,
-                titulo.tipo_titulo,
-                montar_texto_celula_prazo(prazo_venc),
-                self._formatar_taxa(titulo.taxa_venda),
-                self._formatar_taxa(titulo.taxa_compra),
-                formatar_moeda(titulo.pu_venda) if titulo.pu_venda is not None else "—",
-                formatar_moeda(titulo.pu_compra) if titulo.pu_compra is not None else "—",
-            ]
-            adicionar_linha_zebrada(
-                self._scroll_tabela,
-                valores,
-                indice,
-                ao_duplo_clique=lambda ident=titulo.identificador: self._abrir_detalhes(ident),
+            linhas.append(
+                LinhaTabelaOrdenavel(
+                    valores=[
+                        titulo.familia,
+                        titulo.tipo_titulo,
+                        montar_texto_celula_prazo(prazo_venc),
+                        self._formatar_taxa(titulo.taxa_venda),
+                        self._formatar_taxa(titulo.taxa_compra),
+                        formatar_moeda(titulo.pu_venda) if titulo.pu_venda is not None else "—",
+                        formatar_moeda(titulo.pu_compra) if titulo.pu_compra is not None else "—",
+                    ],
+                    chaves=[
+                        titulo.familia,
+                        titulo.tipo_titulo,
+                        prazo_venc.dias_totais,
+                        titulo.taxa_venda if titulo.taxa_venda is not None else -1.0,
+                        titulo.taxa_compra if titulo.taxa_compra is not None else -1.0,
+                        titulo.pu_venda if titulo.pu_venda is not None else -1.0,
+                        titulo.pu_compra if titulo.pu_compra is not None else -1.0,
+                    ],
+                    ao_duplo_clique=lambda ident=titulo.identificador: self._abrir_detalhes(ident),
+                )
             )
+
+        renderizar_tabela_zebrada(
+            self._scroll_tabela,
+            self._COLUNAS,
+            linhas,
+            self._ordenacao_tabela,
+            self._preencher_tabela,
+        )
 
     @staticmethod
     def _formatar_taxa(valor: float | None) -> str:
