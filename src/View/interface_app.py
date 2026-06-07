@@ -189,87 +189,38 @@ class InterfaceApp(ctk.CTk):
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
         linha_botoes = ctk.CTkFrame(card_acao, fg_color="transparent")
-        linha_botoes.pack(anchor="w", padx=12, pady=(0, 8))
+        linha_botoes.pack(fill="x", padx=12, pady=(0, 8))
 
-        ctk.CTkButton(
-            linha_botoes,
-            text="Pesquisar acao",
-            command=self._abrir_janela_pesquisa_acao,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
+        colunas = 4
+        for indice_coluna in range(colunas):
+            linha_botoes.grid_columnconfigure(indice_coluna, weight=1, uniform="consultas")
 
-        ctk.CTkButton(
-            linha_botoes,
-            text="Acoes favoritas",
-            command=self._abrir_janela_favoritas,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
+        botoes_consultas = [
+            ("Pesquisar acao", self._abrir_janela_pesquisa_acao),
+            ("Acoes favoritas", self._abrir_janela_favoritas),
+            ("Comparar acoes", self._abrir_janela_comparar_acoes),
+            ("Noticias do mercado", self._abrir_janela_noticias),
+            ("Criptomoedas", self._abrir_hub_criptomoedas),
+            ("Empresa + dividendos", self._abrir_hub_empresas_dividendos),
+            ("Fundos imobiliarios", self._abrir_hub_fundos_imobiliarios),
+            ("Acoes por periodo", self._abrir_hub_painel_periodo),
+        ]
 
-        ctk.CTkButton(
-            linha_botoes,
-            text="Comparar acoes",
-            command=self._abrir_janela_comparar_acoes,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
-
-        ctk.CTkButton(
-            linha_botoes,
-            text="Noticias do mercado",
-            command=self._abrir_janela_noticias,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
-
-        ctk.CTkButton(
-            linha_botoes,
-            text="Criptomoedas",
-            command=self._abrir_hub_criptomoedas,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
-
-        ctk.CTkButton(
-            linha_botoes,
-            text="Empresa + dividendos",
-            command=self._abrir_hub_empresas_dividendos,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
-
-        ctk.CTkButton(
-            linha_botoes,
-            text="Fundos imobiliarios",
-            command=self._abrir_hub_fundos_imobiliarios,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left", padx=(0, 10))
-
-        ctk.CTkButton(
-            linha_botoes,
-            text="Acoes por periodo",
-            command=self._abrir_hub_painel_periodo,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            width=200,
-            height=36,
-        ).pack(side="left")
+        for indice, (rotulo, acao) in enumerate(botoes_consultas):
+            ctk.CTkButton(
+                linha_botoes,
+                text=rotulo,
+                command=acao,
+                fg_color=CORES["primaria"],
+                hover_color=CORES["primariaHover"],
+                height=36,
+            ).grid(
+                row=indice // colunas,
+                column=indice % colunas,
+                padx=(0, 10),
+                pady=(0, 8),
+                sticky="ew",
+            )
 
         barra = ctk.CTkFrame(card_acao, fg_color="transparent")
         barra.pack(fill="x", padx=12, pady=(0, 12))
