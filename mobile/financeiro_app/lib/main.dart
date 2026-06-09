@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'config/api_config.dart';
 import 'servicos/api_cliente.dart';
 import 'telas/inicio_tela.dart';
 import 'tema/cores.dart';
@@ -52,9 +53,7 @@ class _SplashTelaState extends State<SplashTela> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _erro = 'Nao foi possivel conectar a API.\n'
-            'Verifique a internet e a URL em lib/config/api_config.dart\n\n'
-            '${e.toString().replaceFirst('Exception: ', '')}';
+        _erro = ApiConfig.mensagemErroConexao(e);
         _carregando = false;
       });
     }

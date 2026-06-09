@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-set APK=%~dp0Financeiro.apk
+set APK=%~dp0Financeiro-emulador.apk
 set AVD=Financeiro_Emulador
 set ANDROID_HOME=C:\Android\Sdk
 set ANDROID_SDK_ROOT=%ANDROID_HOME%
@@ -14,8 +14,9 @@ set RAIZ=%~dp0..
 set API_URL=http://127.0.0.1:8000/api/saude
 
 if not exist "%APK%" (
-    echo APK nao encontrado: %APK%
-    echo Gere antes com: gerar_apk.bat
+    echo APK de emulador nao encontrado: %APK%
+    echo Gere antes com: gerar_apk_emulador.bat
+    echo Para celular fisico use: gerar_apk.bat ^(API Render^)
     pause
     exit /b 1
 )

@@ -13,7 +13,6 @@ if not exist "%FLUTTER%" (
     exit /b 1
 )
 
-REM --- Java (JDK) necessario para o Gradle ---
 if not defined JAVA_HOME (
     if exist "C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot\bin\java.exe" (
         set "JAVA_HOME=C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot"
@@ -30,18 +29,13 @@ if not defined JAVA_HOME (
 )
 
 if not defined JAVA_HOME (
-    echo.
-    echo JDK nao encontrado. Instale o Java 17:
-    echo   winget install Microsoft.OpenJDK.17
-    echo.
-    echo Depois feche e abra o terminal, ou defina JAVA_HOME manualmente.
+    echo JDK nao encontrado. Instale: winget install Microsoft.OpenJDK.17
     pause
     exit /b 1
 )
 
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 
-REM --- Android SDK e Gradle fora do OneDrive ---
 if not defined ANDROID_HOME (
     if exist "C:\Android\Sdk\platform-tools\adb.exe" (
         set "ANDROID_HOME=C:\Android\Sdk"
@@ -56,25 +50,15 @@ set "GRADLE_USER_HOME=C:\temp\financeiro_gradle_user"
 if not exist "%WORK_TEMP%" mkdir "%WORK_TEMP%"
 
 echo.
-echo Projeto no OneDrive trava o Gradle. Copiando para build local...
-echo Origem: %ORIGEM%
-echo Build:  %PROJETO%
-echo.
-
+echo Copiando projeto para build local...
 robocopy "%ORIGEM%" "%PROJETO%" /E /XD build .dart_tool android\.gradle android\app\build ios\Flutter\ephemeral macos\Flutter\ephemeral linux\flutter\ephemeral windows\flutter\ephemeral /NFL /NDL /NJH /NJS /nc /ns /np >nul
 if errorlevel 8 (
-    echo Falha ao copiar projeto para %PROJETO%
+    echo Falha ao copiar projeto.
     pause
     exit /b 1
 )
 
 cd /d "%PROJETO%"
-
-if not exist "android\app\build.gradle.kts" if not exist "android\app\build.gradle" (
-    echo Gerando pastas Android...
-    call "%FLUTTER%" create . --project-name financeiro_app --org br.com.financeiro
-)
-
 call "%FLUTTER%" pub get
 if errorlevel 1 (
     echo Falha no pub get.
@@ -83,48 +67,23 @@ if errorlevel 1 (
 )
 
 echo.
-echo JAVA_HOME=%JAVA_HOME%
-if defined ANDROID_HOME echo ANDROID_HOME=%ANDROID_HOME%
-echo GRADLE_USER_HOME=%GRADLE_USER_HOME%
-echo.
-
-"%JAVA_HOME%\bin\java.exe" -version 2>&1
+echo Gerando APK para emulador (API local 127.0.0.1:8000 + adb reverse)...
+call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=http://127.0.0.1:8000
 if errorlevel 1 (
-    echo Falha ao executar java. Verifique o JDK.
-    pause
-    exit /b 1
-)
-
-call "%FLUTTER%" doctor
-
-echo.
-echo Gerando APK para celular (API na nuvem Render — PC pode estar desligado)...
-call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=https://windows-aplicacao-financeira.onrender.com
-
-if errorlevel 1 (
-    echo.
-    echo Falha no build. Verifique: flutter doctor --android-licenses
+    echo Falha no build.
     pause
     exit /b 1
 )
 
 set APK_BUILD=%PROJETO%\build\app\outputs\flutter-apk\app-release.apk
-set APK_NOME=Financeiro.apk
+set APK_NOME=Financeiro-emulador.apk
 set APK_DEST=%~dp0%APK_NOME%
 set APK_COPIA_PROJETO=%ORIGEM%\%APK_NOME%
 
 copy /Y "%APK_BUILD%" "%APK_DEST%" >nul
-if errorlevel 1 (
-    echo Falha ao copiar APK para %APK_DEST%
-    pause
-    exit /b 1
-)
 copy /Y "%APK_BUILD%" "%APK_COPIA_PROJETO%" >nul
 
 echo.
-echo APK gerado:
-echo %APK_DEST%
-echo.
-echo Copia no app:
-echo %APK_COPIA_PROJETO%
+echo APK emulador gerado: %APK_DEST%
+echo Use com: testar_apk.bat
 pause

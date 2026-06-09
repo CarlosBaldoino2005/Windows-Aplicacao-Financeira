@@ -17,7 +17,7 @@ Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/
 - Painel: Em alta / Em queda / Todas
 - Busca de acoes
 - Favoritos salvos no celular (SharedPreferences)
-- Conexao com API na nuvem ou local
+- Conexao com API na nuvem (Render); celular nao depende do PC ligado
 
 ## Requisitos
 
@@ -38,17 +38,21 @@ cd "c:\Users\Carlos\OneDrive\Windows\Financeiro"
 .\executar_api.bat
 ```
 
-URL no emulador: `http://10.0.2.2:8000` (ja configurada em `lib/config/api_config.dart`).
+### Render (celular fisico — padrao)
 
-### Render (nuvem gratuita)
+O APK gerado por `gerar_apk.bat` usa **sempre** a API na nuvem:
 
-1. Conta em [render.com](https://render.com)
-2. Conecte o repositorio GitHub
-3. Crie **Web Service** com **Docker** (usa `Dockerfile` na raiz)
-4. Health check: `/api/saude`
-5. Copie a URL gerada (ex.: `https://financeiro-api.onrender.com`)
-6. Em `lib/config/api_config.dart`, altere `urlBasePadrao`
-7. Se definiu `FINANCEIRO_API_KEY` no Render, coloque o mesmo valor em `chaveApi`
+`https://windows-aplicacao-financeira.onrender.com`
+
+O PC pode estar desligado; basta internet no celular (Wi-Fi ou dados moveis).
+
+Para publicar outra URL, altere `urlRender` em `lib/config/api_config.dart` e rode `gerar_apk.bat` de novo.
+
+Se definiu `FINANCEIRO_API_KEY` no Render, coloque o mesmo valor em `chaveApi`.
+
+### Emulador no PC (opcional, API local)
+
+Use `gerar_apk_emulador.bat` + `testar_apk.bat` com `executar_api.bat` no PC.
 
 ## 2. Gerar projeto Android (primeira vez)
 
@@ -67,22 +71,18 @@ flutter devices
 flutter run
 ```
 
-## 4. Gerar APK instalavel
+## 4. Gerar APK para o celular
 
 ```powershell
-flutter build apk --release
+cd mobile
+gerar_apk.bat
 ```
 
-APK em: `mobile\Financeiro.apk` (gerado por `gerar_apk.bat`)
+APK em: `mobile\Financeiro.apk` — conecta na API Render (nuvem).
 
 Copie para o celular e instale (habilite "fontes desconhecidas" se necessario).
 
-## Celular fisico + API local
-
-O celular nao alcanca `127.0.0.1` do PC. Use:
-
-- API no **Render** (recomendado), ou
-- IP da rede local do PC, ex.: `http://192.168.0.10:8000` em `api_config.dart` (mesma Wi-Fi)
+**Importante:** se o app ainda mostrar erro com `127.0.0.1`, o APK instalado e antigo. Gere e instale de novo com `gerar_apk.bat`.
 
 ## Proximas fases
 
