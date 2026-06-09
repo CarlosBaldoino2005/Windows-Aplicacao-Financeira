@@ -162,6 +162,50 @@ class MonitoramentoServico:
         self._salvar(atualizados)
         return alterados, None
 
+    def obter_por_simbolo(
+        self,
+        simbolo: str,
+        tipo_ativo: TipoAtivoMonitoramento,
+    ) -> MonitoramentoItem | None:
+        simbolo_ok, erro = self._normalizar_por_tipo(simbolo, tipo_ativo)
+        if erro or not simbolo_ok:
+            return None
+        for item in self.listar():
+            if item.simbolo == simbolo_ok and item.tipo_ativo == tipo_ativo:
+                return item
+        return None
+
+    def sincronizar_limites_carteira(
+        self,
+        simbolo: str,
+        tipo_ativo: TipoAtivoMonitoramento,
+        preco_referencia: float,
+        variacao_pct: float,
+    ) -> tuple[MonitoramentoItem | None, str | None]:
+        """Cria ou atualiza limites com base no preco de compra ± percentual."""
+        if preco_referencia <= 0:
+            return None, "Preco de referencia invalido."
+
+        fator = variacao_pct / 100.0
+        valor_baixo = round(preco_referencia * (1.0 - fator), 4)
+        valor_alto = round(preco_referencia * (1.0 + fator), 4)
+
+        existente = self.obter_por_simbolo(simbolo, tipo_ativo)
+        if existente is not None:
+            return self.atualizar_limites(existente.id, valor_baixo, valor_alto)
+
+        return self.adicionar(simbolo, tipo_ativo, valor_baixo, valor_alto)
+
+    def remover_por_simbolo(
+        self,
+        simbolo: str,
+        tipo_ativo: TipoAtivoMonitoramento,
+    ) -> tuple[bool, str | None]:
+        item = self.obter_por_simbolo(simbolo, tipo_ativo)
+        if item is None:
+            return True, None
+        return self.remover(item.id)
+
     def remover(self, item_id: str) -> tuple[bool, str | None]:
         if not item_id or not str(item_id).strip():
             return False, "Selecione um item para remover."

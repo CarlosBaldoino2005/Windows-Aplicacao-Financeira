@@ -53,6 +53,8 @@ CHAVE_MONITORAMENTO_INTERVALO_ATUALIZACAO_SEGUNDOS = (
     "monitoramento_atualizacao_intervalo_segundos"
 )
 CHAVE_MONITORAMENTO_PAUSADO = "monitoramento_pausado"
+CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT = "carteira_variacao_monitoramento_pct"
+CARTEIRA_VARIACAO_PADRAO_PCT = 10.0
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
 VALOR_PADRAO_DISPONIVEL_CALCULAR_QUANTIDADE = 10000.0
@@ -207,6 +209,40 @@ class ConfigPainelIni:
         if SECAO_PAINEL not in parser:
             parser[SECAO_PAINEL] = {}
         parser[SECAO_PAINEL][CHAVE_MONITORAMENTO_PAUSADO] = "sim" if pausado else "nao"
+        self._gravar(parser)
+
+    def padrao_carteira_variacao_monitoramento_pct(self) -> float:
+        return CARTEIRA_VARIACAO_PADRAO_PCT
+
+    def carregar_carteira_variacao_monitoramento_pct(self) -> float:
+        """Percentual de variacao para limites de monitoramento ao cadastrar na carteira."""
+        from src.Tool.validadores import validar_percentual_carteira
+
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT in secao:
+            pct, _ = validar_percentual_carteira(
+                secao.get(CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT, ""),
+                padrao=self.padrao_carteira_variacao_monitoramento_pct(),
+            )
+            return pct or self.padrao_carteira_variacao_monitoramento_pct()
+
+        padrao = self.padrao_carteira_variacao_monitoramento_pct()
+        self.salvar_carteira_variacao_monitoramento_pct(padrao)
+        return padrao
+
+    def salvar_carteira_variacao_monitoramento_pct(self, valor: float) -> None:
+        from src.Tool.validadores import validar_percentual_carteira
+
+        pct, _ = validar_percentual_carteira(
+            str(valor),
+            padrao=self.padrao_carteira_variacao_monitoramento_pct(),
+        )
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT] = str(
+            pct or self.padrao_carteira_variacao_monitoramento_pct()
+        )
         self._gravar(parser)
 
     def carregar_valor_simulacao_renda_fixa(self) -> float:

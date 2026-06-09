@@ -28,6 +28,7 @@ from src.View.janela_configuracao_painel import (
     abrir_configuracao_painel,
 )
 from src.View.janela_monitoramento import JanelaMonitoramento, abrir_monitoramento
+from src.View.janela_carteira import JanelaCarteira, abrir_carteira
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
     obter_simbolo_duplo_clique_treeview,
@@ -81,6 +82,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_grafico_acao: JanelaGraficoAcao | None = None
         self._janela_configuracao: JanelaConfiguracaoPainel | None = None
         self._janela_monitoramento: JanelaMonitoramento | None = None
+        self._janela_carteira: JanelaCarteira | None = None
         self._botao_alerta_monitoramento: ctk.CTkButton | None = None
         self._botao_monitoramento: ctk.CTkButton | None = None
         self._carga_inicial_painel_feita = False
@@ -186,6 +188,20 @@ class InterfaceApp(ctk.CTk):
         self._janela_configuracao = abrir_configuracao_painel(
             self, self._config_painel, ao_aplicar
         )
+
+    def _abrir_carteira(self) -> None:
+        if self._janela_carteira is not None:
+            try:
+                if self._janela_carteira.winfo_exists():
+                    self._janela_carteira.focus_force()
+                    self._janela_carteira.lift()
+                    self._janela_carteira._atualizar_lista(forcar=True)
+                    return
+            except Exception:
+                pass
+
+        janela = abrir_carteira(self)
+        self._janela_carteira = janela
 
     def _abrir_monitoramento(self) -> None:
         if self._janela_monitoramento is not None:
@@ -324,6 +340,7 @@ class InterfaceApp(ctk.CTk):
             ("Tesouros", self._abrir_hub_tesouro),
             ("LCI/LCA", self._abrir_hub_lci_lca),
             ("CDB", self._abrir_hub_cdb),
+            ("Carteira", self._abrir_carteira),
             ("Monitoramento", self._abrir_monitoramento),
         ]
 

@@ -253,6 +253,45 @@ def validar_quantidade_acoes(
     return valor, None
 
 
+def validar_quantidade_posicao(texto: str) -> tuple[float | None, str | None]:
+    """Valida quantidade de cotas/ativos na carteira (aceita decimais)."""
+    if not texto or not str(texto).strip():
+        return None, "Informe a quantidade."
+
+    limpo = str(texto).strip().replace(" ", "")
+    if "," in limpo and "." in limpo:
+        limpo = limpo.replace(".", "").replace(",", ".")
+    else:
+        limpo = limpo.replace(",", ".")
+
+    try:
+        quantidade = float(limpo)
+    except ValueError:
+        return None, "Quantidade invalida."
+
+    if quantidade <= 0:
+        return None, "A quantidade deve ser maior que zero."
+
+    return round(quantidade, 8), None
+
+
+def validar_percentual_carteira(texto: str, padrao: float = 10.0) -> tuple[float | None, str | None]:
+    """Valida percentual de variacao para monitoramento da carteira (1 a 50)."""
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    limpo = str(texto).strip().replace(",", ".")
+    try:
+        valor = float(limpo)
+    except ValueError:
+        return None, "Informe um percentual numerico (ex.: 10)."
+
+    if valor < 1 or valor > 50:
+        return None, "O percentual deve estar entre 1 e 50."
+
+    return round(valor, 2), None
+
+
 def validar_quantidade_cotas(
     texto: str,
     padrao: int = 100,
