@@ -5,7 +5,11 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from src.Model.cotacao import CotacaoResumo, PontoHistorico, SerieHistorica
-from src.Service.mapeamento_periodo import MAPEAMENTO_PERIODO_YAHOO_CHART
+from src.Service.mapeamento_periodo import (
+    MAPEAMENTO_PERIODO_YAHOO_CHART,
+    dias_do_periodo,
+    periodo_usa_janela_em_dias,
+)
 from src.Service.provedores.util_provedor import data_para_exibicao, requisicao_json
 from src.Tool.registrador_log import RegistradorLog
 
@@ -51,10 +55,21 @@ class ProvedorYahooChart:
                 cfg = MAPEAMENTO_PERIODO_YAHOO_CHART.get(
                     periodo_chave, MAPEAMENTO_PERIODO_YAHOO_CHART["mes"]
                 )
-                url = (
-                    f"{URL_CHART.format(simbolo=quote(simbolo))}"
-                    f"?range={cfg['range']}&interval={cfg['interval']}"
-                )
+                if periodo_usa_janela_em_dias(cfg):
+                    dias = dias_do_periodo(cfg) or 365 * 3
+                    fim = datetime.now()
+                    inicio = fim - timedelta(days=dias)
+                    period1 = int(inicio.timestamp())
+                    period2 = int((fim + timedelta(days=1)).timestamp())
+                    url = (
+                        f"{URL_CHART.format(simbolo=quote(simbolo))}"
+                        f"?period1={period1}&period2={period2}&interval={cfg['interval']}"
+                    )
+                else:
+                    url = (
+                        f"{URL_CHART.format(simbolo=quote(simbolo))}"
+                        f"?range={cfg['range']}&interval={cfg['interval']}"
+                    )
                 rotulo = periodo_chave
 
             dados = requisicao_json(url, self._log)

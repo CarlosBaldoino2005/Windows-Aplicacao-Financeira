@@ -16,18 +16,11 @@ from src.View.placeholders_ui import (
     PLACEHOLDER_COMPARAR_BUSCA_ACAO,
     PLACEHOLDER_COMPARAR_BUSCA_CRIPTO,
 )
+from src.Model.periodos_mercado import PERIODOS_MERCADO
 from src.View.janela_grafico_comparacao import JanelaGraficoComparacao
 from src.View.tema import CORES
 
-PERIODOS = [
-    ("dia", "Dia"),
-    ("semana", "Semana"),
-    ("mes", "Mes"),
-    ("trimestre", "Trimestre"),
-    ("semestre", "Semestre"),
-    ("ano", "Ano"),
-    ("personalizado", "Personalizado"),
-]
+PERIODOS = PERIODOS_MERCADO
 
 
 class JanelaCompararAcoes(ctk.CTkToplevel):

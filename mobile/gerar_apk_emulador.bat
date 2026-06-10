@@ -9,7 +9,7 @@ set PROJETO=%WORK_TEMP%\financeiro_app
 if not exist "%FLUTTER%" (
     echo Flutter nao encontrado. Execute primeiro:
     echo   powershell -ExecutionPolicy Bypass -File "%~dp0..\scripts\instalar_flutter.ps1"
-    pause
+    if /I not "%~1"=="auto" pause
     exit /b 1
 )
 
@@ -30,7 +30,7 @@ if not defined JAVA_HOME (
 
 if not defined JAVA_HOME (
     echo JDK nao encontrado. Instale: winget install Microsoft.OpenJDK.17
-    pause
+    if /I not "%~1"=="auto" pause
     exit /b 1
 )
 
@@ -54,7 +54,7 @@ echo Copiando projeto para build local...
 robocopy "%ORIGEM%" "%PROJETO%" /E /XD build .dart_tool android\.gradle android\app\build ios\Flutter\ephemeral macos\Flutter\ephemeral linux\flutter\ephemeral windows\flutter\ephemeral /NFL /NDL /NJH /NJS /nc /ns /np >nul
 if errorlevel 8 (
     echo Falha ao copiar projeto.
-    pause
+    if /I not "%~1"=="auto" pause
     exit /b 1
 )
 
@@ -62,7 +62,7 @@ cd /d "%PROJETO%"
 call "%FLUTTER%" pub get
 if errorlevel 1 (
     echo Falha no pub get.
-    pause
+    if /I not "%~1"=="auto" pause
     exit /b 1
 )
 
@@ -71,7 +71,7 @@ echo Gerando APK para emulador (API local 127.0.0.1:8000 + adb reverse)...
 call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=http://127.0.0.1:8000
 if errorlevel 1 (
     echo Falha no build.
-    pause
+    if /I not "%~1"=="auto" pause
     exit /b 1
 )
 
@@ -86,4 +86,5 @@ copy /Y "%APK_BUILD%" "%APK_COPIA_PROJETO%" >nul
 echo.
 echo APK emulador gerado: %APK_DEST%
 echo Use com: testar_apk.bat
-pause
+if /I not "%~1"=="auto" pause
+exit /b 0

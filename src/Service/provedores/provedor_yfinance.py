@@ -1,13 +1,17 @@
 """Provedor primario: Yahoo Finance via biblioteca yfinance."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pandas as pd
 import yfinance as yf
 
 from src.Model.cotacao import CotacaoResumo, PontoHistorico, SerieHistorica
-from src.Service.mapeamento_periodo import MAPEAMENTO_PERIODO_YFINANCE as MAPEAMENTO_PERIODO
+from src.Service.mapeamento_periodo import (
+    MAPEAMENTO_PERIODO_YFINANCE as MAPEAMENTO_PERIODO,
+    dias_do_periodo,
+    periodo_usa_janela_em_dias,
+)
 from src.Tool.registrador_log import RegistradorLog
 
 NOME_PROVEDOR = "Yahoo Finance (yfinance)"
@@ -66,13 +70,26 @@ class ProvedorYfinance:
                 rotulo = "personalizado"
             else:
                 cfg = MAPEAMENTO_PERIODO.get(periodo_chave, MAPEAMENTO_PERIODO["mes"])
-                dados = yf.download(
-                    simbolo,
-                    period=cfg["period"],
-                    interval=cfg["interval"],
-                    progress=False,
-                    auto_adjust=True,
-                )
+                if periodo_usa_janela_em_dias(cfg):
+                    dias = dias_do_periodo(cfg) or 365 * 3
+                    fim = datetime.now()
+                    inicio = fim - timedelta(days=dias)
+                    dados = yf.download(
+                        simbolo,
+                        start=inicio.date(),
+                        end=(fim + timedelta(days=1)).date(),
+                        interval=cfg["interval"],
+                        progress=False,
+                        auto_adjust=True,
+                    )
+                else:
+                    dados = yf.download(
+                        simbolo,
+                        period=cfg["period"],
+                        interval=cfg["interval"],
+                        progress=False,
+                        auto_adjust=True,
+                    )
                 rotulo = periodo_chave
 
             return self._serie_de_download(simbolo, rotulo, dados)

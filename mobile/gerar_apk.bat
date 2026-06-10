@@ -97,9 +97,26 @@ if errorlevel 1 (
 
 call "%FLUTTER%" doctor
 
+if not exist "%~dp0celular_api_url.bat" (
+    echo.
+    echo Arquivo celular_api_url.bat nao encontrado.
+    echo Copie celular_api_url.example.bat para celular_api_url.bat
+    echo e defina o IP do PC na rede Wi-Fi ^(ex.: http://192.168.0.10:8000^).
+    echo.
+    pause
+    exit /b 1
+)
+
+call "%~dp0celular_api_url.bat"
+if not defined API_CELULAR_URL (
+    echo API_CELULAR_URL nao definida em celular_api_url.bat
+    pause
+    exit /b 1
+)
+
 echo.
-echo Gerando APK para celular (API na nuvem Render — PC pode estar desligado)...
-call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=https://windows-aplicacao-financeira.onrender.com
+echo Gerando APK para celular ^(API local: %API_CELULAR_URL%^)...
+call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=%API_CELULAR_URL%
 
 if errorlevel 1 (
     echo.

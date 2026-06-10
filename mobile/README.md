@@ -1,62 +1,51 @@
 # Financeiro — App Android (Fase 1)
 
-App instalavel em Flutter que consome a **API FastAPI** do projeto (`api/`).
+App instalavel em Flutter que consome a **API FastAPI local** do projeto (`api/`).
+
+**API Render desativada** — desktop e mobile usam apenas API local (`executar_api.bat`).
 
 Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/cores.dart`).
 
 ## Fase 2 (atual)
 
 - Painel com seletor: **Ações**, **Cripto**, **FIIs** e **Índices**
-- Gráfico de histórico com periodos (dia, semana, mês, etc.)
+- Gráfico de histórico com periodos (dia, semana, mês, 3 anos, 5 anos, etc.)
 - **Mais detalhes**: empresa, indicadores, dividendos e resultados
 - Busca por tipo de ativo
 - Favoritos por tipo (salvos no celular)
-
-## Fase 1
-
-- Painel: Em alta / Em queda / Todas
-- Busca de acoes
-- Favoritos salvos no celular (SharedPreferences)
-- Conexao com API na nuvem (Render); celular nao depende do PC ligado
+- Carteira de investimentos
 
 ## Requisitos
 
-1. **Flutter SDK** — ja pode instalar com o script do projeto:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File "scripts\instalar_flutter.ps1"
-   ```
-   (instala em `C:\src\flutter` e adiciona ao PATH do usuario)
-2. **Android Studio** — obrigatorio para gerar APK ([download](https://developer.android.com/studio))
-3. API no Render: `https://windows-aplicacao-financeira.onrender.com` (ja configurada em `api_config.dart`)
+1. **Flutter SDK** — `scripts\instalar_flutter.ps1`
+2. **Android Studio** — para gerar APK
+3. **API local** rodando no PC: `executar_api.bat` (raiz do projeto)
 
-## 1. Subir a API
-
-### Local (testes no emulador Android)
+## 1. Subir a API no PC
 
 ```powershell
 cd "c:\Users\Carlos\OneDrive\Windows\Financeiro"
 .\executar_api.bat
 ```
 
-### Render (celular fisico — padrao)
+A API escuta em `http://0.0.0.0:8000` (acessivel na rede local).
 
-O APK gerado por `gerar_apk.bat` usa **sempre** a API na nuvem:
+## 2. Celular fisico (Wi-Fi)
 
-`https://windows-aplicacao-financeira.onrender.com`
+1. Copie `mobile\celular_api_url.example.bat` para `mobile\celular_api_url.bat`
+2. Ajuste o IP do PC (mesma rede Wi-Fi), ex.: `set API_CELULAR_URL=http://192.168.0.10:8000`
+3. Execute `mobile\gerar_apk.bat`
+4. Instale `mobile\Financeiro.apk` no celular
 
-O PC pode estar desligado; basta internet no celular (Wi-Fi ou dados moveis).
+O PC precisa estar ligado com `executar_api.bat` em execucao.
 
-Para publicar outra URL, altere `urlRender` em `lib/config/api_config.dart` e rode `gerar_apk.bat` de novo.
+## 3. Emulador no PC
 
-Se definiu `FINANCEIRO_API_KEY` no Render, coloque o mesmo valor em `chaveApi`.
+1. `executar_api.bat`
+2. `mobile\gerar_apk_emulador.bat`
+3. `mobile\testar_apk.bat`
 
-### Emulador no PC (opcional, API local)
-
-Use `gerar_apk_emulador.bat` + `testar_apk.bat` com `executar_api.bat` no PC.
-
-## 2. Gerar projeto Android (primeira vez)
-
-Flutter nao esta no repositorio (pasta `android/`). Gere uma vez:
+## 4. Gerar projeto Android (primeira vez)
 
 ```powershell
 cd mobile\financeiro_app
@@ -64,26 +53,6 @@ flutter create . --project-name financeiro_app --org br.com.financeiro
 flutter pub get
 ```
 
-## 3. Executar no emulador ou celular
+## Desktop
 
-```powershell
-flutter devices
-flutter run
-```
-
-## 4. Gerar APK para o celular
-
-```powershell
-cd mobile
-gerar_apk.bat
-```
-
-APK em: `mobile\Financeiro.apk` — conecta na API Render (nuvem).
-
-Copie para o celular e instale (habilite "fontes desconhecidas" se necessario).
-
-**Importante:** se o app ainda mostrar erro com `127.0.0.1`, o APK instalado e antigo. Gere e instale de novo com `gerar_apk.bat`.
-
-## Proximas fases
-
-- Comparar ativos, noticias, tema escuro, empresas pagadoras de dividendos
+O app desktop (`executar.bat`) **nao usa** a API HTTP nem o Render — acessa Yahoo/Brapi direto em Python.

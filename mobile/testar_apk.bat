@@ -15,10 +15,21 @@ set API_URL=http://127.0.0.1:8000/api/saude
 
 if not exist "%APK%" (
     echo APK de emulador nao encontrado: %APK%
-    echo Gere antes com: gerar_apk_emulador.bat
-    echo Para celular fisico use: gerar_apk.bat ^(API Render^)
-    pause
-    exit /b 1
+    echo Gerando automaticamente ^(primeira vez pode levar 5 a 15 minutos^)...
+    echo.
+    call "%~dp0gerar_apk_emulador.bat" auto
+    if errorlevel 1 (
+        echo Falha ao gerar o APK. Execute manualmente: gerar_apk_emulador.bat
+        pause
+        exit /b 1
+    )
+    if not exist "%APK%" (
+        echo APK nao foi criado apos o build.
+        pause
+        exit /b 1
+    )
+    echo APK gerado com sucesso.
+    echo.
 )
 
 if not exist "%ADB%" (

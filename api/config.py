@@ -7,7 +7,7 @@ VERSAO_API = "1.1.0"
 
 
 def obter_porta() -> int:
-    """Porta do servidor (Render injeta PORT)."""
+    """Porta do servidor (padrao 8000 local; Docker pode injetar PORT)."""
     try:
         return int(os.getenv("PORT", "8000"))
     except ValueError:

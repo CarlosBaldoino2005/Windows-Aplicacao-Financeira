@@ -22,13 +22,15 @@ Toda a interface e logica estao em Python (CustomTkinter + Matplotlib). Nao e ne
 
 ## App Android (Fase 1)
 
-Versao mobile instalavel (Flutter) + API na nuvem. Detalhes em [`mobile/README.md`](mobile/README.md).
+Versao mobile instalavel (Flutter) + API local no PC. Detalhes em [`mobile/README.md`](mobile/README.md).
 
 | Componente | Como rodar |
 |------------|------------|
-| API local | `executar_api.bat` ou `uvicorn api.main:app --reload --port 8000` |
-| API nuvem | Deploy Docker no [Render](https://render.com) (`Dockerfile` + `render.yaml`) |
-| App Android | Instalar Flutter, `flutter create .` em `mobile/financeiro_app`, `flutter run` |
+| Desktop | `executar.bat` — nao usa API HTTP (dados direto via Python) |
+| API local (mobile) | `executar_api.bat` — obrigatoria para o app Android |
+| App Android | `mobile\gerar_apk.bat` (celular na Wi-Fi) ou `gerar_apk_emulador.bat` |
+
+API Render **desativada** (`render.yaml` apenas referencia).
 
 Endpoints iniciais: `/api/saude`, `/api/mercado/painel`, `/api/mercado/cotacao/{simbolo}`, `/api/busca/acoes?q=`.
 

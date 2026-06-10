@@ -17,6 +17,8 @@ _DIAS_POR_PERIODO: dict[str, int] = {
     "trimestre": 92,
     "semestre": 183,
     "ano": 366,
+    "tres_anos": 365 * 3,
+    "cinco_anos": 365 * 5,
 }
 
 

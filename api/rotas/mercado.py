@@ -64,7 +64,10 @@ def obter_cotacao(
 @router.get("/historico/{simbolo}")
 def obter_historico(
     simbolo: str,
-    periodo: str = Query(default="mes", description="dia, semana, mes, trimestre, semestre, ano"),
+    periodo: str = Query(
+        default="mes",
+        description="dia, semana, mes, trimestre, semestre, ano, tres_anos, cinco_anos",
+    ),
     tipo: str = Query(default="acoes", description="acoes, cripto, fiis ou indices"),
 ) -> dict:
     """Serie historica para graficos."""

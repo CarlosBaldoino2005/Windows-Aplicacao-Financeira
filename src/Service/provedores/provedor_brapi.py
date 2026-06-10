@@ -1,11 +1,12 @@
 """Provedor de backup 1: Brapi (acoes da B3, sem token obrigatorio)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from src.Model.cotacao import CotacaoResumo, PontoHistorico, SerieHistorica
-from src.Service.mapeamento_periodo import MAPEAMENTO_PERIODO_BRAPI
+
+from src.Service.mapeamento_periodo import MAPEAMENTO_PERIODO_BRAPI, dias_do_periodo
 from src.Service.provedores.util_provedor import (
     codigo_brapi,
     data_para_exibicao,
@@ -103,6 +104,15 @@ class ProvedorBrapi:
                     volume=int(barra.get("volume") or 0) or None,
                 )
             )
+
+        dias_recorte = dias_do_periodo(cfg) if periodo_chave != "personalizado" else None
+        if dias_recorte:
+            limite = datetime.now() - timedelta(days=dias_recorte)
+            pontos = [
+                p
+                for p in pontos
+                if datetime.fromisoformat(p.data_iso).date() >= limite.date()
+            ]
 
         if not pontos:
             return None

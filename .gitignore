@@ -33,4 +33,7 @@ mobile/**/.flutter-plugins-dependencies
 mobile/**/android/.gradle/
 mobile/**/ios/Pods/
 mobile/Financeiro.apk
+mobile/Financeiro-emulador.apk
 mobile/financeiro_app/Financeiro.apk
+mobile/financeiro_app/Financeiro-emulador.apk
+mobile/celular_api_url.bat

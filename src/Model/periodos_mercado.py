@@ -7,6 +7,8 @@ PERIODOS_MERCADO: list[tuple[str, str]] = [
     ("trimestre", "Trimestre"),
     ("semestre", "Semestre"),
     ("ano", "Ano"),
+    ("tres_anos", "3 anos"),
+    ("cinco_anos", "5 anos"),
     ("personalizado", "Personalizado"),
 ]
 

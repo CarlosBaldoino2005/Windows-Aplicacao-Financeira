@@ -103,7 +103,7 @@ class JanelaHubPainelPeriodo(ctk.CTkToplevel):
             cabecalho,
             text=(
                 "Em alta, em queda e todas as acoes monitoradas com variacao no periodo "
-                "selecionado (dia, semana, mes, trimestre, semestre, ano ou personalizado)."
+                "selecionado (dia, semana, mes, trimestre, semestre, ano, 3 anos, 5 anos ou personalizado)."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],

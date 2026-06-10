@@ -7,6 +7,7 @@ import '../modelos/tipo_ativo.dart';
 import '../servicos/api_cliente.dart';
 import '../tema/cores.dart';
 import '../util/formatadores.dart';
+import '../util/periodos_mercado.dart';
 import '../widgets/estado_carregando.dart';
 import '../widgets/estado_erro.dart';
 import 'detalhes_tela.dart';
@@ -32,15 +33,6 @@ class GraficoTela extends StatefulWidget {
 
 class _GraficoTelaState extends State<GraficoTela> {
   final ApiCliente _api = ApiCliente();
-
-  static const _periodos = [
-    ('dia', 'Dia'),
-    ('semana', 'Semana'),
-    ('mes', 'Mês'),
-    ('trimestre', 'Trimestre'),
-    ('semestre', 'Semestre'),
-    ('ano', 'Ano'),
-  ];
 
   String _periodo = 'mes';
   bool _carregando = true;
@@ -143,7 +135,7 @@ class _GraficoTelaState extends State<GraficoTela> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
-              children: _periodos.map((item) {
+              children: periodosGrafico.map((item) {
                 final selecionado = item.$1 == _periodo;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
