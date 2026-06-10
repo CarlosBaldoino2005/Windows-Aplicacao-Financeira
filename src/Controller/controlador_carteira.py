@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
 from src.Model.carteira import LinhaCarteira, PosicaoCarteira, TipoAtivoCarteira, tipo_carteira_para_monitoramento
+from src.Model.opcoes_atualizacao_automatica import OpcoesAtualizacaoAutomatica
 from src.Model.cotacao import CotacaoResumo
 from src.Model.monitoramento import TipoAtivoMonitoramento
 from src.Service.carteira_servico import CarteiraServico
@@ -105,6 +106,12 @@ class ControladorCarteira:
             return
         self._config.salvar_carteira_variacao_monitoramento_pct(pct)
         self._persistencia.resincronizar_monitoramento_todas()
+
+    def carregar_atualizacao_automatica(self) -> OpcoesAtualizacaoAutomatica:
+        return self._config.carregar_atualizacao_automatica_carteira()
+
+    def salvar_atualizacao_automatica(self, habilitada: bool, intervalo_segundos: int) -> None:
+        self._config.salvar_atualizacao_automatica_carteira(habilitada, intervalo_segundos)
 
     def pesquisar_ativos(
         self,

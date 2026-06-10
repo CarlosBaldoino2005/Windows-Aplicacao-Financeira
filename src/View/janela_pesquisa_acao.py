@@ -11,6 +11,7 @@ from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximiz
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.formatadores import formatar_moeda, formatar_variacao
 from src.View.placeholders_ui import PLACEHOLDER_BUSCA_ACAO, PLACEHOLDER_BUSCA_CRIPTO
+from src.View.janela_detalhes_acao import JanelaDetalhesAcao
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.tema import CORES
 
@@ -29,6 +30,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
         self._modo_cripto = modo_cripto
         self._simbolo_atual: str | None = None
         self._janela_grafico: JanelaGraficoAcao | None = None
+        self._janela_detalhes: JanelaDetalhesAcao | None = None
         self._labels_info: dict[str, ctk.CTkLabel] = {}
 
         self.title("Pesquisar criptomoeda" if modo_cripto else "Pesquisar acao")
@@ -41,10 +43,15 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
         self.focus_force()
 
     def _ao_fechar(self) -> None:
-        if self._janela_grafico is not None:
+        for janela in (self._janela_grafico, self._janela_detalhes):
+            if janela is None:
+                continue
             try:
-                if self._janela_grafico.winfo_exists():
-                    self._janela_grafico._ao_fechar()
+                if janela.winfo_exists():
+                    if hasattr(janela, "_ao_fechar"):
+                        janela._ao_fechar()
+                    else:
+                        janela.destroy()
             except Exception:
                 pass
         self.destroy()
@@ -63,9 +70,9 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Busque por nome ou codigo (ex.: BTC, Bitcoin), selecione e abra o grafico."
+                "Busque por nome ou codigo (ex.: BTC, Bitcoin) e clique em Ver para abrir o grafico."
                 if self._modo_cripto
-                else "Busque por nome ou codigo, selecione a acao e abra o grafico em outra tela."
+                else "Busque por nome ou codigo e clique em Ver para abrir o grafico da acao."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -127,6 +134,17 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             rodape,
             text="Abrir grafico",
             command=self._abrir_janela_grafico,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=160,
+            height=36,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            rodape,
+            text="Mais detalhes",
+            command=self._abrir_mais_detalhes,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
@@ -250,7 +268,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
                 linha,
                 text="Ver",
                 width=80,
-                command=lambda s=item.simbolo: self._selecionar_acao(s),
+                command=lambda s=item.simbolo: self._selecionar_acao(s, abrir_analise=True),
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
@@ -278,7 +296,7 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
             return
         self._selecionar_acao(simbolo)
 
-    def _selecionar_acao(self, simbolo: str) -> None:
+    def _selecionar_acao(self, simbolo: str, *, abrir_analise: bool = False) -> None:
         simbolo_ok, erro = self._normalizar_entrada(simbolo)
         if erro:
             titulo = "Cripto" if self._modo_cripto else "Acao"
@@ -307,10 +325,17 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
                 messagebox.showwarning("Acao", msg_erro, parent=self)
                 return
             self._exibir_info(cotacao)
-            self._label_status.configure(
-                text=f"Dados de {codigo} carregados. Clique em Abrir grafico para analisar.",
-                text_color=CORES["sucesso"],
-            )
+            if abrir_analise:
+                self._abrir_janela_grafico()
+                self._label_status.configure(
+                    text=f"Dados de {codigo} carregados. Grafico aberto em nova janela.",
+                    text_color=CORES["sucesso"],
+                )
+            else:
+                self._label_status.configure(
+                    text=f"Dados de {codigo} carregados. Use Abrir grafico ou Mais detalhes para analisar.",
+                    text_color=CORES["sucesso"],
+                )
 
         self._executar_em_thread(buscar, ao_concluir)
 
@@ -347,5 +372,28 @@ class JanelaPesquisaAcao(ctk.CTkToplevel):
         self._janela_grafico = JanelaGraficoAcao(self, self._controlador, self._simbolo_atual)
         self._label_status.configure(
             text="Grafico aberto em nova janela.",
+            text_color=CORES["sucesso"],
+        )
+
+    def _abrir_mais_detalhes(self) -> None:
+        if not self._simbolo_atual:
+            messagebox.showinfo(
+                "Mais detalhes",
+                "Selecione uma acao nos resultados ou consulte um codigo antes.",
+                parent=self,
+            )
+            return
+
+        if self._janela_detalhes is not None:
+            try:
+                if self._janela_detalhes.winfo_exists():
+                    self._janela_detalhes.focus_force()
+                    return
+            except Exception:
+                pass
+
+        self._janela_detalhes = JanelaDetalhesAcao(self, self._controlador, self._simbolo_atual)
+        self._label_status.configure(
+            text="Mais detalhes aberto em nova janela.",
             text_color=CORES["sucesso"],
         )

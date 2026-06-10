@@ -6,6 +6,8 @@ from pathlib import Path
 
 from src.Model.opcoes_atualizacao_automatica import (
     ATUALIZACAO_AUTOMATICA_HABILITADA_PADRAO,
+    CARTEIRA_ATUALIZACAO_AUTOMATICA_HABILITADA_PADRAO,
+    CARTEIRA_INTERVALO_PADRAO_SEGUNDOS,
     INTERVALO_MAXIMO_SEGUNDOS,
     INTERVALO_MINIMO_SEGUNDOS,
     INTERVALO_PADRAO_SEGUNDOS,
@@ -54,6 +56,8 @@ CHAVE_MONITORAMENTO_INTERVALO_ATUALIZACAO_SEGUNDOS = (
 )
 CHAVE_MONITORAMENTO_PAUSADO = "monitoramento_pausado"
 CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT = "carteira_variacao_monitoramento_pct"
+CHAVE_CARTEIRA_ATUALIZACAO_AUTOMATICA = "carteira_atualizacao_automatica"
+CHAVE_CARTEIRA_INTERVALO_ATUALIZACAO_SEGUNDOS = "carteira_atualizacao_intervalo_segundos"
 CARTEIRA_VARIACAO_PADRAO_PCT = 10.0
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
@@ -242,6 +246,54 @@ class ConfigPainelIni:
             parser[SECAO_PAINEL] = {}
         parser[SECAO_PAINEL][CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT] = str(
             pct or self.padrao_carteira_variacao_monitoramento_pct()
+        )
+        self._gravar(parser)
+
+    def padrao_carteira_atualizacao_automatica_habilitada(self) -> bool:
+        return CARTEIRA_ATUALIZACAO_AUTOMATICA_HABILITADA_PADRAO
+
+    def padrao_carteira_intervalo_atualizacao_segundos(self) -> int:
+        return CARTEIRA_INTERVALO_PADRAO_SEGUNDOS
+
+    def carregar_atualizacao_automatica_carteira(self) -> OpcoesAtualizacaoAutomatica:
+        """Atualizacao periodica exclusiva da tela de carteira de investimentos."""
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_CARTEIRA_ATUALIZACAO_AUTOMATICA in secao:
+            habilitada, _ = validar_sim_nao_config(
+                secao.get(CHAVE_CARTEIRA_ATUALIZACAO_AUTOMATICA, ""),
+                padrao=self.padrao_carteira_atualizacao_automatica_habilitada(),
+            )
+            intervalo, _ = validar_intervalo_atualizacao_segundos(
+                secao.get(CHAVE_CARTEIRA_INTERVALO_ATUALIZACAO_SEGUNDOS, ""),
+                padrao=self.padrao_carteira_intervalo_atualizacao_segundos(),
+            )
+            return OpcoesAtualizacaoAutomatica(
+                habilitada=habilitada,
+                intervalo_segundos=intervalo or self.padrao_carteira_intervalo_atualizacao_segundos(),
+            )
+
+        habilitada = self.padrao_carteira_atualizacao_automatica_habilitada()
+        intervalo = self.padrao_carteira_intervalo_atualizacao_segundos()
+        self.salvar_atualizacao_automatica_carteira(habilitada, intervalo)
+        return OpcoesAtualizacaoAutomatica(habilitada=habilitada, intervalo_segundos=intervalo)
+
+    def salvar_atualizacao_automatica_carteira(
+        self,
+        habilitada: bool,
+        intervalo_segundos: int,
+    ) -> None:
+        intervalo_ok, _ = validar_intervalo_atualizacao_segundos(
+            str(intervalo_segundos),
+            padrao=self.padrao_carteira_intervalo_atualizacao_segundos(),
+        )
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_CARTEIRA_ATUALIZACAO_AUTOMATICA] = (
+            "sim" if habilitada else "nao"
+        )
+        parser[SECAO_PAINEL][CHAVE_CARTEIRA_INTERVALO_ATUALIZACAO_SEGUNDOS] = str(
+            intervalo_ok or self.padrao_carteira_intervalo_atualizacao_segundos()
         )
         self._gravar(parser)
 

@@ -9,15 +9,18 @@ from src.Model.opcoes_atualizacao_automatica import OpcoesAtualizacaoAutomatica
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import janela_ui_ainda_ativa
 
-EscopoAtualizacaoAutomatica = Literal["painel", "monitoramento"]
+EscopoAtualizacaoAutomatica = Literal["painel", "monitoramento", "carteira"]
 
 _registrados_painel: list[weakref.ReferenceType["GerenciadorAtualizacaoAutomatica"]] = []
 _registrados_monitoramento: list[weakref.ReferenceType["GerenciadorAtualizacaoAutomatica"]] = []
+_registrados_carteira: list[weakref.ReferenceType["GerenciadorAtualizacaoAutomatica"]] = []
 
 
 def _lista_por_escopo(escopo: EscopoAtualizacaoAutomatica):
     if escopo == "monitoramento":
         return _registrados_monitoramento
+    if escopo == "carteira":
+        return _registrados_carteira
     return _registrados_painel
 
 
@@ -41,6 +44,11 @@ def notificar_mudanca_configuracao_atualizacao_automatica() -> None:
 def notificar_mudanca_configuracao_atualizacao_automatica_monitoramento() -> None:
     """Reagenda a tela de monitoramento apos salvar sua configuracao."""
     _reagendar_registrados(_registrados_monitoramento)
+
+
+def notificar_mudanca_configuracao_atualizacao_automatica_carteira() -> None:
+    """Reagenda a tela de carteira apos salvar sua configuracao."""
+    _reagendar_registrados(_registrados_carteira)
 
 
 class GerenciadorAtualizacaoAutomatica:
@@ -67,6 +75,8 @@ class GerenciadorAtualizacaoAutomatica:
             self._carregar_opcoes = carregar_opcoes
         elif escopo == "monitoramento":
             self._carregar_opcoes = self._config.carregar_atualizacao_automatica_monitoramento
+        elif escopo == "carteira":
+            self._carregar_opcoes = self._config.carregar_atualizacao_automatica_carteira
         else:
             self._carregar_opcoes = self._config.carregar_atualizacao_automatica
         self._lista_registro.append(self._referencia)

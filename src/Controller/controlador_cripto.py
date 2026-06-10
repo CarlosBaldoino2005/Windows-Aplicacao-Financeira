@@ -5,6 +5,7 @@ from src.Model.cripto_universo import QUANTIDADE_PADRAO_CRIPTO
 from src.Service.busca_cripto_servico import BuscaCriptoServico
 from src.Service.favoritos_cripto_servico import FavoritosCriptoServico
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
+from src.Service.painel_periodo_servico import PainelPeriodoServico
 from src.Service.cripto_historico_fallback import mensagem_erro_historico_cripto
 from src.Service.detalhes_cripto_servico import DetalhesCriptoServico
 from src.Service.noticias_cripto_servico import NoticiasCriptoServico
@@ -28,6 +29,7 @@ class ControladorCripto:
         self._noticias = NoticiasCriptoServico()
         self._traducao_noticias = TraducaoNoticiasServico()
         self._detalhes = DetalhesCriptoServico()
+        self._painel_periodo = PainelPeriodoServico(self._servico)
 
     def pesquisar_acoes(self, termo: str) -> tuple[list, str | None]:
         return self._busca.buscar(termo)
@@ -50,6 +52,34 @@ class ControladorCripto:
             "todas": self._servico.listar_todas_monitoradas(quantidade),
             "quantidade": quantidade,
         }
+
+    def obter_painel_periodo(
+        self,
+        quantidade: int,
+        periodo: str,
+        data_inicio_texto: str | None = None,
+        data_fim_texto: str | None = None,
+    ) -> tuple[dict | None, str | None]:
+        """Painel alta/queda/todas com variacao no periodo (criptomoedas monitoradas)."""
+        dt_inicio = None
+        dt_fim = None
+        if periodo == "personalizado":
+            dt_inicio, err_i = validar_data_ptbr(data_inicio_texto or "")
+            if err_i:
+                return None, err_i
+            dt_fim, err_f = validar_data_ptbr(data_fim_texto or "")
+            if err_f:
+                return None, err_f
+
+        dados = self._painel_periodo.obter_painel(
+            quantidade, periodo, dt_inicio, dt_fim
+        )
+        if dados["total_com_dados"] == 0:
+            return None, (
+                f"Nenhuma criptomoeda com historico no periodo "
+                f"({dados['periodo_rotulo']}). Tente outro intervalo."
+            )
+        return dados, None
 
     def listar_simbolos_favoritos(self) -> list[str]:
         return self._favoritos.listar()

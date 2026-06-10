@@ -9,6 +9,10 @@ INTERVALO_PADRAO_SEGUNDOS = 60
 INTERVALO_MINIMO_SEGUNDOS = 10
 INTERVALO_MAXIMO_SEGUNDOS = 3600
 
+# Carteira: atualizacao periodica ligada por padrao a cada 10 s.
+CARTEIRA_ATUALIZACAO_AUTOMATICA_HABILITADA_PADRAO = True
+CARTEIRA_INTERVALO_PADRAO_SEGUNDOS = 10
+
 
 @dataclass(frozen=True)
 class OpcoesAtualizacaoAutomatica:

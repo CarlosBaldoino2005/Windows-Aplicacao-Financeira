@@ -9,6 +9,15 @@ from src.View import mensagem_helper as messagebox
 from src.Controller.controlador_carteira import ControladorCarteira
 from src.Model.carteira import LinhaCarteira, PosicaoCarteira, tipo_carteira_para_monitoramento
 from src.Model.monitoramento import TipoAtivoMonitoramento
+from src.Model.opcoes_atualizacao_automatica import (
+    INTERVALO_MAXIMO_SEGUNDOS,
+    INTERVALO_MINIMO_SEGUNDOS,
+)
+from src.Tool.atualizacao_automatica_helper import (
+    GerenciadorAtualizacaoAutomatica,
+    notificar_mudanca_configuracao_atualizacao_automatica_carteira,
+)
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.controlador_ativo_helper import obter_controlador_por_tipo
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.icone_engrenagem_helper import criar_botao_engrenagem
@@ -28,6 +37,7 @@ from src.View.tabela_carteira_helper import (
     obter_id_duplo_clique_carteira,
     preencher_grid_carteira,
 )
+from src.Tool.validadores import validar_intervalo_atualizacao_segundos, validar_percentual_carteira
 from src.View.tema import CORES
 
 
@@ -38,6 +48,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         super().__init__(pai)
         self._janela_pai = pai
         self._controlador = ControladorCarteira()
+        self._config_painel = ConfigPainelIni()
         self._janela_form = None
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._tabela: ttk.Treeview | None = None
@@ -54,10 +65,20 @@ class JanelaCarteira(ctk.CTkToplevel):
         configurar_janela_maximizada(self, janela_pai=pai)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
+
+        self._atualizador_auto = GerenciadorAtualizacaoAutomatica(
+            self,
+            self._config_painel,
+            lambda: self._atualizar_lista(automatico=True),
+            escopo="carteira",
+        )
+        self._atualizador_auto.iniciar()
+        self._atualizar_indicador_automatico()
         self.after(200, lambda: self._atualizar_lista(forcar=True))
 
     def _ao_fechar(self) -> None:
         self._versao_atualizacao += 1
+        self._atualizador_auto.parar()
         liberar_grid_carteira(self._tabela)
         if self._janela_grafico is not None:
             try:
@@ -145,6 +166,14 @@ class JanelaCarteira(ctk.CTkToplevel):
         )
         self._label_status.pack(side="left", anchor="w")
 
+        self._label_auto = ctk.CTkLabel(
+            barra_status,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+        )
+        self._label_auto.pack(side="right", anchor="e")
+
         barra = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra.pack(fill="x", padx=16, pady=(0, 12))
 
@@ -206,7 +235,7 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         criar_botao_engrenagem(
             grupo_direita,
-            command=self._configurar_variacao,
+            command=self._abrir_configuracao,
             width=36,
             height=36,
         ).pack(side="right")
@@ -388,19 +417,31 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         self._atualizar_lista(forcar=True)
 
-    def _configurar_variacao(self) -> None:
+    def _atualizar_indicador_automatico(self) -> None:
+        opcoes = self._atualizador_auto.obter_opcoes()
+        if opcoes.habilitada:
+            texto = f"Auto: a cada {opcoes.intervalo_segundos} s"
+            cor = CORES["sucesso"]
+        else:
+            texto = "Auto: desligado"
+            cor = CORES["textoSecundario"]
+        self._label_auto.configure(text=texto, text_color=cor)
+
+    def _abrir_configuracao(self) -> None:
         dialogo = ctk.CTkToplevel(self)
-        dialogo.title("Variacao do monitoramento")
+        dialogo.title("Configuracao da carteira")
         dialogo.configure(fg_color=CORES["fundo"])
         dialogo.resizable(False, False)
 
         painel = ctk.CTkFrame(dialogo, fg_color=CORES["superficie"], corner_radius=12)
         painel.pack(fill="both", expand=True, padx=16, pady=16)
 
+        opcoes_auto = self._controlador.carregar_atualizacao_automatica()
+
         ctk.CTkLabel(
             painel,
-            text="Percentual (%) sobre o preco de compra",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            text="Variacao do monitoramento",
+            font=ctk.CTkFont(size=14, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(16, 4))
 
@@ -411,23 +452,120 @@ class JanelaCarteira(ctk.CTkToplevel):
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
-        entrada = ctk.CTkEntry(painel, width=120)
-        entrada.insert(0, f"{self._variacao_pct:.0f}")
-        entrada.pack(anchor="w", padx=16, pady=(0, 12))
+        entrada_variacao = ctk.CTkEntry(painel, width=120)
+        entrada_variacao.insert(0, f"{self._variacao_pct:.0f}")
+        entrada_variacao.pack(anchor="w", padx=16, pady=(0, 12))
+
+        ctk.CTkLabel(
+            painel,
+            text="Atualizacao automatica",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=16, pady=(4, 4))
+
+        ctk.CTkLabel(
+            painel,
+            text="Atualiza cotacoes, resumo e dividendos sem clicar em Atualizar cotacoes.",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=380,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        linha_auto = ctk.CTkFrame(painel, fg_color="transparent")
+        linha_auto.pack(fill="x", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(
+            linha_auto,
+            text="Automatico",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(side="left", padx=(0, 12))
+
+        seletor_auto = ctk.CTkSegmentedButton(
+            linha_auto,
+            values=["Sim", "Nao"],
+            fg_color=CORES["borda"],
+            selected_color=CORES["primaria"],
+            selected_hover_color=CORES["primariaHover"],
+            unselected_color=CORES["superficie"],
+            unselected_hover_color=CORES["zebraEscura"],
+            text_color=CORES["texto"],
+        )
+        seletor_auto.set("Sim" if opcoes_auto.habilitada else "Nao")
+        seletor_auto.pack(side="left")
+
+        linha_intervalo = ctk.CTkFrame(painel, fg_color="transparent")
+        linha_intervalo.pack(fill="x", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(
+            linha_intervalo,
+            text="Intervalo (segundos)",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(side="left", padx=(0, 12))
+
+        entrada_intervalo = ctk.CTkEntry(linha_intervalo, width=80, justify="center")
+        entrada_intervalo.insert(0, str(opcoes_auto.intervalo_segundos))
+        entrada_intervalo.pack(side="left")
+
+        def ao_alterar_automatico(valor: str) -> None:
+            estado = "normal" if valor == "Sim" else "disabled"
+            entrada_intervalo.configure(state=estado)
+
+        seletor_auto.configure(command=ao_alterar_automatico)
+        ao_alterar_automatico(seletor_auto.get())
+
+        ctk.CTkLabel(
+            painel,
+            text=(
+                f"Padrao: ligado, {self._config_painel.padrao_carteira_intervalo_atualizacao_segundos()} s "
+                f"({INTERVALO_MINIMO_SEGUNDOS} a {INTERVALO_MAXIMO_SEGUNDOS})."
+            ),
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+        ).pack(anchor="w", padx=16, pady=(0, 8))
 
         def fechar_dialogo() -> None:
             liberar_modal_janela_filha(dialogo)
             dialogo.destroy()
 
         def salvar() -> None:
-            from src.Tool.validadores import validar_percentual_carteira
-
-            pct, erro = validar_percentual_carteira(entrada.get())
+            pct, erro = validar_percentual_carteira(entrada_variacao.get())
             if erro or pct is None:
                 messagebox.showwarning("Configuracao", erro or "Valor invalido.", parent=dialogo)
                 return
-            self._controlador.salvar_variacao_monitoramento_pct(pct)
+
+            habilitada = seletor_auto.get() == "Sim"
+            intervalo, erro_intervalo = validar_intervalo_atualizacao_segundos(
+                entrada_intervalo.get(),
+                padrao=self._config_painel.padrao_carteira_intervalo_atualizacao_segundos(),
+            )
+            if erro_intervalo:
+                messagebox.showwarning("Intervalo", erro_intervalo, parent=dialogo)
+                return
+            if intervalo is None:
+                messagebox.showwarning(
+                    "Intervalo",
+                    "Informe o intervalo em segundos.",
+                    parent=dialogo,
+                )
+                return
+
+            try:
+                self._controlador.salvar_variacao_monitoramento_pct(pct)
+                self._controlador.salvar_atualizacao_automatica(habilitada, intervalo)
+            except OSError:
+                messagebox.showerror(
+                    "Configuracao",
+                    "Nao foi possivel gravar dados/painel.ini.",
+                    parent=dialogo,
+                )
+                return
+
             self._variacao_pct = pct
+            notificar_mudanca_configuracao_atualizacao_automatica_carteira()
+            self._atualizar_indicador_automatico()
             fechar_dialogo()
             self._atualizar_lista(forcar=True)
 
@@ -452,7 +590,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             width=100,
         ).pack(side="right", padx=(0, 8))
 
-        largura, altura = 400, 220
+        largura, altura = 440, 420
         self._centralizar_dialogo_sobre_pai(dialogo, largura, altura)
         configurar_janela_filha_modal(dialogo, self)
         dialogo.protocol("WM_DELETE_WINDOW", fechar_dialogo)
