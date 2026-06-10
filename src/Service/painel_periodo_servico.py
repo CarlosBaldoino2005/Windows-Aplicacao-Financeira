@@ -6,17 +6,27 @@ from datetime import datetime
 
 from src.Model.cotacao import CotacaoResumo, SerieHistorica
 from src.Model.periodos_mercado import rotulo_periodo_por_chave
+from collections.abc import Callable
+
 from src.Service.mercado_servico import MercadoServico
 from src.Tool.registrador_log import RegistradorLog
 
 _MAX_WORKERS = 4
 
 
+def _resolver_listar_simbolos(mercado) -> Callable[[int], list[str]]:
+    """Acoes usam listar_acoes_monitoradas; FIIs/cripto usam listar_monitoradas."""
+    if hasattr(mercado, "listar_monitoradas"):
+        return mercado.listar_monitoradas
+    return mercado.listar_acoes_monitoradas
+
+
 class PainelPeriodoServico:
-    """Calcula desempenho das acoes entre o inicio e o fim do periodo escolhido."""
+    """Calcula desempenho dos ativos entre o inicio e o fim do periodo escolhido."""
 
     def __init__(self, mercado: MercadoServico | None = None) -> None:
         self._mercado = mercado or MercadoServico()
+        self._listar_simbolos = _resolver_listar_simbolos(self._mercado)
         self._log = RegistradorLog()
 
     def obter_painel(
@@ -26,7 +36,7 @@ class PainelPeriodoServico:
         data_inicio: datetime | None = None,
         data_fim: datetime | None = None,
     ) -> dict:
-        simbolos = self._mercado.listar_acoes_monitoradas(quantidade)
+        simbolos = self._listar_simbolos(quantidade)
         resumos = self._listar_resumos_periodo(
             simbolos, periodo_chave, data_inicio, data_fim
         )
