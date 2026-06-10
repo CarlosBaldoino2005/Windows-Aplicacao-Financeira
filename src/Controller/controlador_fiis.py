@@ -6,6 +6,7 @@ from src.Service.busca_fiis_servico import BuscaFiisServico
 from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.favoritos_fiis_servico import FavoritosFiisServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
+from src.Service.painel_dy_fiis_servico import PainelDyFiisServico
 from src.Service.painel_periodo_servico import PainelPeriodoServico
 from src.Service.noticias_mercado_servico import NoticiasMercadoServico
 from src.Service.traducao_noticias_servico import TraducaoNoticiasServico
@@ -23,6 +24,7 @@ class ControladorFiis:
         self._noticias = NoticiasMercadoServico()
         self._traducao_noticias = TraducaoNoticiasServico()
         self._painel_periodo = PainelPeriodoServico(self._servico)
+        self._painel_dy = PainelDyFiisServico(self._servico)
 
     def pesquisar_acoes(self, termo: str) -> tuple[list, str | None]:
         return self._busca.buscar(termo)
@@ -70,6 +72,32 @@ class ControladorFiis:
         if dados["total_com_dados"] == 0:
             return None, (
                 f"Nenhum FII com historico no periodo "
+                f"({dados['periodo_rotulo']}). Tente outro intervalo."
+            )
+        return dados, None
+
+    def obter_painel_dy(
+        self,
+        quantidade: int,
+        periodo: str,
+        data_inicio_texto: str | None = None,
+        data_fim_texto: str | None = None,
+    ) -> tuple[dict | None, str | None]:
+        """Painel maior/menor/todos os DY de FIIs no periodo escolhido."""
+        dt_inicio = None
+        dt_fim = None
+        if periodo == "personalizado":
+            dt_inicio, err_i = validar_data_ptbr(data_inicio_texto or "")
+            if err_i:
+                return None, err_i
+            dt_fim, err_f = validar_data_ptbr(data_fim_texto or "")
+            if err_f:
+                return None, err_f
+
+        dados = self._painel_dy.obter_painel(quantidade, periodo, dt_inicio, dt_fim)
+        if dados["total_com_dados"] == 0:
+            return None, (
+                f"Nenhum FII com DY calculavel no periodo "
                 f"({dados['periodo_rotulo']}). Tente outro intervalo."
             )
         return dados, None

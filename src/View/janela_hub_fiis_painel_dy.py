@@ -1,6 +1,7 @@
-"""Hub de fundos imobiliarios (mesma estrutura do painel Empresa + dividendos)."""
+"""Hub de FIIs com painel por Dividend Yield (DY) no periodo."""
 from __future__ import annotations
 
+from datetime import datetime
 from tkinter import ttk
 
 from src.View import mensagem_helper as messagebox
@@ -9,6 +10,7 @@ import customtkinter as ctk
 
 from src.Controller.controlador_fiis import ControladorFiis
 from src.Model.cotacao import CotacaoResumo
+from src.Model.periodos_mercado import PERIODOS_MERCADO, periodo_chave_por_rotulo
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.atualizacao_automatica_helper import GerenciadorAtualizacaoAutomatica
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
@@ -18,10 +20,10 @@ from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_noticias_mercado import JanelaNoticiasMercado
 from src.View.janela_pesquisa_acao import JanelaPesquisaAcao
-from src.View.janela_hub_fiis_painel_dy import JanelaHubFiisPainelDy
-from src.View.janela_hub_fiis_painel_periodo import JanelaHubFiisPainelPeriodo
 from src.View.tabela_mercado_helper import (
     criar_card_tabela,
+    definir_rotulo_coluna_simbolo,
+    definir_rotulo_coluna_variacao,
     obter_simbolo_duplo_clique_treeview,
     preencher_tabela as preencher_tabela_mercado,
     reaplicar_fonte_em_tabelas,
@@ -29,20 +31,19 @@ from src.View.tabela_mercado_helper import (
 from src.View.tema import CORES
 
 
-class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
-    """Painel dedicado a fundos imobiliarios (FIIs)."""
+class JanelaHubFiisPainelDy(ctk.CTkToplevel):
+    """Ranking de FIIs por DY (proventos / preco da cota) no periodo escolhido."""
 
     def __init__(self, pai: ctk.CTk) -> None:
         super().__init__(pai)
         self._controlador = ControladorFiis()
         self._config_painel = ConfigPainelIni()
+        self._periodo_rotulo_atual = "Mes"
         self._janela_pesquisa: JanelaPesquisaAcao | None = None
         self._janela_favoritas: JanelaFavoritas | None = None
         self._janela_comparar: JanelaCompararAcoes | None = None
         self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_grafico: JanelaGraficoAcao | None = None
-        self._janela_fiis_periodo: JanelaHubFiisPainelPeriodo | None = None
-        self._janela_fiis_dy: JanelaHubFiisPainelDy | None = None
         self._carga_inicial_feita = False
         self._painel_buscando = False
         self._atualizador_auto = None
@@ -56,12 +57,12 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
             ao_reagendar_auto=self._reagendar_atualizacao_automatica,
         )
 
-        self.title("Fundos imobiliarios")
+        self.title("FIIs por DY")
         self.configure(fg_color=CORES["fundo"])
         self.minsize(900, 600)
 
         self._montar_layout()
-        configurar_janela_maximizada(self)
+        configurar_janela_maximizada(self, janela_pai=pai)
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
         self.after(200, self._executar_carga_inicial)
@@ -97,13 +98,15 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         cabecalho.pack(fill="x")
 
-        self._config_hub.montar_titulo_com_engrenagem(cabecalho, "Fundos imobiliarios")
+        self._config_hub.montar_titulo_com_engrenagem(cabecalho, "FIIs por DY")
 
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Somente FIIs da B3. Graficos, favoritos, comparacao e "
-                "historico de proventos em Mais detalhes."
+                "Dividend Yield (DY): percentual de proventos pagos no periodo em relacao "
+                "ao preco atual da cota. Abas Em alta (maior DY), Em queda (menor DY) e "
+                "Todas. Periodos: dia, semana, mes, trimestre, semestre, ano, 3 anos, "
+                "5 anos ou personalizado."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -129,39 +132,61 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             card,
-            text="Consultas",
+            text="Consultas e periodo",
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=12, pady=(12, 4))
 
-        ctk.CTkLabel(
-            card,
-            text="Pesquise FIIs, favoritos, compare desempenho e leia noticias.",
-            font=ctk.CTkFont(size=12),
-            text_color=CORES["textoSecundario"],
-        ).pack(anchor="w", padx=12, pady=(0, 8))
-
-        linha = ctk.CTkFrame(card, fg_color="transparent")
-        linha.pack(anchor="w", padx=12, pady=(0, 8))
+        linha_botoes = ctk.CTkFrame(card, fg_color="transparent")
+        linha_botoes.pack(anchor="w", padx=12, pady=(0, 8))
 
         for texto, comando in (
             ("Pesquisar FII", self._abrir_pesquisa),
             ("Favoritos", self._abrir_favoritas),
             ("Comparar", self._abrir_comparar),
             ("Noticias", self._abrir_noticias),
-            ("FIIs por periodo", self._abrir_fiis_por_periodo),
-            ("FIIs por DY", self._abrir_fiis_por_dy),
         ):
             ctk.CTkButton(
-                linha,
+                linha_botoes,
                 text=texto,
                 command=comando,
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
+                text_color=CORES.get("textoInverso", "#FFFFFF"),
                 width=170,
                 height=36,
             ).pack(side="left", padx=(0, 8))
+
+        linha_periodo = ctk.CTkFrame(card, fg_color="transparent")
+        linha_periodo.pack(fill="x", padx=12, pady=(0, 8))
+
+        ctk.CTkLabel(linha_periodo, text="Periodo").pack(side="left", padx=(0, 8))
+        self._combo_periodo = ctk.CTkComboBox(
+            linha_periodo,
+            values=[p[1] for p in PERIODOS_MERCADO],
+            width=140,
+            command=self._alternar_datas,
+        )
+        self._combo_periodo.set("Mes")
+        self._combo_periodo.pack(side="left", padx=(0, 12))
+
+        ctk.CTkButton(
+            linha_periodo,
+            text="Atualizar painel",
+            command=self._carregar_painel,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=140,
+        ).pack(side="left", padx=(0, 12))
+
+        self._frame_datas = ctk.CTkFrame(linha_periodo, fg_color="transparent")
+        ctk.CTkLabel(self._frame_datas, text="Inicio (dd/mm/aaaa)").pack(side="left", padx=(0, 6))
+        self._entrada_inicio = ctk.CTkEntry(self._frame_datas, width=110)
+        self._entrada_inicio.pack(side="left", padx=(0, 12))
+        ctk.CTkLabel(self._frame_datas, text="Fim (dd/mm/aaaa)").pack(side="left", padx=(0, 6))
+        self._entrada_fim = ctk.CTkEntry(self._frame_datas, width=110)
+        self._entrada_fim.pack(side="left")
 
         barra = ctk.CTkFrame(card, fg_color="transparent")
         barra.pack(fill="x", padx=12, pady=(0, 12))
@@ -169,20 +194,11 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
         qtd = self._config_painel.carregar()
         self._label_status = ctk.CTkLabel(
             barra,
-            text=f"Carregando ate {qtd} FIIs em cada aba...",
+            text=f"Calculando DY no periodo Mes para ate {qtd} FIIs...",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         )
         self._label_status.pack(side="left")
-
-        ctk.CTkButton(
-            barra,
-            text="Atualizar cotacoes",
-            command=self._carregar_painel,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-        ).pack(side="right")
 
     def _reagendar_atualizacao_automatica(self) -> None:
         if self._atualizador_auto is not None:
@@ -201,6 +217,15 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
         else:
             self.after(200, self._executar_carga_inicial)
         self._reagendar_atualizacao_automatica()
+
+    def _periodo_chave(self) -> str:
+        return periodo_chave_por_rotulo(self._combo_periodo.get())
+
+    def _alternar_datas(self, _valor=None) -> None:
+        if self._periodo_chave() == "personalizado":
+            self._frame_datas.pack(side="left", padx=(12, 0))
+        else:
+            self._frame_datas.pack_forget()
 
     def _montar_painel_cotacoes(self) -> None:
         secao = ctk.CTkFrame(self, fg_color=CORES["fundo"])
@@ -228,30 +253,52 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
 
         self._tabela_alta = self._criar_tabela_aba(
             self._aba_alta,
-            "FIIs em alta no dia (duplo clique abre o grafico)",
+            self._titulo_aba("alta"),
         )
         self._tabela_queda = self._criar_tabela_aba(
             self._aba_queda,
-            "FIIs em queda no dia (duplo clique abre o grafico)",
+            self._titulo_aba("queda"),
         )
         self._tabela_todas = self._criar_tabela_aba(
             self._aba_todas,
-            "Todos os fundos imobiliarios monitorados (duplo clique abre o grafico)",
+            self._titulo_aba("todas"),
         )
         self._trocar_aba("Em alta")
+
+    def _titulo_aba(self, tipo: str) -> str:
+        periodo = self._periodo_rotulo_atual
+        textos = {
+            "alta": f"Maior DY no periodo: {periodo}",
+            "queda": f"Menor DY no periodo: {periodo}",
+            "todas": f"Todos os FIIs por DY no periodo: {periodo}",
+        }
+        return textos.get(tipo, f"FIIs — DY {periodo}") + " (duplo clique abre o grafico)"
+
+    def _atualizar_titulos_abas(self) -> None:
+        for tabela, tipo in (
+            (self._tabela_alta, "alta"),
+            (self._tabela_queda, "queda"),
+            (self._tabela_todas, "todas"),
+        ):
+            label = getattr(tabela, "_label_titulo_card", None)
+            if label is not None:
+                label.configure(text=self._titulo_aba(tipo))
 
     def _criar_tabela_aba(self, aba: ctk.CTkFrame, titulo: str) -> ttk.Treeview:
         frame = ctk.CTkFrame(aba, fg_color=CORES["fundo"])
         frame.pack(fill="both", expand=True, padx=4, pady=4)
         scroll = ctk.CTkScrollableFrame(frame, fg_color=CORES["fundo"])
         scroll.pack(fill="both", expand=True)
-        return criar_card_tabela(
+        tabela = criar_card_tabela(
             scroll,
             titulo,
             altura=14,
             ao_duplo_clique=self._ao_duplo_clique,
             expandir=True,
         )
+        definir_rotulo_coluna_simbolo(tabela, "FII")
+        definir_rotulo_coluna_variacao(tabela, "DY (%)")
+        return tabela
 
     def _trocar_aba(self, nome: str) -> None:
         for frame in (self._aba_alta, self._aba_queda, self._aba_todas):
@@ -298,16 +345,6 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
         self._janela_noticias = JanelaNoticiasMercado(self, self._controlador)
         self._janela_noticias.title("Noticias — fundos imobiliarios")
 
-    def _abrir_fiis_por_periodo(self) -> None:
-        if self._focar_janela(self._janela_fiis_periodo):
-            return
-        self._janela_fiis_periodo = JanelaHubFiisPainelPeriodo(self)
-
-    def _abrir_fiis_por_dy(self) -> None:
-        if self._focar_janela(self._janela_fiis_dy):
-            return
-        self._janela_fiis_dy = JanelaHubFiisPainelDy(self)
-
     @staticmethod
     def _focar_janela(janela) -> bool:
         if janela is None:
@@ -334,9 +371,20 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
                     self._janela_grafico._ao_fechar()
             except Exception:
                 pass
-        self._janela_grafico = JanelaGraficoAcao(self, self._controlador, simbolo)
+        periodo = self._periodo_chave()
+        data_ini = self._entrada_inicio.get().strip() if periodo == "personalizado" else None
+        data_fim = self._entrada_fim.get().strip() if periodo == "personalizado" else None
+        self._janela_grafico = JanelaGraficoAcao(
+            self,
+            self._controlador,
+            simbolo,
+            periodo_chave=periodo,
+            data_inicio=data_ini,
+            data_fim=data_fim,
+        )
         codigo = simbolo.replace(".SA", "")
-        self._janela_grafico.title(f"Grafico — {codigo}")
+        rotulo = self._combo_periodo.get()
+        self._janela_grafico.title(f"Grafico — {codigo} ({rotulo})")
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         executar_em_thread(self, funcao, ao_concluir)
@@ -347,39 +395,68 @@ class JanelaHubFundosImobiliarios(ctk.CTkToplevel):
 
         quantidade = self._config_painel.carregar()
 
+        periodo = self._periodo_chave()
+        rotulo_periodo = self._combo_periodo.get()
+        self._periodo_rotulo_atual = rotulo_periodo
+        self._atualizar_titulos_abas()
+
         self._painel_buscando = True
-        self._label_status.configure(text=f"Carregando ate {quantidade} FIIs...")
+        self._label_status.configure(
+            text=f"Calculando DY no periodo {rotulo_periodo} para ate {quantidade} FIIs..."
+        )
+
+        data_ini = self._entrada_inicio.get().strip() if periodo == "personalizado" else None
+        data_fim = self._entrada_fim.get().strip() if periodo == "personalizado" else None
 
         def buscar():
-            return self._controlador.obter_painel(quantidade)
+            return self._controlador.obter_painel_dy(
+                quantidade,
+                periodo,
+                data_ini,
+                data_fim,
+            )
 
-        def ao_concluir(dados, erro):
+        def ao_concluir(resultado, erro_thread):
             self._painel_buscando = False
-            if erro:
-                self._label_status.configure(text=f"Erro: {erro}", text_color=CORES["erro"])
+            if erro_thread:
+                self._label_status.configure(text=erro_thread, text_color=CORES["erro"])
                 if not automatico:
-                    messagebox.showerror("Erro", erro, parent=self)
+                    messagebox.showerror("Erro", erro_thread, parent=self)
                 return
+
+            dados, msg_erro = resultado
+            if msg_erro:
+                self._label_status.configure(text=msg_erro, text_color=CORES["erro"])
+                if not automatico:
+                    messagebox.showwarning("FIIs por DY", msg_erro, parent=self)
+                return
+
+            rotulo_dy = f"DY ({dados['periodo_rotulo']})"
+            for tabela in (self._tabela_alta, self._tabela_queda, self._tabela_todas):
+                definir_rotulo_coluna_variacao(tabela, rotulo_dy)
+
             self._preencher(
                 self._tabela_alta,
                 dados["em_alta"],
-                "Nenhum FII em alta agora.",
+                f"Nenhum FII com proventos no periodo {dados['periodo_rotulo']}.",
             )
             self._preencher(
                 self._tabela_queda,
                 dados["em_queda"],
-                "Nenhum FII em queda agora.",
+                f"Nenhum FII com proventos no periodo {dados['periodo_rotulo']}.",
             )
             self._preencher(self._tabela_todas, dados["todas"])
             self._trocar_aba("Em alta")
             self._seletor_abas.set("Em alta")
-            from datetime import datetime
 
             hora = datetime.now().strftime("%H:%M:%S")
             self._label_status.configure(
                 text=(
-                    f"Atualizado as {hora} — alta {len(dados['em_alta'])} | "
-                    f"baixa {len(dados['em_queda'])} | todas {len(dados['todas'])}"
+                    f"Atualizado as {hora} — periodo {dados['periodo_rotulo']} | "
+                    f"com dados {dados['total_com_dados']} | "
+                    f"maior DY {len(dados['em_alta'])} | "
+                    f"menor DY {len(dados['em_queda'])} | "
+                    f"todas {len(dados['todas'])}"
                 ),
                 text_color=CORES["sucesso"],
             )
