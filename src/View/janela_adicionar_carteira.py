@@ -13,6 +13,7 @@ from src.Model.resultado_busca import ResultadoBusca
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
+from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
 from src.View.tema import CORES
 
 _LARGURA = 520
@@ -144,9 +145,13 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         self._entrada_busca = ctk.CTkEntry(linha_busca, width=280, placeholder_text="Ex.: PETR4, BTC, HGLG11")
         self._entrada_busca.pack(side="left", padx=(0, 8))
         self._entrada_busca.bind("<Return>", lambda _e: self._pesquisar())
-        self._entrada_codigo = ctk.CTkEntry(linha_busca, width=100, placeholder_text="Codigo")
+        self._entrada_codigo = ctk.CTkEntry(
+            linha_busca,
+            width=100,
+            placeholder_text="Opcional",
+        )
         self._entrada_codigo.pack(side="left", padx=(0, 8))
-        self._entrada_codigo.bind("<Return>", lambda _e: self._usar_codigo_direto())
+        self._entrada_codigo.bind("<Return>", lambda _e: self._confirmar_busca_ou_codigo())
         ctk.CTkButton(
             linha_busca,
             text="Buscar",
@@ -254,8 +259,28 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             for widget in self._frame_resultados.winfo_children():
                 widget.destroy()
 
-    def _pesquisar(self) -> None:
+    def _termo_busca(self) -> str:
         termo = self._entrada_busca.get().strip()
+        if termo:
+            return termo
+        return self._entrada_codigo.get().strip()
+
+    def _normalizar_codigo_direto(self, codigo: str) -> tuple[str | None, str | None]:
+        tipo = self._tipo_da_combo()
+        if tipo == "cripto":
+            return normalizar_simbolo_cripto(codigo)
+        return normalizar_simbolo(codigo)
+
+    def _confirmar_busca_ou_codigo(self) -> None:
+        """Enter no campo opcional: busca pelo texto principal ou usa codigo digitado."""
+        codigo = self._entrada_codigo.get().strip()
+        if not codigo:
+            self._pesquisar()
+            return
+        self._usar_codigo_direto()
+
+    def _pesquisar(self) -> None:
+        termo = self._termo_busca()
         if not termo:
             messagebox.showwarning("Buscar", "Digite o codigo ou nome do ativo.", parent=self)
             return
@@ -270,9 +295,27 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             if erro:
                 self._label_selecionado.configure(text=erro, text_color=CORES["erro"])
                 return
-            self._exibir_resultados(resultado or [], tipo)
+            if not resultado:
+                self._exibir_resultados([], tipo)
+                return
+            resultados, msg = resultado
+            if msg:
+                self._label_selecionado.configure(text=msg, text_color=CORES["erro"])
+                return
+            self._exibir_resultados(resultados or [], tipo)
 
         executar_em_thread(self, tarefa, ao_concluir)
+
+    @staticmethod
+    def _simbolo_do_resultado(item) -> str:
+        if isinstance(item, ResultadoBusca):
+            return item.simbolo
+        simbolo = getattr(item, "simbolo", None)
+        if simbolo:
+            return str(simbolo)
+        if isinstance(item, dict):
+            return str(item.get("simbolo", ""))
+        return str(item)
 
     def _exibir_resultados(self, resultados: list, tipo: TipoAtivoCarteira) -> None:
         for widget in self._frame_resultados.winfo_children():
@@ -285,29 +328,35 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             )
             return
 
+        unico_resultado = len(resultados) == 1
+        simbolo_unico = (
+            self._simbolo_do_resultado(resultados[0]) if unico_resultado else None
+        )
+
         for item in resultados[:12]:
-            if isinstance(item, ResultadoBusca):
-                simbolo = item.simbolo
-                rotulo = f"{codigo_exibicao(simbolo)} — {item.nome}"
-            else:
-                simbolo = str(getattr(item, "simbolo", item))
-                nome = str(getattr(item, "nome", ""))
-                rotulo = f"{codigo_exibicao(simbolo)} — {nome}" if nome else codigo_exibicao(simbolo)
+            simbolo = self._simbolo_do_resultado(item)
+            rotulo = codigo_exibicao(simbolo)
+            destacado = unico_resultado and simbolo == simbolo_unico
 
             ctk.CTkButton(
                 self._frame_resultados,
                 text=rotulo,
                 anchor="w",
-                fg_color=CORES["fundo"],
-                hover_color=CORES["zebraEscura"],
-                text_color=CORES["texto"],
+                fg_color=CORES["primaria"] if destacado else CORES["fundo"],
+                hover_color=CORES["primariaHover"] if destacado else CORES["zebraEscura"],
+                text_color=CORES.get("textoInverso", "#FFFFFF")
+                if destacado
+                else CORES["texto"],
                 command=lambda s=simbolo, t=tipo: self._selecionar_ativo(s, t),
             ).pack(fill="x", pady=2)
 
-        self._label_selecionado.configure(
-            text=f"{len(resultados)} resultado(s). Clique para selecionar.",
-            text_color=CORES["textoSecundario"],
-        )
+        if unico_resultado and simbolo_unico:
+            self._selecionar_ativo(simbolo_unico, tipo)
+        else:
+            self._label_selecionado.configure(
+                text=f"{len(resultados)} resultado(s). Clique para selecionar.",
+                text_color=CORES["textoSecundario"],
+            )
 
     def _selecionar_ativo(self, simbolo: str, tipo: TipoAtivoCarteira) -> None:
         self._simbolo_selecionado = simbolo
@@ -320,19 +369,30 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         )
 
     def _usar_codigo_direto(self) -> None:
-        codigo = self._entrada_codigo.get().strip()
+        codigo = self._entrada_codigo.get().strip() or self._entrada_busca.get().strip()
         if not codigo:
-            messagebox.showwarning("Codigo", "Informe o codigo do ativo.", parent=self)
+            messagebox.showwarning("Codigo", "Digite o codigo ou nome do ativo.", parent=self)
             return
-        self._selecionar_ativo(codigo, self._tipo_da_combo())
+        simbolo_ok, erro = self._normalizar_codigo_direto(codigo)
+        if erro or not simbolo_ok:
+            messagebox.showwarning("Codigo", erro or "Codigo invalido.", parent=self)
+            return
+        self._selecionar_ativo(simbolo_ok, self._tipo_da_combo())
 
     def _resolver_simbolo(self) -> str | None:
         if self._editando and self._posicao:
             return self._posicao.simbolo
         if self._simbolo_selecionado:
             return self._simbolo_selecionado
-        codigo = self._entrada_codigo.get().strip() if hasattr(self, "_entrada_codigo") else ""
-        return codigo or None
+        codigo = ""
+        if hasattr(self, "_entrada_codigo"):
+            codigo = self._entrada_codigo.get().strip()
+        if not codigo and hasattr(self, "_entrada_busca"):
+            codigo = self._entrada_busca.get().strip()
+        if not codigo:
+            return None
+        simbolo_ok, _ = self._normalizar_codigo_direto(codigo)
+        return simbolo_ok
 
     def _salvar(self) -> None:
         simbolo = self._resolver_simbolo()

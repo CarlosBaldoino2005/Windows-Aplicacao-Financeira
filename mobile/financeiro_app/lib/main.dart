@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config/api_config.dart';
 import 'servicos/api_cliente.dart';
@@ -20,6 +21,13 @@ class FinanceiroApp extends StatelessWidget {
       title: 'Financeiro',
       debugShowCheckedModeBanner: false,
       theme: CoresApp.temaClaro(),
+      locale: const Locale('pt', 'BR'),
+      supportedLocales: const [Locale('pt', 'BR')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const SplashTela(),
     );
   }

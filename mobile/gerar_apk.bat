@@ -55,6 +55,11 @@ set "GRADLE_USER_HOME=C:\temp\financeiro_gradle_user"
 
 if not exist "%WORK_TEMP%" mkdir "%WORK_TEMP%"
 
+if exist "%PROJETO%" (
+    echo Removendo copia anterior em %WORK_TEMP%...
+    rmdir /s /q "%PROJETO%" 2>nul
+)
+
 echo.
 echo Projeto no OneDrive trava o Gradle. Copiando para build local...
 echo Origem: %ORIGEM%
@@ -70,6 +75,14 @@ if errorlevel 8 (
 
 cd /d "%PROJETO%"
 
+echo Limpando cache de build anterior (garante codigo novo no APK)...
+call "%FLUTTER%" clean
+if errorlevel 1 (
+    echo Falha no flutter clean.
+    pause
+    exit /b 1
+)
+
 if not exist "android\app\build.gradle.kts" if not exist "android\app\build.gradle" (
     echo Gerando pastas Android...
     call "%FLUTTER%" create . --project-name financeiro_app --org br.com.financeiro
@@ -81,6 +94,9 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+
+rem Registrant antigo na pasta temp (robocopy nao apaga) quebra compile apos clean
+del /f /q "android\app\src\main\java\io\flutter\plugins\GeneratedPluginRegistrant.java" 2>nul
 
 echo.
 echo JAVA_HOME=%JAVA_HOME%

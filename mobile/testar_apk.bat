@@ -13,24 +13,22 @@ set ARGS_EMU=-avd %AVD% -no-snapshot-load -no-boot-anim -gpu swiftshader_indirec
 set RAIZ=%~dp0..
 set API_URL=http://127.0.0.1:8000/api/saude
 
-if not exist "%APK%" (
-    echo APK de emulador nao encontrado: %APK%
-    echo Gerando automaticamente ^(primeira vez pode levar 5 a 15 minutos^)...
-    echo.
-    call "%~dp0gerar_apk_emulador.bat" auto
-    if errorlevel 1 (
-        echo Falha ao gerar o APK. Execute manualmente: gerar_apk_emulador.bat
-        pause
-        exit /b 1
-    )
-    if not exist "%APK%" (
-        echo APK nao foi criado apos o build.
-        pause
-        exit /b 1
-    )
-    echo APK gerado com sucesso.
-    echo.
+echo Gerando APK atualizado ^(sempre recompila o codigo mais recente^)...
+echo A primeira vez ou apos mudancas grandes pode levar 5 a 15 minutos.
+echo.
+call "%~dp0gerar_apk_emulador.bat" auto
+if errorlevel 1 (
+    echo Falha ao gerar o APK. Execute manualmente: gerar_apk_emulador.bat
+    pause
+    exit /b 1
 )
+if not exist "%APK%" (
+    echo APK nao foi criado apos o build.
+    pause
+    exit /b 1
+)
+echo APK gerado com sucesso.
+echo.
 
 if not exist "%ADB%" (
     echo adb nao encontrado em %ANDROID_HOME%

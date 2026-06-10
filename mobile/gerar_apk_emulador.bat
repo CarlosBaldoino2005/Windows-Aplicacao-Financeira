@@ -49,6 +49,11 @@ set "GRADLE_USER_HOME=C:\temp\financeiro_gradle_user"
 
 if not exist "%WORK_TEMP%" mkdir "%WORK_TEMP%"
 
+if exist "%PROJETO%" (
+    echo Removendo copia anterior em %WORK_TEMP%...
+    rmdir /s /q "%PROJETO%" 2>nul
+)
+
 echo.
 echo Copiando projeto para build local...
 robocopy "%ORIGEM%" "%PROJETO%" /E /XD build .dart_tool android\.gradle android\app\build ios\Flutter\ephemeral macos\Flutter\ephemeral linux\flutter\ephemeral windows\flutter\ephemeral /NFL /NDL /NJH /NJS /nc /ns /np >nul
@@ -59,12 +64,24 @@ if errorlevel 8 (
 )
 
 cd /d "%PROJETO%"
+
+echo Limpando cache de build anterior (garante codigo novo no APK)...
+call "%FLUTTER%" clean
+if errorlevel 1 (
+    echo Falha no flutter clean.
+    if /I not "%~1"=="auto" pause
+    exit /b 1
+)
+
 call "%FLUTTER%" pub get
 if errorlevel 1 (
     echo Falha no pub get.
     if /I not "%~1"=="auto" pause
     exit /b 1
 )
+
+rem Registrant antigo na pasta temp (robocopy nao apaga) quebra compile apos clean
+del /f /q "android\app\src\main\java\io\flutter\plugins\GeneratedPluginRegistrant.java" 2>nul
 
 echo.
 echo Gerando APK para emulador (API local 127.0.0.1:8000 + adb reverse)...
