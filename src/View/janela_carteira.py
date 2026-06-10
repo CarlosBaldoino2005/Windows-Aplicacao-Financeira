@@ -100,15 +100,39 @@ class JanelaCarteira(ctk.CTkToplevel):
         )
         self._frame_resumo.pack(fill="x", padx=16, pady=(0, 8))
 
-        self._label_resumo = ctk.CTkLabel(
+        self._label_resumo_vazio = ctk.CTkLabel(
             self._frame_resumo,
             text="Carregando resumo...",
             font=ctk.CTkFont(size=12),
-            text_color=CORES["texto"],
+            text_color=CORES["textoSecundario"],
             justify="left",
             anchor="w",
         )
-        self._label_resumo.pack(anchor="w", padx=12, pady=10)
+        self._label_resumo_vazio.pack(anchor="w", padx=12, pady=10)
+
+        self._frame_cards_resumo = ctk.CTkFrame(self._frame_resumo, fg_color="transparent")
+        self._card_investido, self._valor_investido, _ = self._criar_card_resumo(
+            self._frame_cards_resumo, 0, "Investido"
+        )
+        self._card_atual, self._valor_atual, _ = self._criar_card_resumo(
+            self._frame_cards_resumo, 1, "Valor atual"
+        )
+        self._card_resultado, self._valor_resultado, self._sub_resultado = self._criar_card_resumo(
+            self._frame_cards_resumo, 2, "Resultado", com_subtitulo=True
+        )
+        self._card_dividendos, self._valor_dividendos, _ = self._criar_card_resumo(
+            self._frame_cards_resumo, 3, "Dividendos"
+        )
+
+        self._label_monitoramento_resumo = ctk.CTkLabel(
+            self._frame_resumo,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+        )
+        self._label_monitoramento_resumo.pack(anchor="w", padx=12, pady=(0, 10))
+        self._frame_cards_resumo.pack_forget()
 
         barra_status = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra_status.pack(fill="x", padx=16, pady=(0, 6))
@@ -434,12 +458,87 @@ class JanelaCarteira(ctk.CTkToplevel):
         dialogo.protocol("WM_DELETE_WINDOW", fechar_dialogo)
         dialogo.focus_force()
 
-    def _atualizar_resumo(self, linhas: list[LinhaCarteira]) -> None:
-        if not linhas:
-            self._label_resumo.configure(
-                text="Nenhuma posicao cadastrada.",
+    def _criar_card_resumo(
+        self,
+        pai: ctk.CTkFrame,
+        coluna: int,
+        titulo: str,
+        *,
+        com_subtitulo: bool = False,
+    ) -> tuple[ctk.CTkFrame, ctk.CTkLabel, ctk.CTkLabel | None]:
+        """Monta um card de metrica do resumo (titulo, valor e subtitulo opcional)."""
+        card = ctk.CTkFrame(
+            pai,
+            fg_color=CORES["superficie"],
+            corner_radius=8,
+            border_width=1,
+            border_color=CORES["borda"],
+        )
+        card.grid(row=0, column=coluna, padx=(0 if coluna == 0 else 6, 0), sticky="nsew")
+        pai.grid_columnconfigure(coluna, weight=1)
+
+        ctk.CTkLabel(
+            card,
+            text=titulo,
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+        ).pack(anchor="w", padx=12, pady=(10, 0))
+
+        valor = ctk.CTkLabel(
+            card,
+            text="—",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=CORES["texto"],
+        )
+        valor.pack(anchor="w", padx=12, pady=(2, 2 if com_subtitulo else 10))
+
+        subtitulo = None
+        if com_subtitulo:
+            subtitulo = ctk.CTkLabel(
+                card,
+                text="",
+                font=ctk.CTkFont(size=11),
                 text_color=CORES["textoSecundario"],
             )
+            subtitulo.pack(anchor="w", padx=12, pady=(0, 10))
+
+        return card, valor, subtitulo
+
+    def _aplicar_estilo_card_resultado(self, resultado: float) -> None:
+        """Destaca o card de resultado com cores de lucro ou prejuizo."""
+        if resultado > 0:
+            fundo = CORES.get("sucessoFundo", CORES["superficie"])
+            texto = CORES["sucesso"]
+        elif resultado < 0:
+            fundo = CORES.get("erroFundo", CORES["superficie"])
+            texto = CORES["erro"]
+        else:
+            fundo = CORES["superficie"]
+            texto = CORES["texto"]
+
+        self._card_resultado.configure(fg_color=fundo)
+        self._valor_resultado.configure(text_color=texto)
+        if self._sub_resultado is not None:
+            self._sub_resultado.configure(text_color=texto)
+
+    def _mostrar_resumo_vazio(self, mensagem: str) -> None:
+        self._frame_cards_resumo.pack_forget()
+        self._label_monitoramento_resumo.configure(text="")
+        self._label_resumo_vazio.configure(text=mensagem)
+        self._label_resumo_vazio.pack(anchor="w", padx=12, pady=10)
+
+    def _mostrar_resumo_cards(self) -> None:
+        self._label_resumo_vazio.pack_forget()
+        self._frame_cards_resumo.pack(fill="x", padx=12, pady=(10, 6))
+
+    @staticmethod
+    def _formatar_variacao_pct(valor_pct: float) -> str:
+        sinal = "+" if valor_pct >= 0 else ""
+        return f"{sinal}{valor_pct:.2f}%"
+
+    def _atualizar_resumo(self, linhas: list[LinhaCarteira]) -> None:
+        if not linhas:
+            self._mostrar_resumo_vazio("Nenhuma posicao cadastrada.")
             return
 
         investido = 0.0
@@ -457,26 +556,33 @@ class JanelaCarteira(ctk.CTkToplevel):
                 atual += linha.valor_atual
                 tem_atual = True
 
-        partes = [
-            f"Investido: {formatar_moeda(investido, moeda)}",
-        ]
+        self._mostrar_resumo_cards()
+        self._valor_investido.configure(text=formatar_moeda(investido, moeda))
+        self._valor_dividendos.configure(text=formatar_moeda(dividendos, moeda))
+
         if tem_atual:
             resultado = atual - investido
-            partes.append(f"Valor atual: {formatar_moeda(atual, moeda)}")
-            partes.append(f"Resultado: {formatar_moeda(resultado, moeda)}")
-            self._label_resumo.configure(
-                text="   |   ".join(partes)
-                + f"\nDividendos recebidos: {formatar_moeda(dividendos, moeda)}"
-                + f"\nMonitoramento: ±{self._variacao_pct:.0f}% sobre o preco de compra",
-                text_color=CORES["texto"],
-            )
-            return
+            pct = (resultado / investido * 100) if investido > 0 else 0.0
+            self._valor_atual.configure(text=formatar_moeda(atual, moeda))
+            self._valor_resultado.configure(text=formatar_moeda(resultado, moeda))
+            if self._sub_resultado is not None:
+                self._sub_resultado.configure(text=self._formatar_variacao_pct(pct))
+            self._aplicar_estilo_card_resultado(resultado)
+        else:
+            self._valor_atual.configure(text="—")
+            self._valor_resultado.configure(text="—")
+            if self._sub_resultado is not None:
+                self._sub_resultado.configure(text="Cotacao indisponivel")
+            self._card_resultado.configure(fg_color=CORES["superficie"])
+            self._valor_resultado.configure(text_color=CORES["textoSecundario"])
+            if self._sub_resultado is not None:
+                self._sub_resultado.configure(text_color=CORES["textoSecundario"])
 
-        partes.append(f"Dividendos recebidos: {formatar_moeda(dividendos, moeda)}")
-        partes.append(f"Monitoramento: ±{self._variacao_pct:.0f}%")
-        self._label_resumo.configure(
-            text="   |   ".join(partes),
-            text_color=CORES["texto"],
+        self._label_monitoramento_resumo.configure(
+            text=(
+                f"Monitoramento: ±{self._variacao_pct:.0f}% sobre o preco medio de compra"
+                f"  ·  {len(linhas)} posicao(oes) na carteira"
+            ),
         )
 
     def _atualizar_lista(self, *, forcar: bool = False, automatico: bool = False) -> None:

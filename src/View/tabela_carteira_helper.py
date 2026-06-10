@@ -54,7 +54,8 @@ _ROTULOS = {
     "dividendos": "Dividendos",
     "prox_dividendo": "Prox. dividendo",
 }
-_LARGURAS = (90, 80, 160, 70, 90, 100, 100, 100, 100, 90, 100, 100, 130)
+_LARGURAS = (90, 80, 150, 70, 90, 100, 100, 100, 100, 90, 100, 100, 195)
+_LARGURA_MIN_PROX_DIVIDENDO = 175
 _FONTE_FAMILIA = "Segoe UI"
 
 
@@ -227,7 +228,15 @@ def criar_grid_carteira(
     _configurar_ordenacao_colunas(tabela)
 
     for coluna, largura in zip(_COLUNAS, _LARGURAS, strict=True):
-        tabela.column(coluna, width=largura, anchor="w", stretch=False)
+        expandir = coluna == "prox_dividendo"
+        minwidth = _LARGURA_MIN_PROX_DIVIDENDO if expandir else largura
+        tabela.column(
+            coluna,
+            width=largura,
+            minwidth=minwidth,
+            anchor="w",
+            stretch=expandir,
+        )
 
     aplicar_estilo_grid_carteira(tabela)
     configurar_interacao_treeview(tabela, ao_duplo_clique=ao_duplo_clique)
