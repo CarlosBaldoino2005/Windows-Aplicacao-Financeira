@@ -1,6 +1,5 @@
-# DESATIVADO — o projeto usa apenas API local (executar_api.bat).
-# Mantido como referencia; nao faca deploy ate reativar explicitamente.
 # Deploy gratuito no Render: https://render.com
+# Celular fisico usa esta API (gerar_apk.bat). Emulador usa API local.
 services:
   - type: web
     name: financeiro-api

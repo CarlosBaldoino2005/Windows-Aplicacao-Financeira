@@ -47,7 +47,7 @@ class ApiCliente {
 
   static String mensagemApiDesatualizada(TipoAtivo tipo) {
     return 'A API está na versão $versaoApi e não suporta ${tipo.rotulo}.\n\n'
-        'Atualize a API local (executar_api.bat) para a versão 1.1.0 ou superior.';
+        'A API precisa estar na versão 1.1.0 ou superior (Render ou executar_api.bat).';
   }
 
   static bool tipoExigeApiRecente(TipoAtivo tipo) =>

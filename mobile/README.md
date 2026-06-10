@@ -1,8 +1,9 @@
 # Financeiro — App Android (Fase 1)
 
-App instalavel em Flutter que consome a **API FastAPI local** do projeto (`api/`).
+App instalavel em Flutter que consome a API FastAPI do projeto (`api/`).
 
-**API Render desativada** — desktop e mobile usam apenas API local (`executar_api.bat`).
+- **Celular fisico:** API na nuvem (Render) — PC pode estar desligado.
+- **Emulador no PC:** API local (`executar_api.bat`).
 
 Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/cores.dart`).
 
@@ -19,33 +20,23 @@ Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/
 
 1. **Flutter SDK** — `scripts\instalar_flutter.ps1`
 2. **Android Studio** — para gerar APK
-3. **API local** rodando no PC: `executar_api.bat` (raiz do projeto)
+3. **Emulador apenas:** API local com `executar_api.bat`
 
-## 1. Subir a API no PC
+## 1. Celular fisico
 
-```powershell
-cd "c:\Users\Carlos\OneDrive\Windows\Financeiro"
-.\executar_api.bat
-```
+1. Execute `mobile\gerar_apk.bat`
+2. Instale `mobile\Financeiro.apk` no celular
+3. Use Wi-Fi ou dados moveis — nao precisa do PC na mesma rede
 
-A API escuta em `http://0.0.0.0:8000` (acessivel na rede local).
+A primeira conexao no plano gratuito do Render pode levar ate 1 minuto.
 
-## 2. Celular fisico (Wi-Fi)
+## 2. Emulador no PC
 
-1. Copie `mobile\celular_api_url.example.bat` para `mobile\celular_api_url.bat`
-2. Ajuste o IP do PC (mesma rede Wi-Fi), ex.: `set API_CELULAR_URL=http://192.168.0.10:8000`
-3. Execute `mobile\gerar_apk.bat`
-4. Instale `mobile\Financeiro.apk` no celular
-
-O PC precisa estar ligado com `executar_api.bat` em execucao.
-
-## 3. Emulador no PC
-
-1. `executar_api.bat`
+1. `executar_api.bat` (deixe a janela aberta)
 2. `mobile\gerar_apk_emulador.bat`
 3. `mobile\testar_apk.bat`
 
-## 4. Gerar projeto Android (primeira vez)
+## 3. Gerar projeto Android (primeira vez)
 
 ```powershell
 cd mobile\financeiro_app

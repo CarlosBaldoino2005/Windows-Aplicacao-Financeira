@@ -22,15 +22,13 @@ Toda a interface e logica estao em Python (CustomTkinter + Matplotlib). Nao e ne
 
 ## App Android (Fase 1)
 
-Versao mobile instalavel (Flutter) + API local no PC. Detalhes em [`mobile/README.md`](mobile/README.md).
+Versao mobile instalavel (Flutter). Detalhes em [`mobile/README.md`](mobile/README.md).
 
 | Componente | Como rodar |
 |------------|------------|
 | Desktop | `executar.bat` — nao usa API HTTP (dados direto via Python) |
-| API local (mobile) | `executar_api.bat` — obrigatoria para o app Android |
-| App Android | `mobile\gerar_apk.bat` (celular na Wi-Fi) ou `gerar_apk_emulador.bat` |
-
-API Render **desativada** (`render.yaml` apenas referencia).
+| App Android (celular) | `mobile\gerar_apk.bat` — API na nuvem Render |
+| App Android (emulador) | `executar_api.bat` + `gerar_apk_emulador.bat` + `testar_apk.bat` |
 
 Endpoints iniciais: `/api/saude`, `/api/mercado/painel`, `/api/mercado/cotacao/{simbolo}`, `/api/busca/acoes?q=`.
 
