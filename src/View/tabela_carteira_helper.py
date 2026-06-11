@@ -190,16 +190,38 @@ def criar_grid_carteira(
     *,
     altura: int = 16,
     ao_duplo_clique: Callable | None = None,
+    ao_abrir_tela_cheia: Callable | None = None,
+    texto_botao_tela_cheia: str = "Tela cheia",
+    rolagem_pagina: bool = False,
 ) -> ttk.Treeview:
     card = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=12)
-    card.pack(fill="both", expand=True)
+    if rolagem_pagina:
+        card.pack(fill="x")
+    else:
+        card.pack(fill="both", expand=True)
+
+    linha_titulo = ctk.CTkFrame(card, fg_color="transparent")
+    linha_titulo.pack(fill="x", padx=12, pady=(12, 4))
 
     ctk.CTkLabel(
-        card,
+        linha_titulo,
         text=titulo,
         font=ctk.CTkFont(size=16, weight="bold"),
         text_color=CORES["texto"],
-    ).pack(anchor="w", padx=12, pady=(12, 4))
+    ).pack(side="left", anchor="w")
+
+    if ao_abrir_tela_cheia is not None:
+        ctk.CTkButton(
+            linha_titulo,
+            text=texto_botao_tela_cheia,
+            command=ao_abrir_tela_cheia,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=130,
+            height=28,
+            font=ctk.CTkFont(size=12),
+        ).pack(side="right")
 
     ctk.CTkLabel(
         card,
@@ -209,7 +231,10 @@ def criar_grid_carteira(
     ).pack(anchor="w", padx=12, pady=(0, 8))
 
     frame_tabela = ctk.CTkFrame(card, fg_color="transparent")
-    frame_tabela.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+    if rolagem_pagina:
+        frame_tabela.pack(fill="x", padx=12, pady=(0, 8))
+    else:
+        frame_tabela.pack(fill="both", expand=True, padx=12, pady=(0, 8))
 
     tabela = ttk.Treeview(
         frame_tabela,
@@ -221,9 +246,13 @@ def criar_grid_carteira(
     scroll_y = ttk.Scrollbar(frame_tabela, orient="vertical", command=tabela.yview)
     scroll_x = ttk.Scrollbar(frame_tabela, orient="horizontal", command=tabela.xview)
     tabela.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-    tabela.pack(side="left", fill="both", expand=True)
-    scroll_y.pack(side="right", fill="y")
-    scroll_x.pack(side="bottom", fill="x")
+    if rolagem_pagina:
+        tabela.pack(side="top", fill="x")
+        scroll_x.pack(side="bottom", fill="x")
+    else:
+        tabela.pack(side="left", fill="both", expand=True)
+        scroll_y.pack(side="right", fill="y")
+        scroll_x.pack(side="bottom", fill="x")
 
     _configurar_ordenacao_colunas(tabela)
 
@@ -252,7 +281,20 @@ def criar_grid_carteira(
 
     tabela._card_pai = card  # type: ignore[attr-defined]
     tabela._label_vazio = label_vazio  # type: ignore[attr-defined]
+    tabela._rolagem_pagina = rolagem_pagina  # type: ignore[attr-defined]
+    tabela._altura_minima = altura  # type: ignore[attr-defined]
     return tabela
+
+
+def _ajustar_altura_grid_carteira(tabela: ttk.Treeview, quantidade_linhas: int) -> None:
+    """Na rolagem da pagina, expande a grid para mostrar todas as linhas sem scroll interno."""
+    if not getattr(tabela, "_rolagem_pagina", False):
+        return
+    altura_minima = getattr(tabela, "_altura_minima", 3)
+    if quantidade_linhas <= 0:
+        tabela.configure(height=altura_minima)
+        return
+    tabela.configure(height=max(altura_minima, quantidade_linhas))
 
 
 def aplicar_estilo_grid_carteira(
@@ -326,6 +368,7 @@ def preencher_grid_carteira(
             label_vazio.pack(pady=(0, 12))
         tabela.selection_set()
         _atualizar_cabecalhos_ordenacao(tabela)
+        _ajustar_altura_grid_carteira(tabela, 0)
         return
 
     if label_vazio is not None:
@@ -392,6 +435,7 @@ def preencher_grid_carteira(
         tabela.selection_set()
     sincronizar_tags_selecao_treeview(tabela)
     _atualizar_cabecalhos_ordenacao(tabela)
+    _ajustar_altura_grid_carteira(tabela, len(linhas_exibir))
 
 
 def liberar_grid_carteira(tabela: ttk.Treeview | None) -> None:

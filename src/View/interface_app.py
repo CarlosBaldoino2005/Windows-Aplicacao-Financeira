@@ -17,8 +17,6 @@ from src.View.janela_noticias_mercado import JanelaNoticiasMercado
 from src.View.janela_hub_criptomoedas import JanelaHubCriptomoedas
 from src.View.janela_hub_empresas_dividendos import JanelaHubEmpresasDividendos
 from src.View.janela_hub_fundos_imobiliarios import JanelaHubFundosImobiliarios
-from src.View.janela_hub_fiis_painel_dy import JanelaHubFiisPainelDy
-from src.View.janela_hub_fiis_painel_periodo import JanelaHubFiisPainelPeriodo
 from src.View.janela_hub_painel_periodo import JanelaHubPainelPeriodo
 from src.View.janela_hub_tesouro import JanelaHubTesouro
 from src.View.janela_hub_renda_fixa_bancaria import JanelaHubRendaFixaBancaria
@@ -78,8 +76,6 @@ class InterfaceApp(ctk.CTk):
         self._janela_dividendos: JanelaHubEmpresasDividendos | None = None
         self._janela_fiis: JanelaHubFundosImobiliarios | None = None
         self._janela_painel_periodo: JanelaHubPainelPeriodo | None = None
-        self._janela_fiis_painel_periodo: JanelaHubFiisPainelPeriodo | None = None
-        self._janela_fiis_painel_dy: JanelaHubFiisPainelDy | None = None
         self._janela_tesouro: JanelaHubTesouro | None = None
         self._janela_lci_lca: JanelaHubRendaFixaBancaria | None = None
         self._janela_cdb: JanelaHubRendaFixaBancaria | None = None
@@ -341,8 +337,6 @@ class InterfaceApp(ctk.CTk):
             ("Empresa + dividendos", self._abrir_hub_empresas_dividendos),
             ("Fundos imobiliarios", self._abrir_hub_fundos_imobiliarios),
             ("Acoes por periodo", self._abrir_hub_painel_periodo),
-            ("FIIs por periodo", self._abrir_hub_fiis_painel_periodo),
-            ("FIIs por DY", self._abrir_hub_fiis_painel_dy),
             ("Tesouros", self._abrir_hub_tesouro),
             ("LCI/LCA", self._abrir_hub_lci_lca),
             ("CDB", self._abrir_hub_cdb),
@@ -616,32 +610,6 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_painel_periodo = JanelaHubPainelPeriodo(self)
-
-    def _abrir_hub_fiis_painel_periodo(self) -> None:
-        """Abre painel de FIIs em alta / queda / todas por periodo."""
-        if self._janela_fiis_painel_periodo is not None:
-            try:
-                if self._janela_fiis_painel_periodo.winfo_exists():
-                    self._janela_fiis_painel_periodo.focus_force()
-                    self._janela_fiis_painel_periodo.lift()
-                    return
-            except Exception:
-                pass
-
-        self._janela_fiis_painel_periodo = JanelaHubFiisPainelPeriodo(self)
-
-    def _abrir_hub_fiis_painel_dy(self) -> None:
-        """Abre painel de FIIs ordenado por Dividend Yield no periodo."""
-        if self._janela_fiis_painel_dy is not None:
-            try:
-                if self._janela_fiis_painel_dy.winfo_exists():
-                    self._janela_fiis_painel_dy.focus_force()
-                    self._janela_fiis_painel_dy.lift()
-                    return
-            except Exception:
-                pass
-
-        self._janela_fiis_painel_dy = JanelaHubFiisPainelDy(self)
 
     def _abrir_hub_tesouro(self) -> None:
         """Abre (ou foca) o painel do Tesouro Direto."""

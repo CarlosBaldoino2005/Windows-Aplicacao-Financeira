@@ -30,7 +30,9 @@ from src.Tool.janela_helper import (
 )
 from src.View.formatadores import formatar_moeda
 from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
+from src.View.janela_carteira_posicoes_tela_cheia import JanelaCarteiraPosicoesTelaCheia
 from src.View.janela_grafico_acao import JanelaGraficoAcao
+from src.View.painel_grafico_carteira_helper import PainelGraficoCarteira
 from src.View.tabela_carteira_helper import (
     criar_grid_carteira,
     liberar_grid_carteira,
@@ -51,6 +53,8 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._config_painel = ConfigPainelIni()
         self._janela_form = None
         self._janela_grafico: JanelaGraficoAcao | None = None
+        self._janela_posicoes_tela_cheia: JanelaCarteiraPosicoesTelaCheia | None = None
+        self._painel_grafico: PainelGraficoCarteira | None = None
         self._tabela: ttk.Treeview | None = None
         self._linhas_cache: dict[str, LinhaCarteira] = {}
         self._atualizando = False
@@ -59,7 +63,7 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         self.title("Carteira de investimentos")
         self.configure(fg_color=CORES["fundo"])
-        self.minsize(1020, 640)
+        self.minsize(1020, 820)
 
         self._montar_interface()
         configurar_janela_maximizada(self, janela_pai=pai)
@@ -79,7 +83,15 @@ class JanelaCarteira(ctk.CTkToplevel):
     def _ao_fechar(self) -> None:
         self._versao_atualizacao += 1
         self._atualizador_auto.parar()
+        if self._painel_grafico is not None:
+            self._painel_grafico.liberar()
         liberar_grid_carteira(self._tabela)
+        if self._janela_posicoes_tela_cheia is not None:
+            try:
+                if self._janela_posicoes_tela_cheia.winfo_exists():
+                    self._janela_posicoes_tela_cheia._ao_fechar()
+            except Exception:
+                pass
         if self._janela_grafico is not None:
             try:
                 if self._janela_grafico.winfo_exists():
@@ -240,15 +252,30 @@ class JanelaCarteira(ctk.CTkToplevel):
             height=36,
         ).pack(side="right")
 
-        container = ctk.CTkFrame(self, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+        self._area_rolagem = ctk.CTkScrollableFrame(
+            self,
+            fg_color=CORES["fundo"],
+            label_text="Posicoes e grafico — role a pagina para ver tudo",
+        )
+        self._area_rolagem.pack(fill="both", expand=True, padx=0, pady=0)
+
+        frame_tabela = ctk.CTkFrame(self._area_rolagem, fg_color="transparent")
+        frame_tabela.pack(fill="x", padx=16, pady=(8, 0))
 
         self._tabela = criar_grid_carteira(
-            container,
+            frame_tabela,
             "Posicoes da carteira",
-            altura=18,
+            altura=5,
             ao_duplo_clique=self._ao_duplo_clique,
+            ao_abrir_tela_cheia=self._abrir_posicoes_tela_cheia,
+            texto_botao_tela_cheia="Abrir em tela cheia",
+            rolagem_pagina=True,
         )
+
+        self._painel_grafico = PainelGraficoCarteira(self, self._controlador)
+        card_grafico = self._painel_grafico.montar(self._area_rolagem)
+        card_grafico.pack(fill="x", padx=16, pady=(8, 12))
+        self.after(600, self._reaplicar_grafico_carteira)
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
         rodape.pack(fill="x", padx=16, pady=(0, 12))
@@ -261,6 +288,31 @@ class JanelaCarteira(ctk.CTkToplevel):
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
+
+    def _reaplicar_grafico_carteira(self) -> None:
+        if self._painel_grafico is not None:
+            self._painel_grafico.reaplicar_layout()
+
+    def _abrir_posicoes_tela_cheia(self) -> None:
+        if self._janela_posicoes_tela_cheia is not None:
+            try:
+                if self._janela_posicoes_tela_cheia.winfo_exists():
+                    self._janela_posicoes_tela_cheia.focus_force()
+                    self._janela_posicoes_tela_cheia.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_posicoes_tela_cheia = JanelaCarteiraPosicoesTelaCheia(self)
+
+    def _sincronizar_tela_cheia_posicoes(self) -> None:
+        if self._janela_posicoes_tela_cheia is None:
+            return
+        try:
+            if self._janela_posicoes_tela_cheia.winfo_exists():
+                self._janela_posicoes_tela_cheia._atualizar_indicador_automatico()
+        except Exception:
+            pass
 
     def _abrir_formulario(self, posicao: PosicaoCarteira | None = None) -> None:
         if self._janela_form is not None:
@@ -566,6 +618,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             self._variacao_pct = pct
             notificar_mudanca_configuracao_atualizacao_automatica_carteira()
             self._atualizar_indicador_automatico()
+            self._sincronizar_tela_cheia_posicoes()
             fechar_dialogo()
             self._atualizar_lista(forcar=True)
 
@@ -755,6 +808,8 @@ class JanelaCarteira(ctk.CTkToplevel):
             if self._tabela is not None:
                 preencher_grid_carteira(self._tabela, linhas)
             self._atualizar_resumo(linhas)
+            if self._painel_grafico is not None:
+                self._painel_grafico.atualizar_linhas(linhas)
 
             from datetime import datetime
 

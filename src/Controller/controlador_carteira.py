@@ -10,7 +10,9 @@ from src.Service.carteira_servico import CarteiraServico
 from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
-from src.Service.mercado_servico import MercadoServico
+from src.Service.mercado_servico import MercadoServico, _alinhar_series_comparacao
+from src.Tool.cotacao_dual_helper import codigo_exibicao
+from src.Tool.validadores import validar_data_ptbr
 from src.Tool.carteira_dividendos_helper import (
     calcular_dividendos_recebidos,
     estimar_proximo_dividendo,
@@ -181,3 +183,94 @@ class ControladorCarteira:
             )
 
         return linhas, None
+
+    def _mercado_por_tipo(self, tipo: TipoAtivoCarteira):
+        if tipo == "cripto":
+            return self._mercado_cripto
+        if tipo == "fiis":
+            return self._mercado_fiis
+        return self._mercado_acoes
+
+    def comparar_ativos_carteira(
+        self,
+        periodo_chave: str = "mes",
+        data_inicio_texto: str | None = None,
+        data_fim_texto: str | None = None,
+    ) -> tuple[dict | None, str | None]:
+        """Historico alinhado dos ativos unicos da carteira para grafico comparativo."""
+        posicoes = self._persistencia.listar()
+        if not posicoes:
+            return None, "Cadastre ao menos uma posicao na carteira."
+
+        vistos: set[str] = set()
+        ativos: list[tuple[TipoAtivoCarteira, str]] = []
+        for posicao in posicoes:
+            if posicao.simbolo in vistos:
+                continue
+            vistos.add(posicao.simbolo)
+            ativos.append((posicao.tipo_ativo, posicao.simbolo))
+
+        dt_inicio = None
+        dt_fim = None
+        if periodo_chave == "personalizado":
+            dt_inicio, err_i = validar_data_ptbr(data_inicio_texto or "")
+            if err_i:
+                return None, err_i
+            dt_fim, err_f = validar_data_ptbr(data_fim_texto or "")
+            if err_f:
+                return None, err_f
+
+        series_brutas: dict[str, list[dict]] = {}
+        ordem: list[str] = []
+        avisos: list[str] = []
+
+        for tipo, simbolo in ativos:
+            serie = self._mercado_por_tipo(tipo).buscar_historico(
+                simbolo, periodo_chave, dt_inicio, dt_fim
+            )
+            if not serie or not serie.pontos:
+                avisos.append(f"Sem historico no periodo: {codigo_exibicao(simbolo)}")
+                continue
+
+            ordem.append(simbolo)
+            series_brutas[simbolo] = [
+                {
+                    "data": p.data_exibicao,
+                    "data_iso": p.data_iso,
+                    "preco": p.preco_fechamento,
+                }
+                for p in serie.pontos
+            ]
+
+        if not series_brutas:
+            return None, "Nenhum ativo da carteira com historico no periodo selecionado."
+
+        if len(series_brutas) == 1:
+            simbolo = ordem[0]
+            pontos = series_brutas[simbolo]
+            base = float(pontos[0]["preco"] or 1) or 1.0
+            alinhadas = {
+                simbolo: [
+                    {
+                        **ponto,
+                        "indice_relativo": round((float(ponto["preco"] or 0) / base) * 100, 2),
+                    }
+                    for ponto in pontos
+                ]
+            }
+        else:
+            alinhadas, avisos_alinhamento = _alinhar_series_comparacao(series_brutas, ordem)
+            avisos.extend(avisos_alinhamento)
+            if not alinhadas:
+                mensagem = (
+                    avisos[0]
+                    if avisos
+                    else "Nao foi possivel alinhar os ativos da carteira no periodo."
+                )
+                return None, mensagem
+
+        return {
+            "simbolos": [simbolo for simbolo in ordem if simbolo in alinhadas],
+            "series": alinhadas,
+            "avisos": avisos,
+        }, None
