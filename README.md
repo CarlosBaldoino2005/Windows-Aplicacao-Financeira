@@ -26,9 +26,11 @@ Versao mobile instalavel (Flutter). Detalhes em [`mobile/README.md`](mobile/READ
 
 | Componente | Como rodar |
 |------------|------------|
-| Desktop | `executar.bat` — nao usa API HTTP (dados direto via Python) |
-| App Android (celular) | `mobile\gerar_apk.bat` — API na nuvem Render |
+| Desktop | `executar.bat` — nao usa API HTTP nem Render (dados direto via Python) |
+| App Android (celular) | `liberar_api_rede.bat` + `executar_api.bat` + `mobile\gerar_apk.bat` (API local na Wi-Fi) |
 | App Android (emulador) | `executar_api.bat` + `gerar_apk_emulador.bat` + `testar_apk.bat` |
+
+> A API na nuvem (Render) esta **desativada** — mobile e desktop usam apenas fontes locais.
 
 Endpoints iniciais: `/api/saude`, `/api/mercado/painel`, `/api/mercado/cotacao/{simbolo}`, `/api/busca/acoes?q=`.
 

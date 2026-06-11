@@ -1,5 +1,6 @@
-# Deploy gratuito no Render: https://render.com
-# Celular fisico usa esta API (gerar_apk.bat). Emulador usa API local.
+# DEPRECADO — conexao com API Render desativada no mobile e desktop.
+# App Android usa API local (executar_api.bat + gerar_apk.bat).
+# Deploy historico no Render: https://render.com
 services:
   - type: web
     name: financeiro-api
