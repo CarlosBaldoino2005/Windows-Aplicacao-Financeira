@@ -11,9 +11,16 @@ import '../widgets/seletor_tipo_ativo.dart';
 
 /// Formulário para cadastrar ou editar posição na carteira.
 class CarteiraFormTela extends StatefulWidget {
-  const CarteiraFormTela({super.key, this.posicao});
+  const CarteiraFormTela({
+    super.key,
+    this.posicao,
+    this.preencherSimbolo,
+    this.preencherTipo,
+  });
 
   final PosicaoCarteira? posicao;
+  final String? preencherSimbolo;
+  final TipoAtivo? preencherTipo;
 
   @override
   State<CarteiraFormTela> createState() => _CarteiraFormTelaState();
@@ -39,6 +46,11 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
 
   bool get _editando => widget.posicao != null;
 
+  bool get _novaCompraMesmoAtivo =>
+      !_editando &&
+      widget.preencherSimbolo != null &&
+      widget.preencherTipo != null;
+
   String get _dicaBusca {
     return switch (_tipo) {
       TipoAtivo.cripto => 'BTC, ETH, SOL...',
@@ -52,14 +64,21 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
   void initState() {
     super.initState();
     final pos = widget.posicao;
-    _tipo = pos?.tipo ?? TipoAtivo.acoes;
     if (pos != null) {
+      _tipo = pos.tipo;
       _simboloSelecionado = pos.simbolo;
       _codigoSelecionado = ValidadoresCarteira.codigoExibicao(pos.simbolo);
       _quantidadeCtrl.text = pos.quantidade.toString();
       _precoCtrl.text = pos.precoCompra.toStringAsFixed(2).replaceAll('.', ',');
       _dataCtrl.text = pos.dataCompra;
+    } else if (_novaCompraMesmoAtivo) {
+      _tipo = widget.preencherTipo!;
+      _simboloSelecionado = widget.preencherSimbolo;
+      _codigoSelecionado =
+          ValidadoresCarteira.codigoExibicao(widget.preencherSimbolo!);
+      _dataCtrl.text = ValidadoresCarteira.dataHoje();
     } else {
+      _tipo = TipoAtivo.acoes;
       _dataCtrl.text = ValidadoresCarteira.dataHoje();
     }
   }
@@ -322,7 +341,11 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_editando ? 'Editar posição' : 'Nova compra'),
+        title: Text(
+          _editando
+              ? 'Editar posição'
+              : (_novaCompraMesmoAtivo ? 'Nova compra do ativo' : 'Nova compra'),
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -331,10 +354,10 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
           children: [
             SeletorTipoAtivo(
               tipoSelecionado: _tipo,
-              aoMudar: _editando ? (_) {} : _mudarTipo,
+              aoMudar: (_editando || _novaCompraMesmoAtivo) ? (_) {} : _mudarTipo,
             ),
             const SizedBox(height: 16),
-            if (_editando)
+            if (_editando || _novaCompraMesmoAtivo) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Ativo'),
@@ -345,8 +368,16 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
                     fontSize: 16,
                   ),
                 ),
-              )
-            else
+              ),
+              if (_novaCompraMesmoAtivo)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Cada compra vira uma linha separada. Informe quantidade, preço e data desta nova aquisição.',
+                    style: TextStyle(fontSize: 12, color: CoresApp.textoSecundario),
+                  ),
+                ),
+            ] else
               _montarBuscaAtivo(),
             const SizedBox(height: 12),
             TextFormField(
@@ -383,9 +414,12 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
               validator: (v) => ValidadoresCarteira.validarDataCompra(v ?? ''),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Ao salvar, o ativo entra no monitoramento com limites de ±10% sobre o preço de compra (ajustável na carteira).',
-              style: TextStyle(fontSize: 12),
+            Text(
+              _editando
+                  ? 'Altera somente esta linha. Para outra compra do mesmo ativo, use Nova compra do ativo.'
+                  : 'Cada compra em data ou preço diferente pode ser registrada separadamente. '
+                      'O monitoramento usa o preço médio de compra (±10%, ajustável na carteira).',
+              style: const TextStyle(fontSize: 12),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -397,7 +431,13 @@ class _CarteiraFormTelaState extends State<CarteiraFormTela> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save),
-              label: Text(_editando ? 'Salvar alterações' : 'Adicionar à carteira'),
+              label: Text(
+                _editando
+                    ? 'Salvar alterações'
+                    : (_novaCompraMesmoAtivo
+                        ? 'Registrar nova compra'
+                        : 'Adicionar à carteira'),
+              ),
             ),
           ],
         ),

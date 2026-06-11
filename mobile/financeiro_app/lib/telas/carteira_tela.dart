@@ -117,10 +117,18 @@ class CarteiraTelaState extends State<CarteiraTela> {
     }
   }
 
-  Future<void> _abrirFormulario([PosicaoCarteira? posicao]) async {
+  Future<void> _abrirFormulario({
+    PosicaoCarteira? posicao,
+    String? preencherSimbolo,
+    TipoAtivo? preencherTipo,
+  }) async {
     final salvou = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CarteiraFormTela(posicao: posicao),
+        builder: (_) => CarteiraFormTela(
+          posicao: posicao,
+          preencherSimbolo: preencherSimbolo,
+          preencherTipo: preencherTipo,
+        ),
       ),
     );
     if (salvou == true) await _carregar();
@@ -290,8 +298,13 @@ class CarteiraTelaState extends State<CarteiraTela> {
             _linhaResumo('Dividendos recebidos', formatarMoeda(dividendos, moeda)),
             const SizedBox(height: 4),
             Text(
-              'Monitoramento: ±${_variacaoPct.toStringAsFixed(0)}% sobre o preço de compra',
+              'Monitoramento: ±${_variacaoPct.toStringAsFixed(0)}% sobre o preço médio de compra',
               style: const TextStyle(fontSize: 12, color: CoresApp.textoSecundario),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'O mesmo ativo pode ter várias compras (datas e preços diferentes).',
+              style: TextStyle(fontSize: 12, color: CoresApp.textoSecundario),
             ),
           ],
         ),
@@ -318,87 +331,116 @@ class CarteiraTelaState extends State<CarteiraTela> {
     final pct = linha.resultadoPercentual;
 
     return Card(
-      child: InkWell(
-        onTap: () => _abrirGrafico(linha),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => _abrirGrafico(linha),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          pos.simbolo,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              pos.simbolo,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (linha.nomeAtivo.isNotEmpty)
+                              Text(
+                                linha.nomeAtivo,
+                                style: const TextStyle(
+                                  color: CoresApp.textoSecundario,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            Text(
+                              '${pos.tipo.rotulo} · Compra ${pos.dataCompra}',
+                              style: const TextStyle(
+                                color: CoresApp.textoSecundario,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                        if (linha.nomeAtivo.isNotEmpty)
-                          Text(
-                            linha.nomeAtivo,
-                            style: const TextStyle(color: CoresApp.textoSecundario, fontSize: 12),
-                          ),
-                        Text(
-                          '${pos.tipo.rotulo} · Compra ${pos.dataCompra}',
-                          style: const TextStyle(color: CoresApp.textoSecundario, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    onSelected: (acao) {
-                      switch (acao) {
-                        case 'editar':
-                          _abrirFormulario(pos);
-                        case 'vender':
-                          _registrarVenda(pos);
-                        case 'excluir':
-                          _excluir(pos);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'editar', child: Text('Editar')),
-                      PopupMenuItem(value: 'vender', child: Text('Registrar venda')),
-                      PopupMenuItem(value: 'excluir', child: Text('Excluir')),
+                      ),
+                      IconButton(
+                        tooltip: 'Excluir posição',
+                        onPressed: () => _excluir(pos),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
                     ],
                   ),
+                  const Divider(height: 20),
+                  _detalhe('Quantidade', pos.quantidade.toString()),
+                  _detalhe('Preço compra', formatarMoeda(pos.precoCompra, linha.moeda)),
+                  _detalhe('Investido', formatarMoeda(pos.valorInvestido, linha.moeda)),
+                  if (linha.precoAtual != null)
+                    _detalhe('Preço atual', formatarMoeda(linha.precoAtual!, linha.moeda)),
+                  if (linha.valorAtual != null)
+                    _detalhe('Valor atual', formatarMoeda(linha.valorAtual!, linha.moeda)),
+                  if (resultado != null && pct != null)
+                    _detalhe(
+                      'Valorização',
+                      '${formatarMoeda(resultado, linha.moeda)} (${formatarVariacao(pct)})',
+                      cor: resultado >= 0 ? CoresApp.sucesso : CoresApp.erro,
+                    ),
+                  _detalhe(
+                    'Dividendos recebidos',
+                    formatarMoeda(linha.dividendosRecebidos, linha.moeda),
+                  ),
+                  if (linha.proximoDividendoData.isNotEmpty) ...[
+                    _detalhe(
+                      'Próximo dividendo (est.)',
+                      linha.proximoDividendoData,
+                    ),
+                    if (linha.proximoDividendoPrevisto != null)
+                      _detalhe(
+                        'Valor previsto',
+                        formatarMoeda(linha.proximoDividendoPrevisto!, linha.moeda),
+                      ),
+                  ],
                 ],
               ),
-              const Divider(height: 20),
-              _detalhe('Quantidade', pos.quantidade.toString()),
-              _detalhe('Preço compra', formatarMoeda(pos.precoCompra, linha.moeda)),
-              _detalhe('Investido', formatarMoeda(pos.valorInvestido, linha.moeda)),
-              if (linha.precoAtual != null)
-                _detalhe('Preço atual', formatarMoeda(linha.precoAtual!, linha.moeda)),
-              if (linha.valorAtual != null)
-                _detalhe('Valor atual', formatarMoeda(linha.valorAtual!, linha.moeda)),
-              if (resultado != null && pct != null)
-                _detalhe(
-                  'Valorização',
-                  '${formatarMoeda(resultado, linha.moeda)} (${formatarVariacao(pct)})',
-                  cor: resultado >= 0 ? CoresApp.sucesso : CoresApp.erro,
-                ),
-              _detalhe(
-                'Dividendos recebidos',
-                formatarMoeda(linha.dividendosRecebidos, linha.moeda),
-              ),
-              if (linha.proximoDividendoData.isNotEmpty) ...[
-                _detalhe(
-                  'Próximo dividendo (est.)',
-                  linha.proximoDividendoData,
-                ),
-                if (linha.proximoDividendoPrevisto != null)
-                  _detalhe(
-                    'Valor previsto',
-                    formatarMoeda(linha.proximoDividendoPrevisto!, linha.moeda),
-                  ),
-              ],
-            ],
+            ),
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _abrirFormulario(
+                    preencherSimbolo: pos.simbolo,
+                    preencherTipo: pos.tipo,
+                  ),
+                  icon: const Icon(Icons.add_shopping_cart, size: 18),
+                  label: const Text('Nova compra'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _abrirFormulario(posicao: pos),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Editar'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _registrarVenda(pos),
+                  icon: const Icon(Icons.sell_outlined, size: 18),
+                  label: const Text('Vender'),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

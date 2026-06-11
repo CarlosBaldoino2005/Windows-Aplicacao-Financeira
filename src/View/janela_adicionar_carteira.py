@@ -35,16 +35,30 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         ao_salvar: Callable[[], None],
         *,
         posicao: PosicaoCarteira | None = None,
+        preencher_ativo: tuple[str, TipoAtivoCarteira] | None = None,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._ao_salvar = ao_salvar
         self._posicao = posicao
         self._editando = posicao is not None
-        self._simbolo_selecionado: str | None = posicao.simbolo if posicao else None
-        self._tipo_selecionado: TipoAtivoCarteira | None = posicao.tipo_ativo if posicao else None
+        self._nova_compra_ativo = preencher_ativo is not None and not self._editando
+        if posicao is not None:
+            self._simbolo_selecionado = posicao.simbolo
+            self._tipo_selecionado = posicao.tipo_ativo
+        elif preencher_ativo is not None:
+            self._simbolo_selecionado, self._tipo_selecionado = preencher_ativo
+        else:
+            self._simbolo_selecionado = None
+            self._tipo_selecionado = None
 
-        self.title("Editar posicao" if self._editando else "Registrar compra")
+        if self._editando:
+            titulo = "Editar posicao"
+        elif self._nova_compra_ativo:
+            titulo = "Nova compra do ativo"
+        else:
+            titulo = "Registrar compra"
+        self.title(titulo)
         self.configure(fg_color=CORES["fundo"])
         self.resizable(False, False)
         self.minsize(_LARGURA, _ALTURA)
@@ -84,20 +98,41 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         painel = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         painel.pack(fill="both", expand=True, padx=16, pady=16)
 
+        if self._editando:
+            titulo_form = "Editar posicao"
+        elif self._nova_compra_ativo:
+            titulo_form = "Nova compra do ativo"
+        else:
+            titulo_form = "Registrar compra"
+
         ctk.CTkLabel(
             painel,
-            text="Editar posicao" if self._editando else "Registrar compra",
+            text=titulo_form,
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(16, 4))
 
+        if self._nova_compra_ativo:
+            texto_ajuda = (
+                "Cada compra vira uma linha separada na carteira. "
+                "Informe quantidade, preco e data desta nova aquisicao."
+            )
+        elif self._editando:
+            texto_ajuda = (
+                "Altera somente esta linha da carteira. "
+                "Para outra compra do mesmo ativo, use Nova compra do ativo."
+            )
+        else:
+            texto_ajuda = (
+                "Cada compra em data ou preco diferente pode ser registrada separadamente. "
+                f"Ao salvar, o ativo entra no monitoramento com limites de ±"
+                f"{self._controlador.carregar_variacao_monitoramento_pct():.0f}% "
+                "sobre o preco medio de compra."
+            )
+
         ctk.CTkLabel(
             painel,
-            text=(
-                "Ao salvar, o ativo entra no monitoramento com limites de ±"
-                f"{self._controlador.carregar_variacao_monitoramento_pct():.0f}% "
-                "sobre o preco de compra."
-            ),
+            text=texto_ajuda,
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=_LARGURA - 80,
@@ -130,7 +165,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                 justify="left",
             ).pack(anchor="w", pady=(4, 0))
 
-        if not self._editando:
+        if not self._editando and not self._nova_compra_ativo:
             self._montar_busca_ativo(painel)
         else:
             self._label_ativo_fixo = ctk.CTkLabel(
@@ -235,8 +270,21 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         ).pack(side="right", padx=(0, 8))
 
     def _aplicar_preenchimento_inicial(self) -> None:
+        hoje = datetime.now().strftime("%d/%m/%Y")
+
+        if self._nova_compra_ativo and self._tipo_selecionado and self._simbolo_selecionado:
+            self._definir_tipo_automatico(self._tipo_selecionado)
+            if hasattr(self, "_label_ativo_fixo"):
+                self._label_ativo_fixo.configure(
+                    text=(
+                        f"{codigo_exibicao(self._simbolo_selecionado)} "
+                        f"({ROTULOS_TIPO_CARTEIRA[self._tipo_selecionado]})"
+                    )
+                )
+            self._entrada_data.insert(0, hoje)
+            return
+
         if self._posicao is None:
-            hoje = datetime.now().strftime("%d/%m/%Y")
             self._entrada_data.insert(0, hoje)
             return
 
@@ -451,7 +499,14 @@ def abrir_adicionar_carteira(
     ao_salvar: Callable[[], None],
     *,
     posicao: PosicaoCarteira | None = None,
+    preencher_ativo: tuple[str, TipoAtivoCarteira] | None = None,
 ) -> JanelaAdicionarCarteira | None:
     if not pai.winfo_exists():
         return None
-    return JanelaAdicionarCarteira(pai, controlador, ao_salvar, posicao=posicao)
+    return JanelaAdicionarCarteira(
+        pai,
+        controlador,
+        ao_salvar,
+        posicao=posicao,
+        preencher_ativo=preencher_ativo,
+    )

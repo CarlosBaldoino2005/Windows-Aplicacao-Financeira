@@ -64,7 +64,7 @@ class CarteiraLocal {
 
     posicoes.insert(0, nova);
     await _salvar(posicoes);
-    await _sincronizarMonitoramento(tipo, codigo, precoCompra);
+    await _sincronizarMonitoramentoGrupo(tipo, codigo);
     return nova;
   }
 
@@ -77,11 +77,7 @@ class CarteiraLocal {
 
     posicoes[indice] = posicao;
     await _salvar(posicoes);
-    await _sincronizarMonitoramento(
-      posicao.tipo,
-      posicao.simbolo,
-      posicao.precoCompra,
-    );
+    await _sincronizarMonitoramentoGrupo(posicao.tipo, posicao.simbolo);
   }
 
   /// Registra venda reduzindo a quantidade (remove se zerar).
@@ -105,17 +101,12 @@ class CarteiraLocal {
 
     if (restante == 0) {
       posicoes.removeAt(indice);
-      await _monitoramento.remover(atual.tipo, atual.simbolo);
     } else {
       posicoes[indice] = atual.copiarCom(quantidade: restante);
-      await _sincronizarMonitoramento(
-        atual.tipo,
-        atual.simbolo,
-        atual.precoCompra,
-      );
     }
 
     await _salvar(posicoes);
+    await _sincronizarMonitoramentoGrupo(atual.tipo, atual.simbolo);
   }
 
   Future<void> remover(String id) async {
@@ -125,13 +116,7 @@ class CarteiraLocal {
 
     final removida = posicoes.removeAt(indice);
     await _salvar(posicoes);
-
-    final aindaExiste = posicoes.any(
-      (p) => p.tipo == removida.tipo && p.simbolo == removida.simbolo,
-    );
-    if (!aindaExiste) {
-      await _monitoramento.remover(removida.tipo, removida.simbolo);
-    }
+    await _sincronizarMonitoramentoGrupo(removida.tipo, removida.simbolo);
   }
 
   Future<void> _sincronizarMonitoramento(
@@ -146,6 +131,28 @@ class CarteiraLocal {
       precoReferencia: precoReferencia,
       variacaoPct: pct,
     );
+  }
+
+  Future<void> _sincronizarMonitoramentoGrupo(TipoAtivo tipo, String simbolo) async {
+    final posicoes = await listar();
+    final grupo = posicoes
+        .where((pos) => pos.tipo == tipo && pos.simbolo == simbolo)
+        .toList();
+
+    if (grupo.isEmpty) {
+      await _monitoramento.remover(tipo, simbolo);
+      return;
+    }
+
+    var qtdTotal = 0.0;
+    var investido = 0.0;
+    for (final pos in grupo) {
+      qtdTotal += pos.quantidade;
+      investido += pos.valorInvestido;
+    }
+    final precoMedio =
+        qtdTotal > 0 ? investido / qtdTotal : grupo.first.precoCompra;
+    await _sincronizarMonitoramento(tipo, simbolo, precoMedio);
   }
 
   /// Reaplica limites de monitoramento após alterar o percentual padrão.

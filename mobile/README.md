@@ -14,7 +14,7 @@ Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/
 - **Mais detalhes**: empresa, indicadores, dividendos e resultados
 - Busca por tipo de ativo
 - Favoritos por tipo (salvos no celular)
-- Carteira de investimentos
+- Carteira de investimentos (várias compras do mesmo ativo em datas/preços diferentes)
 
 ## Requisitos
 
@@ -29,6 +29,8 @@ Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/
 3. Opcional: copie `celular_api_url.example.bat` para `celular_api_url.bat` e ajuste o IP do PC
 4. Execute `mobile\gerar_apk.bat` (detecta o IP da rede ou usa `celular_api_url.bat`)
 5. Instale `mobile\Financeiro.apk` no celular na **mesma Wi-Fi** do PC
+
+Em cada posição da carteira, use **Nova compra** para registrar outra aquisição do mesmo ativo.
 
 ## 2. Emulador no PC
 

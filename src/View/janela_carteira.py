@@ -7,7 +7,12 @@ import customtkinter as ctk
 from src.View import mensagem_helper as messagebox
 
 from src.Controller.controlador_carteira import ControladorCarteira
-from src.Model.carteira import LinhaCarteira, PosicaoCarteira, tipo_carteira_para_monitoramento
+from src.Model.carteira import (
+    LinhaCarteira,
+    PosicaoCarteira,
+    TipoAtivoCarteira,
+    tipo_carteira_para_monitoramento,
+)
 from src.Model.monitoramento import TipoAtivoMonitoramento
 from src.Model.opcoes_atualizacao_automatica import (
     INTERVALO_MAXIMO_SEGUNDOS,
@@ -115,6 +120,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             cabecalho,
             text=(
                 "Registre compras e vendas de acoes, criptomoedas, FIIs e indices. "
+                "O mesmo ativo pode ter varias compras (datas e precos diferentes). "
                 "Cada ativo entra no monitoramento com limites de ±"
                 f"{self._variacao_pct:.0f}% sobre o preco medio de compra."
             ),
@@ -213,6 +219,16 @@ class JanelaCarteira(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=140,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            grupo_esquerda,
+            text="Nova compra do ativo",
+            command=self._nova_compra_mesmo_ativo,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=170,
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
@@ -317,7 +333,12 @@ class JanelaCarteira(ctk.CTkToplevel):
         except Exception:
             pass
 
-    def _abrir_formulario(self, posicao: PosicaoCarteira | None = None) -> None:
+    def _abrir_formulario(
+        self,
+        posicao: PosicaoCarteira | None = None,
+        *,
+        preencher_ativo: tuple[str, TipoAtivoCarteira] | None = None,
+    ) -> None:
         if self._janela_form is not None:
             try:
                 if self._janela_form.winfo_exists():
@@ -332,7 +353,25 @@ class JanelaCarteira(ctk.CTkToplevel):
             self._controlador,
             ao_salvar=lambda: self._atualizar_lista(forcar=True),
             posicao=posicao,
+            preencher_ativo=preencher_ativo,
         )
+
+    def _nova_compra_mesmo_ativo(self) -> None:
+        selecionados = self._obter_ids_selecionados()
+        if len(selecionados) != 1:
+            messagebox.showwarning(
+                "Nova compra",
+                "Selecione exatamente uma posicao na grid para registrar outra compra do mesmo ativo.",
+                parent=self,
+            )
+            return
+
+        posicao = self._controlador.obter_posicao(selecionados[0])
+        if posicao is None:
+            messagebox.showwarning("Nova compra", "Posicao nao encontrada.", parent=self)
+            return
+
+        self._abrir_formulario(preencher_ativo=(posicao.simbolo, posicao.tipo_ativo))
 
     def _obter_ids_selecionados(self) -> list[str]:
         if self._tabela is None:
