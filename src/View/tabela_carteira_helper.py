@@ -250,13 +250,17 @@ def criar_grid_carteira(
     scroll_y = ttk.Scrollbar(frame_tabela, orient="vertical", command=tabela.yview)
     scroll_x = ttk.Scrollbar(frame_tabela, orient="horizontal", command=tabela.xview)
     tabela.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+
+    # Grid evita que a barra horizontal cubra a ultima linha da tabela.
+    frame_tabela.grid_rowconfigure(0, weight=0 if rolagem_pagina else 1)
+    frame_tabela.grid_columnconfigure(0, weight=1)
     if rolagem_pagina:
-        tabela.pack(side="top", fill="x")
-        scroll_x.pack(side="bottom", fill="x")
+        tabela.grid(row=0, column=0, sticky="ew")
+        scroll_x.grid(row=1, column=0, sticky="ew")
     else:
-        tabela.pack(side="left", fill="both", expand=True)
-        scroll_y.pack(side="right", fill="y")
-        scroll_x.pack(side="bottom", fill="x")
+        tabela.grid(row=0, column=0, sticky="nsew")
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
 
     _configurar_ordenacao_colunas(tabela)
 
@@ -287,7 +291,48 @@ def criar_grid_carteira(
     tabela._label_vazio = label_vazio  # type: ignore[attr-defined]
     tabela._rolagem_pagina = rolagem_pagina  # type: ignore[attr-defined]
     tabela._altura_minima = altura  # type: ignore[attr-defined]
+    tabela._scroll_y = scroll_y  # type: ignore[attr-defined]
+    tabela._scroll_x = scroll_x  # type: ignore[attr-defined]
+    if not rolagem_pagina:
+        vincular_ajuste_altura_grid_carteira(tabela)
     return tabela
+
+
+def vincular_ajuste_altura_grid_carteira(tabela: ttk.Treeview) -> None:
+    """Recalcula linhas visiveis conforme o container para nao cortar a ultima linha."""
+    if getattr(tabela, "_rolagem_pagina", False):
+        return
+
+    frame = tabela.master
+    altura_minima = getattr(tabela, "_altura_minima", 3)
+
+    def ao_redimensionar(_evento: tk.Event | None = None) -> None:
+        if not treeview_ainda_ativa(tabela):
+            return
+        if _evento is not None and _evento.widget is not frame:
+            return
+        frame.update_idletasks()
+        altura_total = frame.winfo_height()
+        if altura_total <= 2:
+            return
+
+        scroll_x = getattr(tabela, "_scroll_x", None)
+        altura_scroll_x = 18
+        if scroll_x is not None:
+            scroll_x.update_idletasks()
+            if scroll_x.winfo_ismapped() and scroll_x.winfo_height() > 0:
+                altura_scroll_x = scroll_x.winfo_height()
+
+        estilo = ttk.Style()
+        altura_linha = int(estilo.lookup("Treeview", "rowheight") or 30)
+        linhas_visiveis = max(altura_minima, (altura_total - altura_scroll_x) // max(altura_linha, 1))
+        if getattr(tabela, "_altura_visivel_atual", None) == linhas_visiveis:
+            return
+        tabela._altura_visivel_atual = linhas_visiveis  # type: ignore[attr-defined]
+        tabela.configure(height=linhas_visiveis)
+
+    frame.bind("<Configure>", ao_redimensionar, add="+")
+    tabela.after(120, ao_redimensionar)
 
 
 def _ajustar_altura_grid_carteira(tabela: ttk.Treeview, quantidade_linhas: int) -> None:
@@ -447,6 +492,11 @@ def preencher_grid_carteira(
     sincronizar_tags_selecao_treeview(tabela)
     _atualizar_cabecalhos_ordenacao(tabela)
     _ajustar_altura_grid_carteira(tabela, len(linhas_exibir))
+    if not getattr(tabela, "_rolagem_pagina", False) and treeview_ainda_ativa(tabela):
+        tabela._altura_visivel_atual = None  # type: ignore[attr-defined]
+        frame = tabela.master
+        if frame is not None:
+            tabela.after_idle(lambda f=frame: f.event_generate("<Configure>"))
 
 
 def liberar_grid_carteira(tabela: ttk.Treeview | None) -> None:

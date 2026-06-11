@@ -120,7 +120,7 @@ class JanelaCarteiraPosicoesTelaCheia(ctk.CTkToplevel):
         self._tabela = criar_grid_carteira(
             container,
             "Posicoes da carteira",
-            altura=22,
+            altura=8,
             ao_duplo_clique=self._ao_duplo_clique,
         )
 
