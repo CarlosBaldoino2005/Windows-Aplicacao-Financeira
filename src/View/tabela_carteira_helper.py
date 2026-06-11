@@ -37,6 +37,7 @@ _COLUNAS = (
     "resultado_pct",
     "resultado_reais",
     "dividendos",
+    "dividendo_prev_mes",
     "prox_dividendo",
 )
 _ROTULOS = {
@@ -52,9 +53,10 @@ _ROTULOS = {
     "resultado_pct": "Valoriz. %",
     "resultado_reais": "Valoriz. R$",
     "dividendos": "Dividendos",
+    "dividendo_prev_mes": "Dividendo prev. mes",
     "prox_dividendo": "Prox. dividendo",
 }
-_LARGURAS = (90, 80, 150, 70, 90, 100, 100, 100, 100, 90, 100, 100, 195)
+_LARGURAS = (90, 80, 150, 70, 90, 100, 100, 100, 100, 90, 100, 100, 130, 195)
 _LARGURA_MIN_PROX_DIVIDENDO = 175
 _FONTE_FAMILIA = "Segoe UI"
 
@@ -147,6 +149,8 @@ def _chave_ordenacao_linha(linha: LinhaCarteira, coluna: str) -> tuple:
         return chave_comparavel(linha.resultado_reais)
     if coluna == "dividendos":
         return chave_comparavel(linha.dividendos_recebidos)
+    if coluna == "dividendo_prev_mes":
+        return chave_comparavel(linha.dividendo_previsto_proximo_mes)
     if coluna == "prox_dividendo":
         texto = linha.proximo_dividendo_data
         if linha.proximo_dividendo_previsto is not None:
@@ -396,6 +400,12 @@ def preencher_grid_carteira(
             else "—"
         )
 
+        dividendo_prev_mes_texto = (
+            formatar_moeda(linha.dividendo_previsto_proximo_mes, moeda)
+            if linha.dividendo_previsto_proximo_mes is not None
+            else "—"
+        )
+
         prox_texto = formatar_texto_opcional(linha.proximo_dividendo_data)
         if linha.proximo_dividendo_previsto is not None and linha.proximo_dividendo_data:
             prox_texto = (
@@ -422,6 +432,7 @@ def preencher_grid_carteira(
                 _formatar_resultado_pct(linha.resultado_percentual),
                 resultado_reais_texto,
                 formatar_moeda(linha.dividendos_recebidos, moeda),
+                dividendo_prev_mes_texto,
                 prox_texto,
             ),
             tags=(tag,),

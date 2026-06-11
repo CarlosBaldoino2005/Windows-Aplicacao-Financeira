@@ -34,6 +34,26 @@ _ALIASES_CRIPTO_NORM: dict[str, str] = {
 }
 
 
+def eh_simbolo_cripto_conhecido(simbolo: str) -> bool:
+    """Indica se o codigo e um par de cripto conhecido (alias ou sufixo -USD/-USDT)."""
+    limpo = (
+        normalizar_texto_busca((simbolo or "").strip())
+        .upper()
+        .replace("/", "-")
+        .replace(" ", "")
+    )
+    if not limpo:
+        return False
+    if "-USD" in limpo or "-USDT" in limpo:
+        return True
+    if limpo in _ALIASES_CRIPTO_NORM:
+        return True
+    base = limpo.replace("-USD", "").replace("-USDT", "")
+    if base in _ALIASES_CRIPTO_NORM:
+        return True
+    return limpo in _ALIASES_CRIPTO_NORM.values()
+
+
 def normalizar_simbolo_cripto(simbolo: str) -> tuple[str | None, str | None]:
     """
     Valida e normaliza par de cripto (ex.: BTC -> BTC-USD).

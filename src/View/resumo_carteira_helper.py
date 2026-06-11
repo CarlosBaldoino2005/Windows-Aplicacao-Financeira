@@ -9,7 +9,7 @@ from src.View.tema import CORES
 
 
 class PainelResumoCarteira:
-    """Quatro cards de metricas agregadas da carteira."""
+    """Cards de metricas agregadas da carteira."""
 
     def __init__(self, pai: ctk.CTkBaseClass) -> None:
         self._pai = pai
@@ -22,6 +22,7 @@ class PainelResumoCarteira:
         self._valor_resultado: ctk.CTkLabel | None = None
         self._sub_resultado: ctk.CTkLabel | None = None
         self._valor_dividendos: ctk.CTkLabel | None = None
+        self._valor_dividendo_prev_mes: ctk.CTkLabel | None = None
         self._label_rodape: ctk.CTkLabel | None = None
 
     def montar(self) -> ctk.CTkFrame:
@@ -56,6 +57,9 @@ class PainelResumoCarteira:
         )
         _, self._valor_dividendos, _ = self._criar_card_resumo(
             self._frame_cards_resumo, 3, "Dividendos"
+        )
+        _, self._valor_dividendo_prev_mes, _ = self._criar_card_resumo(
+            self._frame_cards_resumo, 4, "Dividendo prev. mes"
         )
 
         self._label_rodape = ctk.CTkLabel(
@@ -161,7 +165,9 @@ class PainelResumoCarteira:
         investido = 0.0
         atual = 0.0
         dividendos = 0.0
+        dividendo_prev_mes = 0.0
         tem_atual = False
+        tem_dividendo_prev_mes = False
         moeda = "BRL"
         if linhas[0].cotacao is not None:
             moeda = linhas[0].cotacao.moeda
@@ -169,6 +175,9 @@ class PainelResumoCarteira:
         for linha in linhas:
             investido += linha.posicao.valor_investido
             dividendos += linha.dividendos_recebidos
+            if linha.dividendo_previsto_proximo_mes is not None:
+                dividendo_prev_mes += linha.dividendo_previsto_proximo_mes
+                tem_dividendo_prev_mes = True
             if linha.valor_atual is not None:
                 atual += linha.valor_atual
                 tem_atual = True
@@ -178,6 +187,10 @@ class PainelResumoCarteira:
             self._valor_investido.configure(text=formatar_moeda(investido, moeda))
         if self._valor_dividendos is not None:
             self._valor_dividendos.configure(text=formatar_moeda(dividendos, moeda))
+        if self._valor_dividendo_prev_mes is not None:
+            self._valor_dividendo_prev_mes.configure(
+                text=formatar_moeda(dividendo_prev_mes, moeda) if tem_dividendo_prev_mes else "—"
+            )
 
         if tem_atual:
             resultado = atual - investido

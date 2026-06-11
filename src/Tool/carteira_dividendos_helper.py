@@ -1,7 +1,8 @@
 """Calculos de dividendos para posicoes da carteira."""
 from __future__ import annotations
 
-from datetime import datetime
+from calendar import monthrange
+from datetime import datetime, timedelta
 
 from src.Model.detalhes_acao import PagamentoDividendo
 from src.Tool.validadores import validar_data_ptbr
@@ -78,8 +79,6 @@ def estimar_proximo_dividendo(
         if difs:
             intervalo_dias = max(30, int(sum(difs) / len(difs)))
 
-    from datetime import timedelta
-
     proxima = ultimo[0] + timedelta(days=intervalo_dias)
     valor_cota = ultimo[1].valor_por_cota
     return (
@@ -87,3 +86,95 @@ def estimar_proximo_dividendo(
         valor_cota,
         round(valor_cota * quantidade, 4),
     )
+
+
+def _limites_proximo_mes_calendario(referencia: datetime) -> tuple[datetime, datetime]:
+    """Primeiro e ultimo instante do mes calendario seguinte a referencia."""
+    if referencia.month == 12:
+        ano, mes = referencia.year + 1, 1
+    else:
+        ano, mes = referencia.year, referencia.month + 1
+    inicio = datetime(ano, mes, 1)
+    ultimo_dia = monthrange(ano, mes)[1]
+    fim = datetime(ano, mes, ultimo_dia, 23, 59, 59)
+    return inicio, fim
+
+
+def _intervalo_medio_pagamentos(
+    ordenados: list[tuple[datetime, PagamentoDividendo]],
+) -> int:
+    """Intervalo medio em dias entre pagamentos recentes (minimo 30)."""
+    if len(ordenados) < 2:
+        return 90
+    difs: list[int] = []
+    for indice in range(min(4, len(ordenados) - 1)):
+        difs.append(abs((ordenados[indice][0] - ordenados[indice + 1][0]).days))
+    if not difs:
+        return 90
+    return max(30, int(sum(difs) / len(difs)))
+
+
+def _pagamentos_ordenados(
+    pagamentos: list[PagamentoDividendo],
+) -> list[tuple[datetime, PagamentoDividendo]]:
+    ordenados: list[tuple[datetime, PagamentoDividendo]] = []
+    for item in pagamentos:
+        data_pag, _ = validar_data_ptbr(item.data_pagamento)
+        if data_pag is None or item.valor_por_cota <= 0:
+            continue
+        ordenados.append((data_pag, item))
+    ordenados.sort(key=lambda par: par[0], reverse=True)
+    return ordenados
+
+
+def estimar_dividendo_proximo_mes(
+    pagamentos: list[PagamentoDividendo],
+    quantidade: float,
+    *,
+    referencia: datetime | None = None,
+) -> float | None:
+    """
+    Valor total previsto de dividendos no proximo mes calendario.
+    Usa pagamentos ja anunciados, a proxima data estimada ou projecao pelo intervalo medio.
+    """
+    if not pagamentos or quantidade <= 0:
+        return None
+
+    hoje = referencia or datetime.now()
+    inicio_mes, fim_mes = _limites_proximo_mes_calendario(hoje)
+
+    total_anunciado = 0.0
+    tem_anunciado = False
+    for item in pagamentos:
+        data_pag, _ = validar_data_ptbr(item.data_pagamento)
+        if data_pag is None or item.valor_por_cota <= 0:
+            continue
+        if data_pag > hoje and inicio_mes <= data_pag <= fim_mes:
+            total_anunciado += item.valor_por_cota * quantidade
+            tem_anunciado = True
+    if tem_anunciado:
+        return round(total_anunciado, 4)
+
+    prox_data, _, prox_total = estimar_proximo_dividendo(
+        pagamentos, quantidade, referencia=hoje
+    )
+    if prox_data and prox_total is not None:
+        data_prox, _ = validar_data_ptbr(prox_data)
+        if data_prox and inicio_mes <= data_prox <= fim_mes:
+            return prox_total
+
+    ordenados = _pagamentos_ordenados(pagamentos)
+    if not ordenados:
+        return None
+
+    ultimo_data, ultimo_item = ordenados[0]
+    intervalo_dias = _intervalo_medio_pagamentos(ordenados)
+    candidata = ultimo_data
+    while candidata <= fim_mes:
+        candidata = candidata + timedelta(days=intervalo_dias)
+        if inicio_mes <= candidata <= fim_mes:
+            return round(ultimo_item.valor_por_cota * quantidade, 4)
+        if candidata > fim_mes:
+            break
+
+    return None

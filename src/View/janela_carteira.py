@@ -156,6 +156,9 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._card_dividendos, self._valor_dividendos, _ = self._criar_card_resumo(
             self._frame_cards_resumo, 3, "Dividendos"
         )
+        self._card_dividendo_prev_mes, self._valor_dividendo_prev_mes, _ = self._criar_card_resumo(
+            self._frame_cards_resumo, 4, "Dividendo prev. mes"
+        )
 
         self._label_monitoramento_resumo = ctk.CTkLabel(
             self._frame_resumo,
@@ -735,7 +738,9 @@ class JanelaCarteira(ctk.CTkToplevel):
         investido = 0.0
         atual = 0.0
         dividendos = 0.0
+        dividendo_prev_mes = 0.0
         tem_atual = False
+        tem_dividendo_prev_mes = False
         moeda = "BRL"
         if linhas[0].cotacao is not None:
             moeda = linhas[0].cotacao.moeda
@@ -743,6 +748,9 @@ class JanelaCarteira(ctk.CTkToplevel):
         for linha in linhas:
             investido += linha.posicao.valor_investido
             dividendos += linha.dividendos_recebidos
+            if linha.dividendo_previsto_proximo_mes is not None:
+                dividendo_prev_mes += linha.dividendo_previsto_proximo_mes
+                tem_dividendo_prev_mes = True
             if linha.valor_atual is not None:
                 atual += linha.valor_atual
                 tem_atual = True
@@ -750,6 +758,9 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._mostrar_resumo_cards()
         self._valor_investido.configure(text=formatar_moeda(investido, moeda))
         self._valor_dividendos.configure(text=formatar_moeda(dividendos, moeda))
+        self._valor_dividendo_prev_mes.configure(
+            text=formatar_moeda(dividendo_prev_mes, moeda) if tem_dividendo_prev_mes else "—"
+        )
 
         if tem_atual:
             resultado = atual - investido

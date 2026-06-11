@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from src.Model.cotacao import CotacaoResumo
+from src.Model.resultado_busca import ResultadoBusca
 
 TipoAtivoCarteira = Literal["acoes", "cripto", "fiis", "indices"]
 
@@ -23,6 +24,29 @@ ROTULOS_TIPO_CARTEIRA: dict[TipoAtivoCarteira, str] = {
 }
 
 MAXIMO_POSICOES_CARTEIRA = 200
+
+
+@dataclass(frozen=True)
+class ResultadoBuscaCarteira:
+    """Item retornado na busca automatica de ativos para a carteira."""
+
+    simbolo: str
+    nome: str
+    bolsa: str
+    tipo_ativo: TipoAtivoCarteira
+
+    @classmethod
+    def de_resultado_busca(
+        cls,
+        item: ResultadoBusca,
+        tipo_ativo: TipoAtivoCarteira,
+    ) -> ResultadoBuscaCarteira:
+        return cls(
+            simbolo=item.simbolo,
+            nome=item.nome,
+            bolsa=item.bolsa,
+            tipo_ativo=tipo_ativo,
+        )
 
 
 @dataclass(frozen=True)
@@ -48,6 +72,7 @@ class LinhaCarteira:
     posicao: PosicaoCarteira
     cotacao: CotacaoResumo | None
     dividendos_recebidos: float = 0.0
+    dividendo_previsto_proximo_mes: float | None = None
     proximo_dividendo_data: str = ""
     proximo_dividendo_valor_por_cota: float | None = None
     proximo_dividendo_previsto: float | None = None

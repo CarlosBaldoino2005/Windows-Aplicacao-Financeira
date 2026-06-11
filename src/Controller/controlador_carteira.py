@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
-from src.Model.carteira import LinhaCarteira, PosicaoCarteira, TipoAtivoCarteira, tipo_carteira_para_monitoramento
+from src.Model.carteira import (
+    LinhaCarteira,
+    PosicaoCarteira,
+    ResultadoBuscaCarteira,
+    TipoAtivoCarteira,
+    tipo_carteira_para_monitoramento,
+)
+from src.Model.resultado_busca import ResultadoBusca
 from src.Model.opcoes_atualizacao_automatica import OpcoesAtualizacaoAutomatica
 from src.Model.cotacao import CotacaoResumo
 from src.Model.monitoramento import TipoAtivoMonitoramento
@@ -15,7 +22,12 @@ from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.validadores import validar_data_ptbr
 from src.Tool.carteira_dividendos_helper import (
     calcular_dividendos_recebidos,
+    estimar_dividendo_proximo_mes,
     estimar_proximo_dividendo,
+)
+from src.Tool.carteira_ativo_helper import (
+    buscar_indices_por_termo,
+    inferir_tipo_ativo_carteira,
 )
 from src.Tool.config_painel import ConfigPainelIni
 
@@ -123,6 +135,57 @@ class ControladorCarteira:
         tipo_mon: TipoAtivoMonitoramento = tipo_carteira_para_monitoramento(tipo_ativo)  # type: ignore[assignment]
         return self._monitoramento.pesquisar_ativos(tipo_mon, termo)
 
+    def pesquisar_ativos_automatico(
+        self,
+        termo: str,
+        *,
+        limite: int = 12,
+    ) -> tuple[list[ResultadoBuscaCarteira], str | None]:
+        """Busca em acoes, FIIs, cripto e indices; infere o tipo de cada resultado."""
+        texto = (termo or "").strip()
+        if not texto:
+            return [], "Digite o codigo ou nome do ativo."
+
+        vistos: set[str] = set()
+        saida: list[ResultadoBuscaCarteira] = []
+
+        def incluir(item: ResultadoBusca, tipo_busca: TipoAtivoCarteira) -> None:
+            if len(saida) >= limite:
+                return
+            simbolo = (item.simbolo or "").strip()
+            if not simbolo or simbolo in vistos:
+                return
+            vistos.add(simbolo)
+            tipo = inferir_tipo_ativo_carteira(simbolo)
+            if tipo_busca == "indices":
+                tipo = "indices"
+            saida.append(ResultadoBuscaCarteira.de_resultado_busca(item, tipo))
+
+        for item in buscar_indices_por_termo(texto, limite=limite):
+            incluir(item, "indices")
+
+        for tipo_mon in ("acoes", "fiis", "cripto"):
+            itens, _erro = self._monitoramento.pesquisar_ativos(
+                tipo_mon,  # type: ignore[arg-type]
+                texto,
+            )
+            for bruto in itens or []:
+                if isinstance(bruto, ResultadoBusca):
+                    item = bruto
+                else:
+                    simbolo = str(getattr(bruto, "simbolo", bruto))
+                    item = ResultadoBusca(
+                        simbolo=simbolo,
+                        nome=str(getattr(bruto, "nome", "")),
+                        bolsa=str(getattr(bruto, "bolsa", "")),
+                    )
+                incluir(item, tipo_mon)  # type: ignore[arg-type]
+
+        if saida:
+            return saida, None
+
+        return [], "Nenhum resultado encontrado."
+
     def obter_linhas_carteira(self) -> tuple[list[LinhaCarteira], str | None]:
         posicoes = self._persistencia.listar()
         if not posicoes:
@@ -154,6 +217,7 @@ class ControladorCarteira:
         for posicao in posicoes:
             cotacao = cotacoes.get((posicao.tipo_ativo, posicao.simbolo))
             dividendos = 0.0
+            dividendo_prev_mes = None
             prox_data = ""
             prox_valor_cota = None
             prox_total = None
@@ -166,6 +230,10 @@ class ControladorCarteira:
                         posicao.data_compra,
                         posicao.quantidade,
                     )
+                    dividendo_prev_mes = estimar_dividendo_proximo_mes(
+                        detalhes.pagamentos_dividendos,
+                        posicao.quantidade,
+                    )
                     prox_data, prox_valor_cota, prox_total = estimar_proximo_dividendo(
                         detalhes.pagamentos_dividendos,
                         posicao.quantidade,
@@ -176,6 +244,7 @@ class ControladorCarteira:
                     posicao=posicao,
                     cotacao=cotacao,
                     dividendos_recebidos=dividendos,
+                    dividendo_previsto_proximo_mes=dividendo_prev_mes,
                     proximo_dividendo_data=prox_data,
                     proximo_dividendo_valor_por_cota=prox_valor_cota,
                     proximo_dividendo_previsto=prox_total,
