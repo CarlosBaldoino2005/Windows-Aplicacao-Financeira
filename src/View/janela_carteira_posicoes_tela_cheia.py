@@ -17,6 +17,7 @@ from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thr
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.resumo_carteira_helper import PainelResumoCarteira
 from src.View.tabela_carteira_helper import (
+    aplicar_ajuste_altura_grid_carteira,
     criar_grid_carteira,
     liberar_grid_carteira,
     obter_id_duplo_clique_carteira,
@@ -58,10 +59,14 @@ class JanelaCarteiraPosicoesTelaCheia(ctk.CTkToplevel):
         self._atualizador_auto.iniciar()
         self._atualizar_indicador_automatico()
         self.after(200, lambda: self._atualizar_lista(forcar=True))
+        self.after(400, lambda: aplicar_ajuste_altura_grid_carteira(self._tabela))
 
     def _montar_interface(self) -> None:
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
-        cabecalho.pack(fill="x")
+        cabecalho.grid(row=0, column=0, sticky="ew")
 
         ctk.CTkLabel(
             cabecalho,
@@ -84,22 +89,27 @@ class JanelaCarteiraPosicoesTelaCheia(ctk.CTkToplevel):
 
         barra_status = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra_status.pack(fill="x", padx=16, pady=(0, 8))
+        barra_status.grid_columnconfigure(0, weight=1)
 
         self._label_status = ctk.CTkLabel(
             barra_status,
             text="",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
+            anchor="w",
+            justify="left",
         )
-        self._label_status.pack(side="left", anchor="w")
+        self._label_status.grid(row=0, column=0, sticky="ew")
 
         self._label_auto = ctk.CTkLabel(
             barra_status,
             text="",
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
+            anchor="e",
+            justify="right",
         )
-        self._label_auto.pack(side="right", anchor="e")
+        self._label_auto.grid(row=1, column=0, sticky="ew", pady=(2, 0))
 
         barra_acoes = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra_acoes.pack(fill="x", padx=16, pady=(0, 12))
@@ -115,17 +125,20 @@ class JanelaCarteiraPosicoesTelaCheia(ctk.CTkToplevel):
         ).pack(side="left")
 
         container = ctk.CTkFrame(self, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+        container.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
 
         self._tabela = criar_grid_carteira(
             container,
             "Posicoes da carteira",
-            altura=8,
+            altura=6,
             ao_duplo_clique=self._ao_duplo_clique,
+            modo_tela_cheia=True,
         )
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
-        rodape.pack(fill="x", padx=16, pady=(0, 12))
+        rodape.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
         ctk.CTkButton(
             rodape,
             text="Fechar",

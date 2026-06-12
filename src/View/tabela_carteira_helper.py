@@ -197,6 +197,7 @@ def criar_grid_carteira(
     ao_abrir_tela_cheia: Callable | None = None,
     texto_botao_tela_cheia: str = "Tela cheia",
     rolagem_pagina: bool = False,
+    modo_tela_cheia: bool = False,
 ) -> ttk.Treeview:
     card = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=12)
     if rolagem_pagina:
@@ -265,8 +266,9 @@ def criar_grid_carteira(
     _configurar_ordenacao_colunas(tabela)
 
     for coluna, largura in zip(_COLUNAS, _LARGURAS, strict=True):
-        expandir = coluna == "prox_dividendo"
-        minwidth = _LARGURA_MIN_PROX_DIVIDENDO if expandir else largura
+        # Em tela cheia, desativa stretch para forcar rolagem horizontal nas colunas largas.
+        expandir = coluna == "prox_dividendo" and not modo_tela_cheia
+        minwidth = _LARGURA_MIN_PROX_DIVIDENDO if coluna == "prox_dividendo" else largura
         tabela.column(
             coluna,
             width=largura,
@@ -293,9 +295,90 @@ def criar_grid_carteira(
     tabela._altura_minima = altura  # type: ignore[attr-defined]
     tabela._scroll_y = scroll_y  # type: ignore[attr-defined]
     tabela._scroll_x = scroll_x  # type: ignore[attr-defined]
+    tabela._modo_tela_cheia = modo_tela_cheia  # type: ignore[attr-defined]
     if not rolagem_pagina:
         vincular_ajuste_altura_grid_carteira(tabela)
     return tabela
+
+
+def _calcular_linhas_visiveis_grid_carteira(
+    tabela: ttk.Treeview,
+    altura_total: int,
+    altura_minima: int,
+) -> int:
+    """Quantidade de linhas que cabem sem cortar a ultima linha nem a barra horizontal."""
+    scroll_x = getattr(tabela, "_scroll_x", None)
+    # Reserva espaco para scroll horizontal (colunas largas quase sempre exigem).
+    altura_scroll_x = 20
+    if scroll_x is not None:
+        scroll_x.update_idletasks()
+        if scroll_x.winfo_ismapped() and scroll_x.winfo_height() > 0:
+            altura_scroll_x = max(altura_scroll_x, scroll_x.winfo_height())
+
+    estilo = ttk.Style()
+    altura_linha = max(int(estilo.lookup("Treeview", "rowheight") or 30), 1)
+    margem = 6
+    area_linhas = max(0, altura_total - altura_scroll_x - margem)
+    linhas_visiveis = max(altura_minima, area_linhas // altura_linha)
+
+    # Garante que a ultima linha nunca fica pela metade.
+    while (
+        linhas_visiveis > altura_minima
+        and linhas_visiveis * altura_linha + altura_scroll_x + margem > altura_total
+    ):
+        linhas_visiveis -= 1
+
+    return linhas_visiveis
+
+
+def aplicar_ajuste_altura_grid_carteira(tabela: ttk.Treeview) -> None:
+    """Aplica altura visivel da grid sem disparar loop de eventos Configure."""
+    if getattr(tabela, "_rolagem_pagina", False):
+        return
+    if not treeview_ainda_ativa(tabela):
+        return
+    if getattr(tabela, "_em_ajuste_altura", False):
+        return
+
+    frame = tabela.master
+    altura_minima = getattr(tabela, "_altura_minima", 3)
+    frame.update_idletasks()
+    altura_total = frame.winfo_height()
+    if altura_total <= 2:
+        return
+
+    linhas_visiveis = _calcular_linhas_visiveis_grid_carteira(
+        tabela,
+        altura_total,
+        altura_minima,
+    )
+    if getattr(tabela, "_altura_visivel_atual", None) == linhas_visiveis:
+        return
+
+    try:
+        tabela._em_ajuste_altura = True  # type: ignore[attr-defined]
+        tabela._altura_visivel_atual = linhas_visiveis  # type: ignore[attr-defined]
+        tabela.configure(height=linhas_visiveis)
+    finally:
+        tabela._em_ajuste_altura = False  # type: ignore[attr-defined]
+
+
+def _agendar_ajuste_altura_grid_carteira(tabela: ttk.Treeview, _evento: tk.Event | None = None) -> None:
+    """Agrupa varios Configure em um unico ajuste (evita recursao)."""
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    job = getattr(tabela, "_job_ajuste_altura", None)
+    if job is not None:
+        try:
+            tabela.after_cancel(job)
+        except tk.TclError:
+            pass
+
+    tabela._job_ajuste_altura = tabela.after(  # type: ignore[attr-defined]
+        50,
+        lambda: aplicar_ajuste_altura_grid_carteira(tabela),
+    )
 
 
 def vincular_ajuste_altura_grid_carteira(tabela: ttk.Treeview) -> None:
@@ -304,35 +387,9 @@ def vincular_ajuste_altura_grid_carteira(tabela: ttk.Treeview) -> None:
         return
 
     frame = tabela.master
-    altura_minima = getattr(tabela, "_altura_minima", 3)
-
-    def ao_redimensionar(_evento: tk.Event | None = None) -> None:
-        if not treeview_ainda_ativa(tabela):
-            return
-        if _evento is not None and _evento.widget is not frame:
-            return
-        frame.update_idletasks()
-        altura_total = frame.winfo_height()
-        if altura_total <= 2:
-            return
-
-        scroll_x = getattr(tabela, "_scroll_x", None)
-        altura_scroll_x = 18
-        if scroll_x is not None:
-            scroll_x.update_idletasks()
-            if scroll_x.winfo_ismapped() and scroll_x.winfo_height() > 0:
-                altura_scroll_x = scroll_x.winfo_height()
-
-        estilo = ttk.Style()
-        altura_linha = int(estilo.lookup("Treeview", "rowheight") or 30)
-        linhas_visiveis = max(altura_minima, (altura_total - altura_scroll_x) // max(altura_linha, 1))
-        if getattr(tabela, "_altura_visivel_atual", None) == linhas_visiveis:
-            return
-        tabela._altura_visivel_atual = linhas_visiveis  # type: ignore[attr-defined]
-        tabela.configure(height=linhas_visiveis)
-
-    frame.bind("<Configure>", ao_redimensionar, add="+")
-    tabela.after(120, ao_redimensionar)
+    frame.bind("<Configure>", lambda e: _agendar_ajuste_altura_grid_carteira(tabela, e), add="+")
+    tabela.bind("<Map>", lambda e: _agendar_ajuste_altura_grid_carteira(tabela, e), add="+")
+    tabela.after(120, lambda: aplicar_ajuste_altura_grid_carteira(tabela))
 
 
 def _ajustar_altura_grid_carteira(tabela: ttk.Treeview, quantidade_linhas: int) -> None:
@@ -494,9 +551,7 @@ def preencher_grid_carteira(
     _ajustar_altura_grid_carteira(tabela, len(linhas_exibir))
     if not getattr(tabela, "_rolagem_pagina", False) and treeview_ainda_ativa(tabela):
         tabela._altura_visivel_atual = None  # type: ignore[attr-defined]
-        frame = tabela.master
-        if frame is not None:
-            tabela.after_idle(lambda f=frame: f.event_generate("<Configure>"))
+        tabela.after_idle(lambda t=tabela: aplicar_ajuste_altura_grid_carteira(t))
 
 
 def liberar_grid_carteira(tabela: ttk.Treeview | None) -> None:
