@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../modelos/cotacao_resumo.dart';
 import '../modelos/tipo_ativo.dart';
+import '../config/api_config.dart';
 import '../servicos/api_cliente.dart';
+import '../servicos/estado_api.dart';
 import '../servicos/favoritos_local.dart';
 import '../widgets/cotacao_card.dart';
 import '../widgets/estado_carregando.dart';
@@ -51,6 +53,14 @@ class PainelTelaState extends State<PainelTela> with SingleTickerProviderStateMi
       _carregando = true;
       _erro = null;
     });
+    if (!EstadoApi.online) {
+      setState(() {
+        _erro = ApiConfig.mensagemModoOffline();
+        _carregando = false;
+      });
+      return;
+    }
+
     try {
       final painel = await _api.obterPainel(tipo: _tipo);
       final fav = await _servicoFavoritos.listar();

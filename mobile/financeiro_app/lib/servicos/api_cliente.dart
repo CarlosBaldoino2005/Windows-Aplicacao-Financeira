@@ -1,173 +1,84 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-
-import '../config/api_config.dart';
 import '../modelos/cotacao_resumo.dart';
 import '../modelos/detalhes_ativo.dart';
 import '../modelos/resultado_busca.dart';
 import '../modelos/serie_historica.dart';
 import '../modelos/tipo_ativo.dart';
+import 'busca_mercado_servico.dart';
+import 'detalhes_mercado_servico.dart';
+import 'mercado_servico.dart';
+import 'provedores/yahoo_chart_provedor.dart';
 
+/// Cliente de mercado: consulta Yahoo/Brapi direto (como o desktop), sem API local.
 class ApiCliente {
-  ApiCliente({http.Client? cliente}) : _cliente = cliente ?? http.Client();
+  ApiCliente({
+    MercadoServico? mercado,
+    BuscaMercadoServico? busca,
+    DetalhesMercadoServico? detalhes,
+    YahooChartProvedor? yahooChart,
+  })  : _mercado = mercado ?? MercadoServico(),
+        _busca = busca ?? BuscaMercadoServico(),
+        _detalhes = detalhes ?? DetalhesMercadoServico(),
+        _yahooChart = yahooChart ?? YahooChartProvedor();
 
-  final http.Client _cliente;
+  final MercadoServico _mercado;
+  final BuscaMercadoServico _busca;
+  final DetalhesMercadoServico _detalhes;
+  final YahooChartProvedor _yahooChart;
 
-  /// Versao retornada por /api/saude (ex.: 1.1.0).
-  static String versaoApi = '1.0.0';
+  /// Versao logica do app mobile (nao depende mais da API FastAPI).
+  static const String versaoApi = '1.1.0';
 
-  /// Recursos informados pela API apos o health check.
-  static List<String> recursosApi = const [];
+  static const List<String> recursosApi = [
+    'painel-acoes',
+    'painel-cripto',
+    'painel-fiis',
+    'painel-indices',
+    'detalhes',
+    'historico',
+    'busca-cripto',
+    'busca-fiis',
+  ];
 
-  static bool get suportaPainelCompleto =>
-      _compararVersao(versaoApi, '1.1.0') >= 0 ||
-      recursosApi.contains('painel-cripto');
+  static bool get suportaPainelCompleto => true;
 
-  Map<String, String> _cabecalhos() {
-    final mapa = <String, String>{'Accept': 'application/json'};
-    if (ApiConfig.chaveApi.isNotEmpty) {
-      mapa['X-API-Key'] = ApiConfig.chaveApi;
-    }
-    return mapa;
-  }
-
+  /// Verifica se os provedores de mercado respondem (internet + Yahoo).
   Future<void> verificarSaude() async {
-    final resposta = await _cliente.get(
-      Uri.parse(ApiConfig.montarUrl('/api/saude')),
-      headers: _cabecalhos(),
-    );
-    if (resposta.statusCode != 200) {
-      throw Exception('API indisponivel (${resposta.statusCode}).');
+    final resumo = await _yahooChart.buscarResumos(['SPY']);
+    if (resumo.isEmpty) {
+      throw Exception('Provedores de mercado indisponiveis.');
     }
-    final json = jsonDecode(resposta.body) as Map<String, dynamic>;
-    versaoApi = json['versao']?.toString() ?? '1.0.0';
-    recursosApi = (json['recursos'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
   }
 
   static String mensagemApiDesatualizada(TipoAtivo tipo) {
-    return 'A API está na versão $versaoApi e não suporta ${tipo.rotulo}.\n\n'
-        'A API precisa estar na versão 1.1.0 ou superior (execute executar_api.bat no PC).';
+    return 'Recurso ${tipo.rotulo} indisponivel nesta versao do app.';
   }
 
-  static bool tipoExigeApiRecente(TipoAtivo tipo) =>
-      tipo != TipoAtivo.acoes && !suportaPainelCompleto;
+  static bool tipoExigeApiRecente(TipoAtivo tipo) => false;
 
   Future<Map<String, List<CotacaoResumo>>> obterPainel({
     TipoAtivo tipo = TipoAtivo.acoes,
     int quantidade = 10,
-  }) async {
-    if (tipoExigeApiRecente(tipo)) {
-      throw Exception(mensagemApiDesatualizada(tipo));
-    }
-
-    final caminho =
-        '/api/mercado/painel?quantidade=$quantidade&tipo=${Uri.encodeQueryComponent(tipo.chave)}';
-    return _parsePainel(await _getJson(caminho));
+  }) {
+    return _mercado.obterPainel(tipo: tipo, quantidade: quantidade);
   }
 
-  Future<CotacaoResumo> obterCotacao(String simbolo, {TipoAtivo tipo = TipoAtivo.acoes}) async {
-    if (tipoExigeApiRecente(tipo)) {
-      throw Exception(mensagemApiDesatualizada(tipo));
-    }
-
-    final caminho =
-        '/api/mercado/cotacao/${Uri.encodeComponent(simbolo)}?tipo=${Uri.encodeQueryComponent(tipo.chave)}';
-    final json = await _getJson(caminho);
-    return CotacaoResumo.fromJson(json['cotacao'] as Map<String, dynamic>);
+  Future<CotacaoResumo> obterCotacao(String simbolo, {TipoAtivo tipo = TipoAtivo.acoes}) {
+    return _mercado.obterCotacao(simbolo, tipo);
   }
 
   Future<SerieHistorica> obterHistorico(
     String simbolo, {
     TipoAtivo tipo = TipoAtivo.acoes,
     String periodo = 'mes',
-  }) async {
-    if (tipoExigeApiRecente(tipo)) {
-      throw Exception(mensagemApiDesatualizada(tipo));
-    }
-
-    final caminho = '/api/mercado/historico/${Uri.encodeComponent(simbolo)}'
-        '?periodo=${Uri.encodeQueryComponent(periodo)}'
-        '&tipo=${Uri.encodeQueryComponent(tipo.chave)}';
-    final json = await _getJson(caminho);
-    return SerieHistorica.fromJson(json['serie'] as Map<String, dynamic>);
+  }) {
+    return _mercado.obterHistorico(simbolo, tipo, periodo: periodo);
   }
 
-  Future<DetalhesAtivo> obterDetalhes(String simbolo, {TipoAtivo tipo = TipoAtivo.acoes}) async {
-    if (tipoExigeApiRecente(tipo)) {
-      throw Exception(mensagemApiDesatualizada(tipo));
-    }
-
-    final parametro = tipo.parametroDetalhes;
-    final caminho =
-        '/api/mercado/detalhes/${Uri.encodeComponent(simbolo)}?tipo=${Uri.encodeQueryComponent(parametro)}';
-    final json = await _getJson(caminho);
-    return DetalhesAtivo.fromJson(json['detalhes'] as Map<String, dynamic>);
+  Future<DetalhesAtivo> obterDetalhes(String simbolo, {TipoAtivo tipo = TipoAtivo.acoes}) {
+    return _detalhes.obterDetalhes(simbolo, tipo);
   }
 
-  Future<List<ResultadoBusca>> buscar(String termo, {TipoAtivo tipo = TipoAtivo.acoes}) async {
-    if (tipoExigeApiRecente(tipo)) {
-      throw Exception(mensagemApiDesatualizada(tipo));
-    }
-
-    final caminho = '/api/busca/acoes?q=${Uri.encodeQueryComponent(termo)}'
-        '&tipo=${Uri.encodeQueryComponent(tipo.chave)}';
-    final json = await _getJson(caminho);
-    final lista = json['resultados'] as List<dynamic>? ?? [];
-    return lista
-        .map((item) => ResultadoBusca.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> _getJson(String caminho) async {
-    final resposta = await _cliente.get(
-      Uri.parse(ApiConfig.montarUrl(caminho)),
-      headers: _cabecalhos(),
-    );
-    if (resposta.statusCode != 200) {
-      throw Exception(_extrairErro(resposta));
-    }
-    return jsonDecode(resposta.body) as Map<String, dynamic>;
-  }
-
-  Map<String, List<CotacaoResumo>> _parsePainel(Map<String, dynamic> json) {
-    return {
-      'emAlta': _listaCotacoes(json['emAlta']),
-      'emQueda': _listaCotacoes(json['emQueda']),
-      'todas': _listaCotacoes(json['todas']),
-    };
-  }
-
-  List<CotacaoResumo> _listaCotacoes(dynamic valor) {
-    final lista = valor as List<dynamic>? ?? [];
-    return lista
-        .map((item) => CotacaoResumo.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
-  String _extrairErro(http.Response resposta) {
-    if (resposta.statusCode == 404) {
-      return 'Recurso não encontrado na API (${resposta.statusCode}). '
-          'Verifique se a API está na versão 1.1.0 ou superior.';
-    }
-    try {
-      final json = jsonDecode(resposta.body) as Map<String, dynamic>;
-      final detalhe = json['detail']?.toString();
-      if (detalhe != null && detalhe.isNotEmpty) return detalhe;
-      return 'Erro ${resposta.statusCode}';
-    } catch (_) {
-      return 'Erro ${resposta.statusCode}';
-    }
-  }
-
-  static int _compararVersao(String atual, String minima) {
-    final partesAtual = atual.split('.').map(int.tryParse).toList();
-    final partesMinima = minima.split('.').map(int.tryParse).toList();
-    for (var i = 0; i < 3; i++) {
-      final a = i < partesAtual.length ? (partesAtual[i] ?? 0) : 0;
-      final b = i < partesMinima.length ? (partesMinima[i] ?? 0) : 0;
-      if (a != b) return a.compareTo(b);
-    }
-    return 0;
+  Future<List<ResultadoBusca>> buscar(String termo, {TipoAtivo tipo = TipoAtivo.acoes}) {
+    return _busca.buscar(termo, tipo);
   }
 }

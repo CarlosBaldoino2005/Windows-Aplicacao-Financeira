@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../modelos/resultado_busca.dart';
 import '../modelos/tipo_ativo.dart';
+import '../config/api_config.dart';
 import '../servicos/api_cliente.dart';
+import '../servicos/estado_api.dart';
 import '../servicos/favoritos_local.dart';
 import '../tema/cores.dart';
 import '../widgets/estado_carregando.dart';
@@ -70,6 +72,14 @@ class BuscaTelaState extends State<BuscaTela> {
   }
 
   Future<void> _pesquisar() async {
+    if (!EstadoApi.online) {
+      setState(() {
+        _erro = ApiConfig.mensagemModoOffline();
+        _resultados = [];
+      });
+      return;
+    }
+
     if (_tipo == TipoAtivo.indices) {
       setState(() {
         _erro = 'Para índices, use a aba Painel → Índices.';

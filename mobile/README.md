@@ -1,9 +1,6 @@
 # Financeiro — App Android (Fase 1)
 
-App instalavel em Flutter que consome a API FastAPI local do projeto (`api/`).
-
-- **Celular fisico:** API local no PC (`executar_api.bat`) na mesma Wi-Fi — **sem Render**.
-- **Emulador no PC:** API local (`executar_api.bat` + `127.0.0.1:8000`).
+App instalavel em Flutter que consulta **Yahoo Finance e Brapi diretamente**, como o desktop — **sem depender do PC** nem de `executar_api.bat`.
 
 Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/cores.dart`).
 
@@ -16,38 +13,61 @@ Interface segue tokens em `../modelo-ui/design-tokens.json` (cores em `lib/tema/
 - Favoritos por tipo (salvos no celular)
 - Carteira de investimentos (várias compras do mesmo ativo em datas/preços diferentes)
 
+## Provedores de mercado
+
+| Dado | Fonte |
+|------|-------|
+| Cotações B3 | Brapi → Yahoo Chart |
+| Cotações EUA / cripto / índices | Yahoo Chart |
+| Histórico | Brapi (B3) → Yahoo Chart |
+| Busca | Listas locais + Yahoo Search |
+| Detalhes | Yahoo Quote Summary → Brapi → Yahoo Chart |
+
+A carteira e os favoritos ficam no celular (`SharedPreferences`). Só precisam de internet para **cotações, gráficos, busca e detalhes**.
+
 ## Requisitos
 
 1. **Flutter SDK** — `scripts\instalar_flutter.ps1`
 2. **Android Studio** — para gerar APK
-3. **API local** — `executar_api.bat` (celular e emulador)
+3. **Internet no celular** — para dados de mercado (Wi-Fi ou dados móveis)
 
-## 1. Celular fisico
-
-1. Execute `liberar_api_rede.bat` **como administrador** (uma vez, libera porta 8000 no firewall)
-2. Deixe `executar_api.bat` aberto no PC
-3. Opcional: copie `celular_api_url.example.bat` para `celular_api_url.bat` e ajuste o IP do PC
-4. Execute `mobile\gerar_apk.bat` (detecta o IP da rede ou usa `celular_api_url.bat`)
-5. Instale `mobile\Financeiro.apk` no celular na **mesma Wi-Fi** do PC
-
-Em cada posição da carteira, use **Nova compra** para registrar outra aquisição do mesmo ativo.
-
-## 2. Emulador no PC
-
-1. `executar_api.bat` (deixe a janela aberta)
-2. `mobile\gerar_apk_emulador.bat`
-3. `mobile\testar_apk.bat`
-
-## 3. Gerar projeto Android (primeira vez)
+## Gerar e instalar APK
 
 ```powershell
-cd mobile\financeiro_app
-flutter create . --project-name financeiro_app --org br.com.financeiro
-flutter pub get
+cd mobile
+gerar_apk.bat
 ```
+
+Instale `mobile\Financeiro.apk` no celular. **Não é mais necessário** configurar IP do PC nem manter `executar_api.bat` aberto.
+
+O script `gerar_apk.bat` ainda aceita `celular_api_url.bat` por compatibilidade, mas o app **não usa** essa URL para cotações.
+
+## Emulador no PC
+
+```powershell
+mobile\gerar_apk_emulador.bat
+mobile\testar_apk.bat
+```
+
+## Modo offline
+
+Sem internet, o app abre normalmente. A **carteira local** continua disponível; painel, busca, gráficos e detalhes exibem aviso até a conexão voltar (toque em **Atualizar** na tela inicial).
 
 ## Desktop
 
-O app desktop (`executar.bat`) **nao usa** API HTTP nem Render — acessa Yahoo/Brapi direto em Python.
+O app desktop (`executar.bat`) usa a mesma lógica de provedores em Python (`src/Service/`).
 
-A API Render (`onrender.com`) esta **desativada** em todo o projeto.
+A API FastAPI (`executar_api.bat`) permanece opcional para integrações futuras; o mobile **não depende** dela.
+
+## Estrutura mobile
+
+```
+financeiro_app/lib/
+  servicos/
+    api_cliente.dart          # fachada usada pelas telas
+    mercado_servico.dart      # painel, cotacao, historico
+    busca_mercado_servico.dart
+    detalhes_mercado_servico.dart
+    provedores/               # Yahoo Chart, Brapi, busca
+  dados/universo_mercado.dart # listas de ativos monitorados
+```

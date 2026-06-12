@@ -84,8 +84,8 @@ rem Registrant antigo na pasta temp (robocopy nao apaga) quebra compile apos cle
 del /f /q "android\app\src\main\java\io\flutter\plugins\GeneratedPluginRegistrant.java" 2>nul
 
 echo.
-echo Gerando APK para emulador (API local 127.0.0.1:8000 + adb reverse)...
-call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=http://127.0.0.1:8000
+echo Gerando APK para emulador (cotacoes direto Yahoo/Brapi)...
+call "%FLUTTER%" build apk --release
 if errorlevel 1 (
     echo Falha no build.
     if /I not "%~1"=="auto" pause

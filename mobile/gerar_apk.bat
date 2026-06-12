@@ -113,32 +113,9 @@ if errorlevel 1 (
 
 call "%FLUTTER%" doctor
 
-set API_URL=
-if exist "%~dp0celular_api_url.bat" (
-    call "%~dp0celular_api_url.bat"
-    if defined API_CELULAR_URL set "API_URL=%API_CELULAR_URL%"
-)
-
-if not defined API_URL (
-    for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
-        if not defined API_URL (
-            set "_ip=%%a"
-            set "_ip=!_ip:~1!"
-            if not "!_ip!"=="127.0.0.1" set "API_URL=http://!_ip!:8000"
-        )
-    )
-)
-
-if not defined API_URL (
-    echo.
-    echo Nao foi possivel detectar o IP do PC na rede local.
-    set /p API_URL=Informe a URL da API ^(ex.: http://192.168.0.10:8000^): 
-)
-
 echo.
-echo Gerando APK para celular ^(API local em %API_URL%^)...
-echo PC deve estar ligado com executar_api.bat na mesma Wi-Fi.
-call "%FLUTTER%" build apk --release --dart-define=API_BASE_URL=%API_URL%
+echo Gerando APK para celular ^(cotacoes direto Yahoo/Brapi — sem PC^)...
+call "%FLUTTER%" build apk --release
 
 if errorlevel 1 (
     echo.

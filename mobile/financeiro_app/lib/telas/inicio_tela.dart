@@ -1,29 +1,60 @@
 import 'package:flutter/material.dart';
 
+import '../servicos/estado_api.dart';
+import '../tema/cores.dart';
 import 'busca_tela.dart';
 import 'carteira_tela.dart';
 import 'favoritos_tela.dart';
 import 'painel_tela.dart';
 
 class InicioTela extends StatefulWidget {
-  const InicioTela({super.key});
+  const InicioTela({super.key, this.indiceInicial = 0});
+
+  final int indiceInicial;
 
   @override
   State<InicioTela> createState() => _InicioTelaState();
 }
 
 class _InicioTelaState extends State<InicioTela> {
-  int _indice = 0;
+  late int _indice;
 
   final _chavePainel = GlobalKey<PainelTelaState>();
   final _chaveFavoritos = GlobalKey<FavoritosTelaState>();
   final _chaveCarteira = GlobalKey<CarteiraTelaState>();
 
-  void _atualizarTudo() {
+  @override
+  void initState() {
+    super.initState();
+    _indice = widget.indiceInicial.clamp(0, 3);
+  }
+
+  Future<void> _atualizarTudo() async {
+    await EstadoApi.atualizarConexao();
+    if (!mounted) return;
+    setState(() {});
     _chavePainel.currentState?.recarregar();
     _chaveFavoritos.currentState?.recarregar();
     _chaveCarteira.currentState?.recarregar();
-    setState(() {});
+  }
+
+  Widget _bannerOffline() {
+    if (EstadoApi.online) return const SizedBox.shrink();
+
+    return MaterialBanner(
+      backgroundColor: const Color(0xFFFFF7ED),
+      content: Text(
+        EstadoApi.mensagemBannerOffline(),
+        style: const TextStyle(fontSize: 13, color: CoresApp.texto),
+      ),
+      leading: const Icon(Icons.cloud_off, color: Color(0xFFD97706)),
+      actions: [
+        TextButton(
+          onPressed: _atualizarTudo,
+          child: const Text('Atualizar'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -46,9 +77,17 @@ class _InicioTelaState extends State<InicioTela> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _indice,
-        children: telas,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _bannerOffline(),
+          Expanded(
+            child: IndexedStack(
+              index: _indice,
+              children: telas,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _indice,

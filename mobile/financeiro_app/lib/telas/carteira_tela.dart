@@ -6,6 +6,7 @@ import '../modelos/tipo_ativo.dart';
 import '../servicos/api_cliente.dart';
 import '../servicos/carteira_config.dart';
 import '../servicos/carteira_local.dart';
+import '../servicos/estado_api.dart';
 import '../tema/cores.dart';
 import '../util/dividendos_carteira_helper.dart';
 import '../util/formatadores.dart';
@@ -57,6 +58,19 @@ class CarteiraTelaState extends State<CarteiraTela> {
       }
 
       final linhas = <LinhaCarteira>[];
+
+      if (!EstadoApi.online) {
+        for (final pos in posicoes) {
+          linhas.add(LinhaCarteira(posicao: pos));
+        }
+        if (!mounted) return;
+        setState(() {
+          _linhas = linhas;
+          _carregando = false;
+        });
+        return;
+      }
+
       for (final pos in posicoes) {
         try {
           final cotacao = await _api.obterCotacao(pos.simbolo, tipo: pos.tipo);

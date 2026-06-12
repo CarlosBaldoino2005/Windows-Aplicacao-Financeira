@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'config/api_config.dart';
-import 'servicos/api_cliente.dart';
+import 'servicos/carteira_local.dart';
+import 'servicos/estado_api.dart';
 import 'telas/inicio_tela.dart';
 import 'tema/cores.dart';
 import 'widgets/estado_carregando.dart';
-import 'widgets/estado_erro.dart';
 
 void main() {
   runApp(const FinanceiroApp());
@@ -41,45 +40,42 @@ class SplashTela extends StatefulWidget {
 }
 
 class _SplashTelaState extends State<SplashTela> {
-  final ApiCliente _api = ApiCliente();
-  bool _carregando = true;
-  String? _erro;
-
   @override
   void initState() {
     super.initState();
-    _verificarApi();
+    _iniciar();
   }
 
-  Future<void> _verificarApi() async {
-    try {
-      await _api.verificarSaude();
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const InicioTela()),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _erro = ApiConfig.mensagemErroConexao(e);
-        _carregando = false;
-      });
+  Future<void> _iniciar() async {
+    // Nao bloqueia o app sem internet — verifica provedores em paralelo ao splash.
+    final resultados = await Future.wait([
+      EstadoApi.atualizarConexao(),
+      Future<void>.delayed(const Duration(milliseconds: 500)),
+    ]);
+
+    final conectado = resultados.first as bool;
+    var indiceInicial = 0;
+
+    if (!conectado) {
+      final posicoes = await CarteiraLocal().listar();
+      if (posicoes.isNotEmpty) {
+        indiceInicial = 3; // aba Carteira
+      }
     }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => InicioTela(indiceInicial: indiceInicial),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       body: Center(
-        child: _carregando
-            ? const EstadoCarregando(mensagem: 'Conectando a API...')
-            : EstadoErro(mensagem: _erro!, aoTentarNovamente: () {
-                setState(() {
-                  _carregando = true;
-                  _erro = null;
-                });
-                _verificarApi();
-              }),
+        child: EstadoCarregando(mensagem: 'Abrindo Financeiro...'),
       ),
     );
   }
