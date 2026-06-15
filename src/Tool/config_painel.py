@@ -13,6 +13,12 @@ from src.Model.opcoes_atualizacao_automatica import (
     INTERVALO_PADRAO_SEGUNDOS,
     OpcoesAtualizacaoAutomatica,
 )
+from src.Model.opcoes_relatorio_automatico_carteira import (
+    RELATORIO_AUTOMATICO_HABILITADO_PADRAO,
+    RELATORIO_AUTOMATICO_HORARIOS_PADRAO,
+    OpcoesRelatorioAutomaticoCarteira,
+)
+from src.Model.acoes_universo import QUANTIDADE_PADRAO_PAINEL
 from src.Model.cripto_universo import QUANTIDADE_PADRAO_CRIPTO
 from src.Tool.registrador_log import RegistradorLog
 from src.Model.opcoes_fonte_grid import FONTE_GRID_PADRAO, OpcoesFonteGrid
@@ -58,6 +64,9 @@ CHAVE_MONITORAMENTO_PAUSADO = "monitoramento_pausado"
 CHAVE_CARTEIRA_VARIACAO_MONITORAMENTO_PCT = "carteira_variacao_monitoramento_pct"
 CHAVE_CARTEIRA_ATUALIZACAO_AUTOMATICA = "carteira_atualizacao_automatica"
 CHAVE_CARTEIRA_INTERVALO_ATUALIZACAO_SEGUNDOS = "carteira_atualizacao_intervalo_segundos"
+CHAVE_CARTEIRA_RELATORIO_AUTOMATICO = "carteira_relatorio_automatico"
+CHAVE_CARTEIRA_RELATORIO_HORARIOS = "carteira_relatorio_horarios"
+CHAVE_CARTEIRA_RELATORIO_EMAILS = "carteira_relatorio_emails"
 CARTEIRA_VARIACAO_PADRAO_PCT = 10.0
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
@@ -295,6 +304,69 @@ class ConfigPainelIni:
         parser[SECAO_PAINEL][CHAVE_CARTEIRA_INTERVALO_ATUALIZACAO_SEGUNDOS] = str(
             intervalo_ok or self.padrao_carteira_intervalo_atualizacao_segundos()
         )
+        self._gravar(parser)
+
+    def padrao_relatorio_automatico_carteira_habilitado(self) -> bool:
+        return RELATORIO_AUTOMATICO_HABILITADO_PADRAO
+
+    def padrao_relatorio_automatico_carteira_horarios(self) -> tuple[str, ...]:
+        return RELATORIO_AUTOMATICO_HORARIOS_PADRAO
+
+    def carregar_relatorio_automatico_carteira(self) -> OpcoesRelatorioAutomaticoCarteira:
+        """Relatorio PDF agendado da carteira (horarios fixos HH:MM)."""
+        from src.Tool.validadores import (
+            validar_lista_emails_relatorio,
+            validar_lista_horarios_relatorio,
+        )
+
+        secao = self._ler_ou_criar_secao()
+        if CHAVE_CARTEIRA_RELATORIO_AUTOMATICO in secao:
+            habilitado, _ = validar_sim_nao_config(
+                secao.get(CHAVE_CARTEIRA_RELATORIO_AUTOMATICO, ""),
+                padrao=self.padrao_relatorio_automatico_carteira_habilitado(),
+            )
+            bruto_horarios = secao.get(CHAVE_CARTEIRA_RELATORIO_HORARIOS, "").strip()
+            if not bruto_horarios:
+                horarios = self.padrao_relatorio_automatico_carteira_horarios()
+            else:
+                lista, _ = validar_lista_horarios_relatorio(bruto_horarios.replace(";", ","))
+                horarios = lista if lista else self.padrao_relatorio_automatico_carteira_horarios()
+
+            bruto_emails = secao.get(CHAVE_CARTEIRA_RELATORIO_EMAILS, "").strip()
+            emails: tuple[str, ...] = ()
+            if bruto_emails:
+                lista_emails, _ = validar_lista_emails_relatorio(bruto_emails.replace(";", ","))
+                emails = lista_emails or ()
+
+            return OpcoesRelatorioAutomaticoCarteira(
+                habilitado=habilitado,
+                horarios=horarios,
+                emails_destinatarios=emails,
+            )
+
+        habilitado = self.padrao_relatorio_automatico_carteira_habilitado()
+        horarios = self.padrao_relatorio_automatico_carteira_horarios()
+        self.salvar_relatorio_automatico_carteira(habilitado, horarios, ())
+        return OpcoesRelatorioAutomaticoCarteira(
+            habilitado=habilitado,
+            horarios=horarios,
+            emails_destinatarios=(),
+        )
+
+    def salvar_relatorio_automatico_carteira(
+        self,
+        habilitado: bool,
+        horarios: tuple[str, ...],
+        emails_destinatarios: tuple[str, ...],
+    ) -> None:
+        parser = self._ler_parser()
+        if SECAO_PAINEL not in parser:
+            parser[SECAO_PAINEL] = {}
+        parser[SECAO_PAINEL][CHAVE_CARTEIRA_RELATORIO_AUTOMATICO] = (
+            "sim" if habilitado else "nao"
+        )
+        parser[SECAO_PAINEL][CHAVE_CARTEIRA_RELATORIO_HORARIOS] = ";".join(horarios)
+        parser[SECAO_PAINEL][CHAVE_CARTEIRA_RELATORIO_EMAILS] = ";".join(emails_destinatarios)
         self._gravar(parser)
 
     def carregar_valor_simulacao_renda_fixa(self) -> float:

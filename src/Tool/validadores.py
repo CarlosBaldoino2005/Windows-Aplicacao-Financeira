@@ -478,3 +478,101 @@ def validar_provedor_noticias(
     if obter_provedor(chave, categoria):
         return chave, None
     return padrao, "Provedor de noticias invalido para esta categoria."
+
+
+_PADRAO_HORARIO_HH_MM = re.compile(r"^(\d{1,2}):(\d{2})$")
+
+
+def validar_horario_hh_mm(texto: str) -> tuple[str | None, str | None]:
+    """Valida horario no formato HH:MM (00:00 a 23:59). Retorna (horario_ok, erro)."""
+    limpo = (texto or "").strip()
+    if not limpo:
+        return None, "Horario vazio."
+
+    correspondencia = _PADRAO_HORARIO_HH_MM.match(limpo)
+    if not correspondencia:
+        return None, f"Horario invalido: {limpo!r}. Use HH:MM (ex.: 08:00)."
+
+    hora = int(correspondencia.group(1))
+    minuto = int(correspondencia.group(2))
+    if hora > 23 or minuto > 59:
+        return None, f"Horario fora do intervalo permitido: {limpo}."
+
+    return f"{hora:02d}:{minuto:02d}", None
+
+
+def validar_lista_horarios_relatorio(
+    texto: str,
+    *,
+    maximo: int = 24,
+) -> tuple[tuple[str, ...] | None, str | None]:
+    """
+    Interpreta lista de horarios separados por virgula, ponto-e-virgula, espaco ou quebra de linha.
+    Retorna tupla ordenada e sem duplicatas.
+    """
+    from src.Model.opcoes_relatorio_automatico_carteira import MAXIMO_HORARIOS_RELATORIO
+
+    limite = max(1, min(maximo, MAXIMO_HORARIOS_RELATORIO))
+    bruto = (texto or "").replace("\n", ";").replace(",", ";")
+    partes = [p.strip() for p in bruto.split(";") if p.strip()]
+    if not partes:
+        return None, "Informe ao menos um horario (HH:MM), um por linha ou separados por virgula."
+
+    horarios: list[str] = []
+    for parte in partes:
+        horario, erro = validar_horario_hh_mm(parte)
+        if erro:
+            return None, erro
+        if horario and horario not in horarios:
+            horarios.append(horario)
+
+    if len(horarios) > limite:
+        return None, f"Informe no maximo {limite} horarios."
+
+    horarios.sort()
+    return tuple(horarios), None
+
+
+_PADRAO_EMAIL = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def validar_email(texto: str) -> tuple[str | None, str | None]:
+    """Valida endereco de e-mail simples. Retorna (email_normalizado, erro)."""
+    limpo = (texto or "").strip().lower()
+    if not limpo:
+        return None, "E-mail vazio."
+    if not _PADRAO_EMAIL.match(limpo):
+        return None, f"E-mail invalido: {texto!r}."
+    return limpo, None
+
+
+def validar_lista_emails_relatorio(
+    texto: str,
+    *,
+    maximo: int = 20,
+) -> tuple[tuple[str, ...] | None, str | None]:
+    """
+    Interpreta lista de e-mails separados por virgula, ponto-e-virgula, espaco ou quebra de linha.
+    Retorna tupla sem duplicatas. Texto vazio retorna tupla vazia (sem erro).
+    """
+    from src.Model.opcoes_relatorio_automatico_carteira import MAXIMO_EMAILS_RELATORIO
+
+    limite = max(1, min(maximo, MAXIMO_EMAILS_RELATORIO))
+    bruto = (texto or "").replace("\n", ";").replace(",", ";")
+    partes = [p.strip() for p in bruto.split(";") if p.strip()]
+    if not partes:
+        return (), None
+
+    emails: list[str] = []
+    for parte in partes:
+        email, erro = validar_email(parte)
+        if erro:
+            return None, erro
+        if email and email not in emails:
+            emails.append(email)
+
+    if len(emails) > limite:
+        return None, f"Informe no maximo {limite} e-mails."
+
+    return tuple(emails), None
+    return padrao, "Provedor de noticias invalido para esta categoria."

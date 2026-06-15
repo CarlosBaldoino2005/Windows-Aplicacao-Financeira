@@ -1,6 +1,8 @@
 """Coordena carteira de investimentos entre interface e servicos."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
 from src.Model.carteira import (
     LinhaCarteira,
@@ -11,6 +13,7 @@ from src.Model.carteira import (
 )
 from src.Model.resultado_busca import ResultadoBusca
 from src.Model.opcoes_atualizacao_automatica import OpcoesAtualizacaoAutomatica
+from src.Model.opcoes_relatorio_automatico_carteira import OpcoesRelatorioAutomaticoCarteira
 from src.Model.cotacao import CotacaoResumo
 from src.Model.monitoramento import TipoAtivoMonitoramento
 from src.Service.carteira_servico import CarteiraServico
@@ -18,6 +21,7 @@ from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
 from src.Service.mercado_servico import MercadoServico, _alinhar_series_comparacao
+from src.Service.relatorio_carteira_servico import RelatorioCarteiraServico
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.validadores import validar_data_ptbr
 from src.Tool.carteira_dividendos_helper import (
@@ -126,6 +130,21 @@ class ControladorCarteira:
 
     def salvar_atualizacao_automatica(self, habilitada: bool, intervalo_segundos: int) -> None:
         self._config.salvar_atualizacao_automatica_carteira(habilitada, intervalo_segundos)
+
+    def carregar_relatorio_automatico(self) -> OpcoesRelatorioAutomaticoCarteira:
+        return self._config.carregar_relatorio_automatico_carteira()
+
+    def salvar_relatorio_automatico(
+        self,
+        habilitado: bool,
+        horarios: tuple[str, ...],
+        emails_destinatarios: tuple[str, ...],
+    ) -> None:
+        self._config.salvar_relatorio_automatico_carteira(
+            habilitado,
+            horarios,
+            emails_destinatarios,
+        )
 
     def pesquisar_ativos(
         self,
@@ -252,6 +271,22 @@ class ControladorCarteira:
             )
 
         return linhas, None
+
+    def gerar_relatorio_pdf(self) -> tuple[Path | None, str | None]:
+        """Monta dados da carteira e grava PDF na pasta Relatorios."""
+        linhas, erro = self.obter_linhas_carteira()
+        if erro:
+            return None, erro
+        if not linhas:
+            return None, "Cadastre ao menos uma posicao na carteira para gerar o relatorio."
+
+        servico = RelatorioCarteiraServico()
+        dados = servico.montar_dados(linhas)
+        try:
+            caminho = servico.gerar_pdf(dados)
+        except Exception as exc:
+            return None, f"Nao foi possivel gerar o PDF: {exc}"
+        return Path(caminho), None
 
     def _mercado_por_tipo(self, tipo: TipoAtivoCarteira):
         if tipo == "cripto":

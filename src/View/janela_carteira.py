@@ -7,6 +7,8 @@ import customtkinter as ctk
 from src.View import mensagem_helper as messagebox
 
 from src.Controller.controlador_carteira import ControladorCarteira
+from src.Service.email_relatorio_servico import EmailRelatorioServico
+from src.Service.relatorio_carteira_servico import RelatorioCarteiraServico
 from src.Model.carteira import (
     LinhaCarteira,
     PosicaoCarteira,
@@ -22,7 +24,11 @@ from src.Tool.atualizacao_automatica_helper import (
     GerenciadorAtualizacaoAutomatica,
     notificar_mudanca_configuracao_atualizacao_automatica_carteira,
 )
+from src.Tool.relatorio_automatico_helper import (
+    notificar_mudanca_configuracao_relatorio_automatico_carteira,
+)
 from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.email_smtp_helper import testar_conexao_smtp
 from src.Tool.controlador_ativo_helper import obter_controlador_por_tipo
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.icone_engrenagem_helper import criar_botao_engrenagem
@@ -44,7 +50,12 @@ from src.View.tabela_carteira_helper import (
     obter_id_duplo_clique_carteira,
     preencher_grid_carteira,
 )
-from src.Tool.validadores import validar_intervalo_atualizacao_segundos, validar_percentual_carteira
+from src.Tool.validadores import (
+    validar_intervalo_atualizacao_segundos,
+    validar_lista_emails_relatorio,
+    validar_lista_horarios_relatorio,
+    validar_percentual_carteira,
+)
 from src.View.tema import CORES
 
 
@@ -64,6 +75,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._linhas_cache: dict[str, LinhaCarteira] = {}
         self._atualizando = False
         self._versao_atualizacao = 0
+        self._gerando_relatorio = False
         self._variacao_pct = self._controlador.carregar_variacao_monitoramento_pct()
 
         self.title("Carteira de investimentos")
@@ -187,13 +199,24 @@ class JanelaCarteira(ctk.CTkToplevel):
         )
         self._label_status.pack(side="left", anchor="w")
 
-        self._label_auto = ctk.CTkLabel(
-            barra_status,
+        frame_status_direita = ctk.CTkFrame(barra_status, fg_color="transparent")
+        frame_status_direita.pack(side="right", anchor="e")
+
+        self._label_relatorio_auto = ctk.CTkLabel(
+            frame_status_direita,
             text="",
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
         )
-        self._label_auto.pack(side="right", anchor="e")
+        self._label_relatorio_auto.pack(anchor="e")
+
+        self._label_auto = ctk.CTkLabel(
+            frame_status_direita,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+        )
+        self._label_auto.pack(anchor="e")
 
         barra = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra.pack(fill="x", padx=16, pady=(0, 12))
@@ -259,6 +282,16 @@ class JanelaCarteira(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=150,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            grupo_esquerda,
+            text="Relatorio",
+            command=self._gerar_relatorio,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=120,
         ).pack(side="left")
 
         grupo_direita = ctk.CTkFrame(barra, fg_color="transparent")
@@ -521,6 +554,22 @@ class JanelaCarteira(ctk.CTkToplevel):
             cor = CORES["textoSecundario"]
         self._label_auto.configure(text=texto, text_color=cor)
 
+        opcoes_rel = self._controlador.carregar_relatorio_automatico()
+        if opcoes_rel.habilitado and opcoes_rel.horarios:
+            horarios_txt = ", ".join(opcoes_rel.horarios)
+            sufixo_email = ""
+            if opcoes_rel.emails_destinatarios:
+                sufixo_email = f" | e-mail: {len(opcoes_rel.emails_destinatarios)}"
+            self._label_relatorio_auto.configure(
+                text=f"Relatorio auto: {horarios_txt}{sufixo_email}",
+                text_color=CORES["sucesso"],
+            )
+        else:
+            self._label_relatorio_auto.configure(
+                text="Relatorio auto: desligado",
+                text_color=CORES["textoSecundario"],
+            )
+
     def _abrir_configuracao(self) -> None:
         dialogo = ctk.CTkToplevel(self)
         dialogo.title("Configuracao da carteira")
@@ -530,35 +579,46 @@ class JanelaCarteira(ctk.CTkToplevel):
         painel = ctk.CTkFrame(dialogo, fg_color=CORES["superficie"], corner_radius=12)
         painel.pack(fill="both", expand=True, padx=16, pady=16)
 
+        barra = ctk.CTkFrame(painel, fg_color="transparent")
+        barra.pack(side="bottom", fill="x", padx=8, pady=(0, 4))
+
+        scroll = ctk.CTkScrollableFrame(
+            painel,
+            fg_color="transparent",
+            width=392,
+        )
+        scroll.pack(fill="both", expand=True, padx=8, pady=(12, 0))
+
         opcoes_auto = self._controlador.carregar_atualizacao_automatica()
+        opcoes_relatorio = self._controlador.carregar_relatorio_automatico()
 
         ctk.CTkLabel(
-            painel,
+            scroll,
             text="Variacao do monitoramento",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(16, 4))
 
         ctk.CTkLabel(
-            painel,
+            scroll,
             text="Limites de monitoramento: preco medio ± este valor (1 a 50).",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
-        entrada_variacao = ctk.CTkEntry(painel, width=120)
+        entrada_variacao = ctk.CTkEntry(scroll, width=120)
         entrada_variacao.insert(0, f"{self._variacao_pct:.0f}")
         entrada_variacao.pack(anchor="w", padx=16, pady=(0, 12))
 
         ctk.CTkLabel(
-            painel,
+            scroll,
             text="Atualizacao automatica",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(4, 4))
 
         ctk.CTkLabel(
-            painel,
+            scroll,
             text="Atualiza cotacoes, resumo e dividendos sem clicar em Atualizar cotacoes.",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -566,7 +626,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
-        linha_auto = ctk.CTkFrame(painel, fg_color="transparent")
+        linha_auto = ctk.CTkFrame(scroll, fg_color="transparent")
         linha_auto.pack(fill="x", padx=16, pady=(0, 8))
 
         ctk.CTkLabel(
@@ -589,7 +649,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         seletor_auto.set("Sim" if opcoes_auto.habilitada else "Nao")
         seletor_auto.pack(side="left")
 
-        linha_intervalo = ctk.CTkFrame(painel, fg_color="transparent")
+        linha_intervalo = ctk.CTkFrame(scroll, fg_color="transparent")
         linha_intervalo.pack(fill="x", padx=16, pady=(0, 8))
 
         ctk.CTkLabel(
@@ -611,7 +671,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         ao_alterar_automatico(seletor_auto.get())
 
         ctk.CTkLabel(
-            painel,
+            scroll,
             text=(
                 f"Padrao: ligado, {self._config_painel.padrao_carteira_intervalo_atualizacao_segundos()} s "
                 f"({INTERVALO_MINIMO_SEGUNDOS} a {INTERVALO_MAXIMO_SEGUNDOS})."
@@ -619,6 +679,116 @@ class JanelaCarteira(ctk.CTkToplevel):
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(
+            scroll,
+            text="Relatorio automatico (PDF)",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=16, pady=(8, 4))
+
+        ctk.CTkLabel(
+            scroll,
+            text=(
+                "Gera e abre o relatorio PDF da carteira nos horarios informados "
+                "(formato HH:MM). Um horario por linha ou separados por virgula."
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=380,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        linha_rel_auto = ctk.CTkFrame(scroll, fg_color="transparent")
+        linha_rel_auto.pack(fill="x", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(
+            linha_rel_auto,
+            text="Automatico",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(side="left", padx=(0, 12))
+
+        seletor_rel_auto = ctk.CTkSegmentedButton(
+            linha_rel_auto,
+            values=["Sim", "Nao"],
+            fg_color=CORES["borda"],
+            selected_color=CORES["primaria"],
+            selected_hover_color=CORES["primariaHover"],
+            unselected_color=CORES["superficie"],
+            unselected_hover_color=CORES["zebraEscura"],
+            text_color=CORES["texto"],
+        )
+        seletor_rel_auto.set("Sim" if opcoes_relatorio.habilitado else "Nao")
+        seletor_rel_auto.pack(side="left")
+
+        ctk.CTkLabel(
+            scroll,
+            text="Horarios (HH:MM)",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+
+        caixa_horarios = ctk.CTkTextbox(scroll, width=380, height=72)
+        caixa_horarios.insert("1.0", "\n".join(opcoes_relatorio.horarios))
+        caixa_horarios.pack(anchor="w", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(
+            scroll,
+            text="E-mails para envio",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+
+        ctk.CTkLabel(
+            scroll,
+            text=(
+                "Envia o PDF nos mesmos horarios acima. Um e-mail por linha ou separados "
+                "por virgula. Configure o servidor em dados/email.ini (modelo: email.example.ini)."
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            wraplength=380,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+
+        caixa_emails = ctk.CTkTextbox(scroll, width=380, height=64)
+        if opcoes_relatorio.emails_destinatarios:
+            caixa_emails.insert("1.0", "\n".join(opcoes_relatorio.emails_destinatarios))
+        caixa_emails.pack(anchor="w", padx=16, pady=(0, 8))
+
+        def testar_email_smtp() -> None:
+            ok, erro = testar_conexao_smtp()
+            if ok:
+                messagebox.showinfo(
+                    "Teste de e-mail",
+                    "Conexao SMTP OK. O servidor aceitou usuario e senha.",
+                    parent=dialogo,
+                )
+                return
+            messagebox.showwarning(
+                "Teste de e-mail",
+                erro or "Nao foi possivel conectar ao servidor SMTP.",
+                parent=dialogo,
+            )
+
+        ctk.CTkButton(
+            scroll,
+            text="Testar conexao SMTP",
+            command=testar_email_smtp,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=180,
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        def ao_alterar_relatorio_automatico(valor: str) -> None:
+            estado = "normal" if valor == "Sim" else "disabled"
+            caixa_horarios.configure(state=estado)
+            caixa_emails.configure(state=estado)
+
+        seletor_rel_auto.configure(command=ao_alterar_relatorio_automatico)
+        ao_alterar_relatorio_automatico(seletor_rel_auto.get())
 
         def fechar_dialogo() -> None:
             liberar_modal_janela_filha(dialogo)
@@ -646,9 +816,36 @@ class JanelaCarteira(ctk.CTkToplevel):
                 )
                 return
 
+            rel_habilitado = seletor_rel_auto.get() == "Sim"
+            texto_horarios = caixa_horarios.get("1.0", "end").strip()
+            horarios, erro_horarios = validar_lista_horarios_relatorio(texto_horarios)
+            if rel_habilitado and erro_horarios:
+                messagebox.showwarning("Horarios", erro_horarios, parent=dialogo)
+                return
+            if rel_habilitado and not horarios:
+                messagebox.showwarning(
+                    "Horarios",
+                    "Informe ao menos um horario para o relatorio automatico.",
+                    parent=dialogo,
+                )
+                return
+            horarios_finais = horarios if horarios else opcoes_relatorio.horarios
+
+            texto_emails = caixa_emails.get("1.0", "end").strip()
+            emails, erro_emails = validar_lista_emails_relatorio(texto_emails)
+            if erro_emails:
+                messagebox.showwarning("E-mails", erro_emails, parent=dialogo)
+                return
+            emails_finais = emails if emails is not None else ()
+
             try:
                 self._controlador.salvar_variacao_monitoramento_pct(pct)
                 self._controlador.salvar_atualizacao_automatica(habilitada, intervalo)
+                self._controlador.salvar_relatorio_automatico(
+                    rel_habilitado,
+                    horarios_finais,
+                    emails_finais,
+                )
             except OSError:
                 messagebox.showerror(
                     "Configuracao",
@@ -659,13 +856,12 @@ class JanelaCarteira(ctk.CTkToplevel):
 
             self._variacao_pct = pct
             notificar_mudanca_configuracao_atualizacao_automatica_carteira()
+            notificar_mudanca_configuracao_relatorio_automatico_carteira()
             self._atualizar_indicador_automatico()
             self._sincronizar_tela_cheia_posicoes()
             fechar_dialogo()
             self._atualizar_lista(forcar=True)
 
-        barra = ctk.CTkFrame(painel, fg_color="transparent")
-        barra.pack(fill="x", padx=16, pady=(0, 16))
         ctk.CTkButton(
             barra,
             text="Cancelar",
@@ -685,7 +881,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             width=100,
         ).pack(side="right", padx=(0, 8))
 
-        largura, altura = 440, 420
+        largura, altura = 460, 580
         self._centralizar_dialogo_sobre_pai(dialogo, largura, altura)
         configurar_janela_filha_modal(dialogo, self)
         dialogo.protocol("WM_DELETE_WINDOW", fechar_dialogo)
@@ -825,6 +1021,79 @@ class JanelaCarteira(ctk.CTkToplevel):
                 f"  ·  {len(linhas)} posicao(oes) na carteira"
             ),
         )
+
+    def _gerar_relatorio(self) -> None:
+        if self._gerando_relatorio:
+            return
+        if not janela_ui_ainda_ativa(self):
+            return
+
+        self._gerando_relatorio = True
+        self._label_status.configure(
+            text="Gerando relatorio PDF...",
+            text_color=CORES["textoSecundario"],
+        )
+
+        def tarefa():
+            caminho, erro = self._controlador.gerar_relatorio_pdf()
+            if erro or caminho is None:
+                return caminho, erro, None
+
+            opcoes = self._controlador.carregar_relatorio_automatico()
+            erro_email: str | None = None
+            if opcoes.emails_destinatarios:
+                _, erro_email = EmailRelatorioServico().enviar_relatorio_pdf(
+                    caminho,
+                    opcoes.emails_destinatarios,
+                )
+            return caminho, None, erro_email
+
+        def ao_concluir(resultado, erro_thread):
+            self._gerando_relatorio = False
+            if not janela_ui_ainda_ativa(self):
+                return
+
+            if erro_thread:
+                messagebox.showerror("Relatorio", erro_thread, parent=self)
+                self._label_status.configure(text=erro_thread, text_color=CORES["erro"])
+                return
+
+            caminho, erro, erro_email = (
+                resultado if resultado is not None else (None, "Falha ao gerar relatorio.", None)
+            )
+            if erro or caminho is None:
+                texto = erro or "Nao foi possivel gerar o relatorio."
+                messagebox.showerror("Relatorio", texto, parent=self)
+                self._label_status.configure(text=texto, text_color=CORES["erro"])
+                return
+
+            erro_abrir = RelatorioCarteiraServico.abrir_pdf_no_sistema(caminho)
+            mensagem = f"PDF salvo em:\n{caminho}"
+            if erro_abrir:
+                mensagem = f"{mensagem}\n\n{erro_abrir}"
+            opcoes_email = self._controlador.carregar_relatorio_automatico()
+            if erro_email:
+                mensagem = f"{mensagem}\n\nFalha no e-mail:\n{erro_email}"
+            elif opcoes_email.emails_destinatarios:
+                mensagem = (
+                    f"{mensagem}\n\nE-mail enviado para "
+                    f"{len(opcoes_email.emails_destinatarios)} destinatario(s)."
+                )
+
+            messagebox.showinfo(
+                "Relatorio gerado",
+                mensagem,
+                parent=self,
+            )
+            texto_status = f"Relatorio salvo: {caminho.name}"
+            if erro_email:
+                texto_status = f"{texto_status} | E-mail: {erro_email}"
+            self._label_status.configure(
+                text=texto_status,
+                text_color=CORES["erro"] if erro_email else CORES["sucesso"],
+            )
+
+        executar_em_thread(self, tarefa, ao_concluir)
 
     def _atualizar_lista(self, *, forcar: bool = False, automatico: bool = False) -> None:
         if self._atualizando and not forcar:

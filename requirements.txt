@@ -5,3 +5,4 @@ matplotlib>=3.8.0
 deep-translator>=1.11.4
 pywin32>=306
 plyer>=2.1.0
+reportlab>=4.2.0
