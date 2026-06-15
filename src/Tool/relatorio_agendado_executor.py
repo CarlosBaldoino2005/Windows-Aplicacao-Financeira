@@ -71,16 +71,43 @@ def _chave_slot(agora: datetime, horario: str) -> str:
     return f"{agora.strftime('%d-%m-%Y')} {horario}"
 
 
-def _horario_coincide(agora: datetime, horario: str) -> bool:
+def _minutos_do_dia(agora: datetime) -> int:
+    return agora.hour * 60 + agora.minute
+
+
+def _minutos_do_horario(horario: str) -> int | None:
     partes = horario.split(":")
     if len(partes) != 2:
-        return False
+        return None
     try:
         hora = int(partes[0])
         minuto = int(partes[1])
     except ValueError:
+        return None
+    if hora < 0 or hora > 23 or minuto < 0 or minuto > 59:
+        return None
+    return hora * 60 + minuto
+
+
+def _horario_coincide(agora: datetime, horario: str) -> bool:
+    alvo = _minutos_do_horario(horario)
+    if alvo is None:
         return False
-    return agora.hour == hora and agora.minute == minuto
+    return _minutos_do_dia(agora) == alvo
+
+
+def _horario_dentro_da_tolerancia(
+    agora: datetime,
+    horario: str,
+    *,
+    tolerancia_minutos: int = 2,
+) -> bool:
+    """Aceita o minuto exato e ate N minutos depois (tarefa atrasada)."""
+    alvo = _minutos_do_horario(horario)
+    if alvo is None:
+        return False
+    atual = _minutos_do_dia(agora)
+    return alvo <= atual <= alvo + tolerancia_minutos
 
 
 def _obter_horario_disparo(
@@ -90,8 +117,19 @@ def _obter_horario_disparo(
     momento = agora or datetime.now()
     if not opcoes.habilitado or not opcoes.horarios:
         return None
+
+    estado = _carregar_estado()
+    hoje = momento.strftime("%d-%m-%Y")
+    if estado.get("ultima_data") != hoje:
+        slots_executados: set[str] = set()
+    else:
+        slots_executados = set(estado.get("slots_executados") or [])
+
     for horario in opcoes.horarios:
-        if _horario_coincide(momento, horario):
+        chave = _chave_slot(momento, horario)
+        if chave in slots_executados:
+            continue
+        if _horario_coincide(momento, horario) or _horario_dentro_da_tolerancia(momento, horario):
             return horario
     return None
 

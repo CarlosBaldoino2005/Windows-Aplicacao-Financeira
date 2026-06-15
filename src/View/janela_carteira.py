@@ -746,7 +746,7 @@ class JanelaCarteira(ctk.CTkToplevel):
                 "Envia o PDF nos mesmos horarios acima. Um e-mail por linha ou separados "
                 "por virgula. Configure o servidor em dados/email.ini (modelo: email.example.ini). "
                 "Com o app fechado: execute scripts/instalar_agendador_relatorio.bat "
-                "(ou instalar_servico_relatorio.bat como administrador)."
+                "(tarefa FinanceiroAgendadorRelatorio; diagnostico: verificar_agendador_relatorio.bat)."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],

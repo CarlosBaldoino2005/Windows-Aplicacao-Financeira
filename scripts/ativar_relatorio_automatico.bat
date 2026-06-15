@@ -24,6 +24,7 @@ if exist "venv\Scripts\pythonw.exe" (
 
 echo.
 echo Pronto. O servico Windows NAO e necessario.
+echo Tarefa: FinanceiroAgendadorRelatorio
 echo Se ele existir e der erro 1069/1053, ignore ou remova com:
 echo   scripts\desinstalar_servico_relatorio.bat ^(como admin^)
 echo.
