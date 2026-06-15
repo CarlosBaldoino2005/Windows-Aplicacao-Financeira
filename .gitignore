@@ -23,6 +23,8 @@ dados/monitoramento.json
 dados/carteira.json
 dados/painel.ini
 dados/email.ini
+dados/relatorio_automatico_estado.json
+dados/relatorio_automatico.lock
 dados/cache_tesouro_precos.csv
 *.log
 dist/

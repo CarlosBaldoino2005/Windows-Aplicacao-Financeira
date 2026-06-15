@@ -10,7 +10,6 @@ from src.View import mensagem_helper as messagebox
 import customtkinter as ctk
 
 from src.Controller.controlador_mercado import ControladorMercado
-from src.Controller.controlador_carteira import ControladorCarteira
 from src.Model.cotacao import CotacaoResumo
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
@@ -42,8 +41,7 @@ from src.Tool.atualizacao_automatica_helper import (
     notificar_mudanca_configuracao_atualizacao_automatica,
 )
 from src.Tool.relatorio_automatico_helper import GerenciadorRelatorioAutomaticoCarteira
-from src.Service.relatorio_carteira_servico import RelatorioCarteiraServico
-from src.Service.email_relatorio_servico import EmailRelatorioServico
+from src.Tool.relatorio_agendado_executor import ResultadoRelatorioAgendado
 from src.Tool.icone_engrenagem_helper import criar_botao_engrenagem
 from src.Tool.icone_alerta_helper import criar_botao_alerta
 from src.Tool.alerta_monitoramento_helper import (
@@ -93,7 +91,6 @@ class InterfaceApp(ctk.CTk):
         self._carga_inicial_painel_feita = False
         self._reconstruindo_tema = False
         self._painel_buscando = False
-        self._gerando_relatorio_carteira_auto = False
 
         self._configurar_aparencia()
         self._montar_layout()
@@ -113,7 +110,7 @@ class InterfaceApp(ctk.CTk):
         self._atualizador_auto.iniciar()
         self._gerenciador_relatorio_carteira = GerenciadorRelatorioAutomaticoCarteira(
             self,
-            self._executar_relatorio_automatico_carteira,
+            self._ao_concluir_relatorio_automatico_carteira,
             self._config_painel,
         )
         self._gerenciador_relatorio_carteira.iniciar()
@@ -216,91 +213,52 @@ class InterfaceApp(ctk.CTk):
         janela = abrir_carteira(self)
         self._janela_carteira = janela
 
-    def _executar_relatorio_automatico_carteira(self) -> None:
-        """Disparado pelo agendador global nos horarios configurados na carteira."""
-        if self._gerando_relatorio_carteira_auto:
-            return
+    def _ao_concluir_relatorio_automatico_carteira(
+        self,
+        resultado: ResultadoRelatorioAgendado,
+    ) -> None:
+        """Atualiza status na carteira apos o executor gerar/enviar o relatorio."""
         if not widget_ainda_existe(self):
             return
 
-        self._gerando_relatorio_carteira_auto = True
-        controlador = ControladorCarteira()
+        caminho = resultado.caminho_pdf
+        if caminho is None:
+            return
 
-        def tarefa():
-            caminho, erro = controlador.gerar_relatorio_pdf()
-            if erro or caminho is None:
-                return {
-                    "caminho": None,
-                    "erro": erro,
-                    "erro_email": None,
-                    "qtd_emails": 0,
-                }
+        opcoes = ConfigPainelIni().carregar_relatorio_automatico_carteira()
+        qtd_emails = len(opcoes.emails_destinatarios)
+        erro_email = resultado.mensagem if resultado.mensagem and "e-mail falhou" in resultado.mensagem.lower() else None
 
-            opcoes = controlador.carregar_relatorio_automatico()
-            erro_email: str | None = None
-            qtd_emails = len(opcoes.emails_destinatarios)
-            if opcoes.emails_destinatarios:
-                _, erro_email = EmailRelatorioServico().enviar_relatorio_pdf(
-                    caminho,
-                    opcoes.emails_destinatarios,
-                )
-            return {
-                "caminho": caminho,
-                "erro": None,
-                "erro_email": erro_email,
-                "qtd_emails": qtd_emails,
-            }
-
-        def ao_concluir(resultado, erro_thread):
-            self._gerando_relatorio_carteira_auto = False
-            if not widget_ainda_existe(self):
-                return
-
-            if erro_thread:
-                return
-
-            dados = resultado or {}
-            caminho = dados.get("caminho")
-            erro = dados.get("erro")
-            erro_email = dados.get("erro_email")
-            qtd_emails = int(dados.get("qtd_emails") or 0)
-            if erro or caminho is None:
-                return
-
-            RelatorioCarteiraServico.abrir_pdf_no_sistema(caminho)
-
-            texto_status = f"Relatorio automatico gerado: {caminho.name}"
-            if erro_email:
-                texto_status = f"{texto_status} | E-mail: {erro_email}"
-                enviar_notificacao_windows(
-                    "Financeiro — e-mail do relatorio",
-                    erro_email[:220],
-                )
-            elif qtd_emails > 0:
-                texto_status = (
-                    f"{texto_status} | E-mail enviado para {qtd_emails} destinatario(s)"
-                )
-                enviar_notificacao_windows(
-                    "Financeiro — relatorio enviado",
-                    f"PDF enviado para {qtd_emails} e-mail(s).",
-                )
-
-            janela_carteira = self._janela_carteira
-            if janela_carteira is None:
-                return
-            try:
-                if not janela_carteira.winfo_exists():
-                    return
-            except Exception:
-                return
-
-            cor_status = CORES["erro"] if erro_email else CORES["sucesso"]
-            janela_carteira._label_status.configure(
-                text=texto_status,
-                text_color=cor_status,
+        texto_status = f"Relatorio automatico gerado: {caminho.name}"
+        if erro_email:
+            texto_status = f"{texto_status} | E-mail: {erro_email}"
+            enviar_notificacao_windows(
+                "Financeiro — e-mail do relatorio",
+                erro_email[:220],
+            )
+        elif qtd_emails > 0:
+            texto_status = (
+                f"{texto_status} | E-mail enviado para {qtd_emails} destinatario(s)"
+            )
+            enviar_notificacao_windows(
+                "Financeiro — relatorio enviado",
+                f"PDF enviado para {qtd_emails} e-mail(s).",
             )
 
-        self._executar_em_thread(tarefa, ao_concluir)
+        janela_carteira = self._janela_carteira
+        if janela_carteira is None:
+            return
+        try:
+            if not janela_carteira.winfo_exists():
+                return
+        except Exception:
+            return
+
+        cor_status = CORES["erro"] if erro_email else CORES["sucesso"]
+        janela_carteira._label_status.configure(
+            text=texto_status,
+            text_color=cor_status,
+        )
 
     def _abrir_monitoramento(self) -> None:
         if self._janela_monitoramento is not None:

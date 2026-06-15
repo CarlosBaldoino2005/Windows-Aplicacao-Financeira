@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import smtplib
-from datetime import datetime
+from email.header import Header
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -25,6 +25,8 @@ class EmailRelatorioServico:
         self,
         caminho_pdf: Path,
         destinatarios: tuple[str, ...],
+        *,
+        assunto: str,
     ) -> tuple[bool, str | None]:
         if not destinatarios:
             return False, "Nenhum destinatario informado."
@@ -45,14 +47,17 @@ class EmailRelatorioServico:
         except OSError as exc:
             return False, f"Nao foi possivel ler o PDF: {exc}"
 
-        assunto = f"Relatorio da carteira — {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        assunto_limpo = (assunto or "").strip()
+        if not assunto_limpo:
+            return False, "Assunto do e-mail nao informado."
+
         corpo = (
             "Segue em anexo o relatorio automatico da sua carteira de investimentos.\n\n"
             "Gerado pelo aplicativo Financeiro."
         )
 
         mensagem = MIMEMultipart()
-        mensagem["Subject"] = assunto
+        mensagem["Subject"] = Header(assunto_limpo, "utf-8")
         mensagem["From"] = opcoes.remetente
         mensagem["To"] = ", ".join(destinatarios)
         mensagem.attach(MIMEText(corpo, "plain", "utf-8"))

@@ -272,21 +272,22 @@ class ControladorCarteira:
 
         return linhas, None
 
-    def gerar_relatorio_pdf(self) -> tuple[Path | None, str | None]:
-        """Monta dados da carteira e grava PDF na pasta Relatorios."""
+    def gerar_relatorio_pdf(self) -> tuple[Path | None, str | None, str | None]:
+        """Monta dados da carteira, grava PDF e retorna caminho, erro e assunto do resumo."""
         linhas, erro = self.obter_linhas_carteira()
         if erro:
-            return None, erro
+            return None, erro, None
         if not linhas:
-            return None, "Cadastre ao menos uma posicao na carteira para gerar o relatorio."
+            return None, "Cadastre ao menos uma posicao na carteira para gerar o relatorio.", None
 
         servico = RelatorioCarteiraServico()
         dados = servico.montar_dados(linhas)
+        assunto = servico.formatar_assunto_resumo_carteira(dados.resumo)
         try:
             caminho = servico.gerar_pdf(dados)
         except Exception as exc:
-            return None, f"Nao foi possivel gerar o PDF: {exc}"
-        return Path(caminho), None
+            return None, f"Nao foi possivel gerar o PDF: {exc}", None
+        return Path(caminho), None, assunto
 
     def _mercado_por_tipo(self, tipo: TipoAtivoCarteira):
         if tipo == "cripto":

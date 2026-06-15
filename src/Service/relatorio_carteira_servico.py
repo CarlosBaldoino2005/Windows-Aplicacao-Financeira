@@ -106,6 +106,17 @@ class RelatorioCarteiraServico:
             avisos=avisos,
         )
 
+    @staticmethod
+    def formatar_assunto_resumo_carteira(resumo: ResumoRelatorioCarteira) -> str:
+        """Texto do resumo consolidado para o assunto do e-mail."""
+        return (
+            f"Investido {formatar_moeda(resumo.total_investido)}"
+            f" | Atual {formatar_moeda(resumo.total_atual)}"
+            f" | Resultado {formatar_variacao(resumo.resultado_reais, resumo.resultado_pct)}"
+            f" | Dividendos {formatar_moeda(resumo.total_dividendos)}"
+            f" | Prev. mes {formatar_moeda(resumo.dividendo_previsto_mes)}"
+        )
+
     def gerar_pdf(self, dados: DadosRelatorioCarteira) -> Path:
         """Grava o PDF e retorna o caminho completo."""
         self._pasta_relatorios.mkdir(parents=True, exist_ok=True)

@@ -744,7 +744,9 @@ class JanelaCarteira(ctk.CTkToplevel):
             scroll,
             text=(
                 "Envia o PDF nos mesmos horarios acima. Um e-mail por linha ou separados "
-                "por virgula. Configure o servidor em dados/email.ini (modelo: email.example.ini)."
+                "por virgula. Configure o servidor em dados/email.ini (modelo: email.example.ini). "
+                "Com o app fechado: execute scripts/instalar_agendador_relatorio.bat "
+                "(ou instalar_servico_relatorio.bat como administrador)."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -1035,7 +1037,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         )
 
         def tarefa():
-            caminho, erro = self._controlador.gerar_relatorio_pdf()
+            caminho, erro, assunto = self._controlador.gerar_relatorio_pdf()
             if erro or caminho is None:
                 return caminho, erro, None
 
@@ -1045,6 +1047,7 @@ class JanelaCarteira(ctk.CTkToplevel):
                 _, erro_email = EmailRelatorioServico().enviar_relatorio_pdf(
                     caminho,
                     opcoes.emails_destinatarios,
+                    assunto=assunto or "",
                 )
             return caminho, None, erro_email
 
