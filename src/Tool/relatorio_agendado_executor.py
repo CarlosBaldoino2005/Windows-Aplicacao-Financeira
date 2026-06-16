@@ -24,6 +24,7 @@ class ResultadoRelatorioAgendado:
     executado: bool
     mensagem: str | None = None
     caminho_pdf: Path | None = None
+    resumo: str | None = None
 
 
 def _raiz_projeto() -> Path:
@@ -200,6 +201,19 @@ def limpar_estado_agendamento_relatorio() -> None:
             pass
 
 
+def _notificar_resumo_relatorio_automatico(raiz: Path, resumo: str) -> None:
+    """Toast do Windows com o resumo consolidado da carteira (sem detalhes de e-mail/PDF)."""
+    texto = (resumo or "").strip()
+    if not texto:
+        return
+
+    from src.Tool.notificacao_windows_helper import enviar_notificacao_windows
+    from src.Tool.registrar_toast_windows_helper import registrar_toast_windows
+
+    registrar_toast_windows(raiz)
+    enviar_notificacao_windows("Relatorio da carteira", texto[:250])
+
+
 def gerar_e_enviar_relatorio_carteira(
     *,
     abrir_pdf: bool = False,
@@ -226,12 +240,16 @@ def gerar_e_enviar_relatorio_carteira(
     if abrir_pdf:
         RelatorioCarteiraServico.abrir_pdf_no_sistema(caminho)
 
+    resumo = (assunto or "").strip()
+    _notificar_resumo_relatorio_automatico(raiz, resumo)
+
     if erro_email:
         log.erro(f"Relatorio agendado: PDF gerado, e-mail falhou.")
         return ResultadoRelatorioAgendado(
             True,
             f"PDF gerado, mas e-mail falhou: {erro_email}",
             caminho,
+            resumo=resumo or None,
         )
 
     if opcoes.emails_destinatarios:
@@ -242,7 +260,7 @@ def gerar_e_enviar_relatorio_carteira(
     else:
         log.info(f"Relatorio agendado: PDF gerado em {caminho.name}.")
 
-    return ResultadoRelatorioAgendado(True, None, caminho)
+    return ResultadoRelatorioAgendado(True, None, caminho, resumo=resumo or None)
 
 
 def executar_ciclo_relatorio_agendado(

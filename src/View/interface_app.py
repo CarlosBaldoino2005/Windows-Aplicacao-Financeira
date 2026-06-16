@@ -52,7 +52,6 @@ from src.Tool.alerta_monitoramento_helper import (
     remover_destaque_alerta_ui,
     widget_ainda_existe,
 )
-from src.Tool.notificacao_windows_helper import enviar_notificacao_windows
 from src.Tool.janela_helper import (
     configurar_janela_maximizada,
     executar_em_thread,
@@ -232,17 +231,9 @@ class InterfaceApp(ctk.CTk):
         texto_status = f"Relatorio automatico gerado: {caminho.name}"
         if erro_email:
             texto_status = f"{texto_status} | E-mail: {erro_email}"
-            enviar_notificacao_windows(
-                "Financeiro — e-mail do relatorio",
-                erro_email[:220],
-            )
         elif qtd_emails > 0:
             texto_status = (
                 f"{texto_status} | E-mail enviado para {qtd_emails} destinatario(s)"
-            )
-            enviar_notificacao_windows(
-                "Financeiro — relatorio enviado",
-                f"PDF enviado para {qtd_emails} e-mail(s).",
             )
 
         janela_carteira = self._janela_carteira
