@@ -201,17 +201,21 @@ def limpar_estado_agendamento_relatorio() -> None:
             pass
 
 
-def _notificar_resumo_relatorio_automatico(raiz: Path, resumo: str) -> None:
+def _notificar_resumo_relatorio_automatico(raiz: Path, resumo: str, log: RegistradorLog) -> None:
     """Toast do Windows com o resumo consolidado da carteira (sem detalhes de e-mail/PDF)."""
     texto = (resumo or "").strip()
     if not texto:
+        log.aviso("Relatorio agendado: resumo vazio, notificacao Windows ignorada.")
         return
 
-    from src.Tool.notificacao_windows_helper import enviar_notificacao_windows
-    from src.Tool.registrar_toast_windows_helper import registrar_toast_windows
+    from src.Tool.notificacao_windows_helper import enviar_notificacao_resumo_carteira
+    from src.Tool.registrar_toast_windows_helper import preparar_toast_para_notificacao
 
-    registrar_toast_windows(raiz)
-    enviar_notificacao_windows("Relatorio da carteira", texto[:250])
+    preparar_toast_para_notificacao(raiz)
+    if enviar_notificacao_resumo_carteira(texto):
+        log.info("Relatorio agendado: notificacao Windows exibida com o resumo.")
+    else:
+        log.aviso("Relatorio agendado: nao foi possivel exibir notificacao Windows.")
 
 
 def gerar_e_enviar_relatorio_carteira(
@@ -228,6 +232,9 @@ def gerar_e_enviar_relatorio_carteira(
         log.erro(f"Relatorio agendado: {erro or 'falha ao gerar PDF'}")
         return ResultadoRelatorioAgendado(False, erro or "Falha ao gerar PDF.")
 
+    resumo = (assunto or "").strip()
+    _notificar_resumo_relatorio_automatico(raiz, resumo, log)
+
     opcoes = controlador.carregar_relatorio_automatico()
     erro_email: str | None = None
     if opcoes.emails_destinatarios:
@@ -239,9 +246,6 @@ def gerar_e_enviar_relatorio_carteira(
 
     if abrir_pdf:
         RelatorioCarteiraServico.abrir_pdf_no_sistema(caminho)
-
-    resumo = (assunto or "").strip()
-    _notificar_resumo_relatorio_automatico(raiz, resumo)
 
     if erro_email:
         log.erro(f"Relatorio agendado: PDF gerado, e-mail falhou.")

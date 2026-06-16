@@ -1,6 +1,7 @@
 """Toast nativo do Windows 10+ para alertas do monitoramento."""
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -11,18 +12,26 @@ from src.Tool.registrar_toast_windows_helper import APP_ID_TOAST
 
 _SCRIPT_TOAST = r"""
 param(
-    [Parameter(Mandatory = $true)][string]$Titulo,
-    [Parameter(Mandatory = $true)][string]$Mensagem,
-    [Parameter(Mandatory = $true)][string]$AppId
+    [Parameter(Mandatory = $true)][string]$ArquivoPayload
 )
 try {
+    $payload = Get-Content -LiteralPath $ArquivoPayload -Raw -Encoding UTF8 | ConvertFrom-Json
+    $Titulo = [string]$payload.titulo
+    $Mensagem = [string]$payload.mensagem
+    $AppId = [string]$payload.appId
+
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-    $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(
-        [Windows.UI.Notifications.ToastTemplateType]::ToastText02
-    )
+    if ([string]::IsNullOrWhiteSpace($Mensagem)) {
+        $tipo = [Windows.UI.Notifications.ToastTemplateType]::ToastText01
+    } else {
+        $tipo = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
+    }
+    $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($tipo)
     $raw = [xml]$template.GetXml()
     ($raw.toast.visual.binding.text | Where-Object { $_.id -eq "1" }).AppendChild($raw.CreateTextNode($Titulo)) | Out-Null
-    ($raw.toast.visual.binding.text | Where-Object { $_.id -eq "2" }).AppendChild($raw.CreateTextNode($Mensagem)) | Out-Null
+    if (-not [string]::IsNullOrWhiteSpace($Mensagem)) {
+        ($raw.toast.visual.binding.text | Where-Object { $_.id -eq "2" }).AppendChild($raw.CreateTextNode($Mensagem)) | Out-Null
+    }
     $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
     $xml.LoadXml($raw.OuterXml)
     $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
@@ -36,6 +45,7 @@ try {
 
 def _enviar_via_powershell(titulo: str, mensagem: str) -> bool:
     caminho_script: Path | None = None
+    caminho_payload: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -45,6 +55,23 @@ def _enviar_via_powershell(titulo: str, mensagem: str) -> bool:
         ) as arquivo:
             arquivo.write(_SCRIPT_TOAST)
             caminho_script = Path(arquivo.name)
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",
+        ) as arquivo:
+            json.dump(
+                {
+                    "titulo": titulo,
+                    "mensagem": mensagem,
+                    "appId": APP_ID_TOAST,
+                },
+                arquivo,
+                ensure_ascii=False,
+            )
+            caminho_payload = Path(arquivo.name)
 
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         resultado = subprocess.run(
@@ -56,14 +83,10 @@ def _enviar_via_powershell(titulo: str, mensagem: str) -> bool:
                 "Bypass",
                 "-File",
                 str(caminho_script),
-                "-Titulo",
-                titulo,
-                "-Mensagem",
-                mensagem,
-                "-AppId",
-                APP_ID_TOAST,
+                "-ArquivoPayload",
+                str(caminho_payload),
             ],
-            timeout=15,
+            timeout=20,
             creationflags=flags,
             check=False,
             capture_output=True,
@@ -73,11 +96,12 @@ def _enviar_via_powershell(titulo: str, mensagem: str) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     finally:
-        if caminho_script is not None:
-            try:
-                caminho_script.unlink(missing_ok=True)
-            except OSError:
-                pass
+        for caminho in (caminho_script, caminho_payload):
+            if caminho is not None:
+                try:
+                    caminho.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 def _enviar_via_plyer(titulo: str, mensagem: str) -> bool:
@@ -85,11 +109,20 @@ def _enviar_via_plyer(titulo: str, mensagem: str) -> bool:
     try:
         from plyer import notification
 
+        titulo_ok = (titulo or "").strip()[:63]
+        if not titulo_ok:
+            return False
+        mensagem_ok = (mensagem or "").strip()
+        if not mensagem_ok and len((titulo or "").strip()) > 63:
+            mensagem_ok = (titulo or "").strip()[63:255]
+        if not mensagem_ok:
+            mensagem_ok = "Financeiro"
+
         notification.notify(
-            title=titulo,
-            message=mensagem,
+            title=titulo_ok,
+            message=mensagem_ok[:255],
             app_name="Financeiro",
-            timeout=12,
+            timeout=15,
         )
         return True
     except Exception:
@@ -109,6 +142,19 @@ def enviar_notificacao_windows(titulo: str, mensagem: str) -> bool:
     if _enviar_via_powershell(titulo, mensagem):
         return True
     return _enviar_via_plyer(titulo, mensagem)
+
+
+def enviar_notificacao_resumo_carteira(resumo: str) -> bool:
+    """Toast com o resumo consolidado da carteira (uma unica mensagem visivel)."""
+    texto = (resumo or "").strip()
+    if not texto:
+        return False
+
+    texto = texto[:250]
+    if len(texto) <= 120:
+        return enviar_notificacao_windows(texto, "")
+
+    return enviar_notificacao_windows(texto[:120], texto[120:])
 
 
 def enviar_varias_notificacoes_windows(

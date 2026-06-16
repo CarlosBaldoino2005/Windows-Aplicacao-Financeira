@@ -89,10 +89,35 @@ def registrar_toast_windows(raiz_projeto: Path | None = None) -> bool:
     raiz = raiz_projeto or Path(__file__).resolve().parents[2]
     _definir_app_id_processo(APP_ID_TOAST)
 
-    argumentos = "-m src.main"
+    executavel, argumentos = _resolver_executavel_atalho(raiz)
     return _criar_atalho_com_app_id(
         APP_ID_TOAST,
         raiz,
-        sys.executable,
+        executavel,
         argumentos,
     )
+
+
+def _resolver_executavel_atalho(raiz: Path) -> tuple[str, str]:
+    """Usa executar.bat quando existir para manter o mesmo App ID nas notificacoes."""
+    bat = raiz / "executar.bat"
+    if bat.is_file():
+        return str(bat.resolve()), ""
+    return sys.executable, "-m src.main"
+
+
+def preparar_toast_para_notificacao(raiz_projeto: Path | None = None) -> None:
+    """
+    Garante AppUserModelID no processo atual sem sobrescrever o atalho a cada notificacao.
+    Cria o atalho apenas se ainda nao existir (evita trocar para pythonw no agendador).
+    """
+    if sys.platform != "win32":
+        return
+
+    raiz = raiz_projeto or Path(__file__).resolve().parents[2]
+    _definir_app_id_processo(APP_ID_TOAST)
+    if _caminho_atalho_inicio().is_file():
+        return
+
+    executavel, argumentos = _resolver_executavel_atalho(raiz)
+    _criar_atalho_com_app_id(APP_ID_TOAST, raiz, executavel, argumentos)
