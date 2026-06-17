@@ -13,6 +13,7 @@ from src.Tool.janela_helper import configurar_janela_maximizada
 from src.View.grafico_modelo_helper import (
     ModeloGrafico,
     desenhar_serie_preco_principal,
+    desenhar_series_comparacao,
     montar_seletor_modelo_grafico,
     normalizar_modelo_grafico,
 )
@@ -267,6 +268,10 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._controle_zoom = None
+        self._modelo_grafico: ModeloGrafico = normalizar_modelo_grafico(
+            dados.get("modelo_grafico")
+        )
+        self._dados["modelo_grafico"] = self._modelo_grafico
 
         self.title(titulo_janela)
         self.configure(fg_color=CORES["fundo"])
@@ -301,6 +306,14 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 10))
 
+        barra_modelo = ctk.CTkFrame(self, fg_color="transparent")
+        barra_modelo.pack(fill="x", padx=16, pady=(0, 4))
+        montar_seletor_modelo_grafico(
+            barra_modelo,
+            modelo_inicial=self._modelo_grafico,
+            ao_mudar=self._alternar_modelo_grafico,
+        )
+
         barra_zoom = ctk.CTkFrame(self, fg_color="transparent")
         barra_zoom.pack(fill="x", padx=16, pady=(0, 4))
         montar_botoes_zoom_grafico(barra_zoom, lambda: self._controle_zoom)
@@ -320,6 +333,11 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
             width=120,
         ).pack(side="right")
 
+        self._desenhar_grafico()
+
+    def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
+        self._modelo_grafico = modelo
+        self._dados["modelo_grafico"] = modelo
         self._desenhar_grafico()
 
     def _desenhar_grafico(self) -> None:
@@ -353,25 +371,18 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
-        linhas_plot: list = []
 
         indices = np.arange(len(serie_referencia))
         datas_grafico = [p["data"] for p in serie_referencia]
 
-        for i, simbolo in enumerate(simbolos):
-            serie = dados["series"].get(simbolo) or []
-            if len(serie) < 2:
-                continue
-            linha, = eixo.plot(
-                indices,
-                [p["indice_relativo"] for p in serie],
-                label=simbolo.replace(".SA", ""),
-                color=_CORES_GRAFICO[i % len(_CORES_GRAFICO)],
-                linewidth=2.5,
-                marker="o",
-                markersize=5,
-            )
-            linhas_plot.append(linha)
+        linhas_plot = desenhar_series_comparacao(
+            eixo,
+            indices,
+            simbolos,
+            dados["series"],
+            _CORES_GRAFICO,
+            modelo=self._modelo_grafico,
+        )
 
         try:
             valores_cdi = CdiServico().montar_indice_cdi_base100(datas_grafico)

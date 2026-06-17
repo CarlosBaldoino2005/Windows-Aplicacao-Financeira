@@ -10,8 +10,12 @@ from src.Controller.controlador_carteira import ControladorCarteira
 from src.Model.carteira import LinhaCarteira
 from src.Model.periodos_mercado import PERIODOS_MERCADO, periodo_chave_por_rotulo
 from src.Service.cdi_servico import CdiServico
-from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.janela_helper import executar_em_thread, janela_ui_ainda_ativa
+from src.View.grafico_modelo_helper import (
+    ModeloGrafico,
+    desenhar_series_comparacao,
+    montar_seletor_modelo_grafico,
+)
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
     aplicar_tema_matplotlib,
@@ -50,6 +54,7 @@ class PainelGraficoCarteira:
         self._desenhando = False
         self._tem_posicoes = False
         self._janela_grafico_ampliado: JanelaGraficoComparacao | None = None
+        self._modelo_grafico: ModeloGrafico = "linha"
 
     def montar(self, pai: ctk.CTkFrame) -> ctk.CTkFrame:
         """Monta o painel; o chamador posiciona o card retornado (ex.: grid row=1)."""
@@ -88,6 +93,13 @@ class PainelGraficoCarteira:
         )
         self._combo_periodo.set("Mes")
         self._combo_periodo.pack(side="left", padx=(0, 10))
+
+        montar_seletor_modelo_grafico(
+            barra,
+            modelo_inicial=self._modelo_grafico,
+            ao_mudar=self._alternar_modelo_grafico,
+            largura_combo=110,
+        )
 
         ctk.CTkButton(
             barra,
@@ -171,6 +183,12 @@ class PainelGraficoCarteira:
             return
         self._carregar_grafico()
 
+    def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
+        self._modelo_grafico = modelo
+        if self._dados_grafico:
+            self._dados_grafico["modelo_grafico"] = modelo
+            self._desenhar_grafico()
+
     def _alternar_datas(self, _valor: str | None = None) -> None:
         if self._frame_datas is None or self._combo_periodo is None:
             return
@@ -225,6 +243,7 @@ class PainelGraficoCarteira:
                 return
 
             self._dados_grafico = dados
+            self._dados_grafico["modelo_grafico"] = self._modelo_grafico
             avisos = dados.get("avisos") or []
             qtd = len(dados.get("simbolos") or [])
             status = f"{qtd} ativo(s) no grafico — periodo: {self._combo_periodo.get() if self._combo_periodo else 'Mes'}."
@@ -323,25 +342,18 @@ class PainelGraficoCarteira:
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
-        linhas_plot: list = []
 
         indices = np.arange(len(serie_referencia))
         datas_grafico = [p["data"] for p in serie_referencia]
 
-        for i, simbolo in enumerate(simbolos):
-            serie = dados["series"].get(simbolo) or []
-            if len(serie) < 2:
-                continue
-            linha, = eixo.plot(
-                indices,
-                [p["indice_relativo"] for p in serie],
-                label=codigo_exibicao(simbolo),
-                color=CORES_GRAFICO[i % len(CORES_GRAFICO)],
-                linewidth=2.2,
-                marker="o",
-                markersize=3,
-            )
-            linhas_plot.append(linha)
+        linhas_plot = desenhar_series_comparacao(
+            eixo,
+            indices,
+            simbolos,
+            dados["series"],
+            CORES_GRAFICO,
+            modelo=self._modelo_grafico,
+        )
 
         try:
             valores_cdi = CdiServico().montar_indice_cdi_base100(datas_grafico)

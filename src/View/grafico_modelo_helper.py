@@ -97,6 +97,107 @@ def CORES_TRANSPARENTE() -> str:
     return "#00000000"
 
 
+def _montar_pontos_vela_comparacao(serie: list[dict]) -> list[dict]:
+    """Monta abertura/fechamento a partir do indice relativo para candlesticks."""
+    pontos: list[dict] = []
+    indice_anterior: float | None = None
+    for ponto in serie:
+        fechamento = float(ponto.get("indice_relativo") or 0)
+        abertura = float(indice_anterior if indice_anterior is not None else fechamento)
+        pontos.append({**ponto, "fechamento": fechamento, "abertura": abertura})
+        indice_anterior = fechamento
+    return pontos
+
+
+def desenhar_series_comparacao(
+    eixo,
+    indices: np.ndarray,
+    simbolos: list[str],
+    series: dict[str, list[dict]],
+    cores: list[str],
+    *,
+    modelo: ModeloGrafico | str = "linha",
+    largura_barra: float = 0.65,
+) -> list[Line2D]:
+    """
+    Desenha varias series de comparacao (indice base 100) no modelo escolhido.
+    Retorna linhas guia para tooltip e selecao de periodo.
+    """
+    modelo_ok = normalizar_modelo_grafico(str(modelo))
+    linhas_plot: list[Line2D] = []
+    series_validas: list[tuple[str, list[dict]]] = []
+
+    for simbolo in simbolos:
+        serie = series.get(simbolo) or []
+        if len(serie) >= 2:
+            series_validas.append((simbolo, serie))
+
+    quantidade = len(series_validas)
+    largura_grupo = 0.75
+
+    for indice_serie, (simbolo, serie) in enumerate(series_validas):
+        cor = cores[indice_serie % len(cores)]
+        valores = [float(p["indice_relativo"]) for p in serie]
+        valores_np = np.asarray(valores, dtype=float)
+        rotulo = simbolo.replace(".SA", "")
+
+        if modelo_ok == "barra":
+            if quantidade <= 1:
+                posicoes_x = indices
+                largura = largura_barra
+            else:
+                largura = largura_grupo / quantidade
+                posicoes_x = indices + (indice_serie - (quantidade - 1) / 2) * largura
+            eixo.bar(
+                posicoes_x,
+                valores_np,
+                width=largura,
+                color=cor,
+                alpha=0.82,
+                label=rotulo,
+                zorder=2,
+            )
+        elif modelo_ok == "area":
+            eixo.fill_between(indices, valores_np, alpha=0.18, color=cor, zorder=1)
+            eixo.plot(
+                indices,
+                valores_np,
+                color=cor,
+                linewidth=2.2,
+                marker="o",
+                markersize=3,
+                label=rotulo,
+                zorder=3,
+            )
+        elif modelo_ok == "vela":
+            pontos_vela = _montar_pontos_vela_comparacao(serie)
+            if quantidade <= 1:
+                posicoes_x = indices
+                largura_corpo = largura_barra
+            else:
+                largura = largura_grupo / quantidade
+                posicoes_x = indices + (indice_serie - (quantidade - 1) / 2) * largura
+                largura_corpo = min(0.55, largura * 0.9)
+            _desenhar_velas(eixo, posicoes_x, pontos_vela, largura_corpo)
+        else:
+            eixo.plot(
+                indices,
+                valores_np,
+                label=rotulo,
+                color=cor,
+                linewidth=2.2,
+                marker="o",
+                markersize=3,
+                zorder=3,
+            )
+
+        linhas_plot.append(
+            _linha_guia_interacao(eixo, indices, valores, label=rotulo)
+        )
+
+    return linhas_plot
+
+
 def desenhar_serie_preco_principal(
     eixo,
     indices: np.ndarray,

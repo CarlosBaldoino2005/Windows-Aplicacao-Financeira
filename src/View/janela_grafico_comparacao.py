@@ -10,6 +10,12 @@ from matplotlib.figure import Figure
 
 from src.Service.cdi_servico import CdiServico
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
+from src.View.grafico_modelo_helper import (
+    ModeloGrafico,
+    desenhar_series_comparacao,
+    montar_seletor_modelo_grafico,
+    normalizar_modelo_grafico,
+)
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
     TEXTO_INSTRUCAO_GRAFICO_COMPARACAO,
@@ -61,6 +67,10 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
         self._figura = None
         self._canvas = None
         self._desenhando_grafico = False
+        self._modelo_grafico: ModeloGrafico = normalizar_modelo_grafico(
+            dados.get("modelo_grafico")
+        )
+        self._dados["modelo_grafico"] = self._modelo_grafico
 
         self._montar_interface()
         configurar_janela_maximizada(self, ao_apos_layout=self._desenhar_grafico)
@@ -139,6 +149,11 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
         barra_grafico = ctk.CTkFrame(self, fg_color="transparent")
         barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
+        montar_seletor_modelo_grafico(
+            barra_grafico,
+            modelo_inicial=self._modelo_grafico,
+            ao_mudar=self._alternar_modelo_grafico,
+        )
         montar_botoes_zoom_grafico(barra_grafico, lambda: self._controle_zoom)
         self._btn_grafico_ampliado = ctk.CTkButton(
             barra_grafico,
@@ -156,6 +171,11 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
         self._frame_grafico = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
         self._frame_grafico.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
+
+    def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
+        self._modelo_grafico = modelo
+        self._dados["modelo_grafico"] = modelo
+        self._desenhar_grafico()
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         executar_em_thread(self, funcao, ao_concluir)
@@ -261,25 +281,18 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
-        linhas_plot: list = []
 
         indices = np.arange(len(serie_referencia))
         datas_grafico = [p["data"] for p in serie_referencia]
 
-        for i, simbolo in enumerate(simbolos):
-            serie = dados["series"].get(simbolo) or []
-            if len(serie) < 2:
-                continue
-            linha, = eixo.plot(
-                indices,
-                [p["indice_relativo"] for p in serie],
-                label=simbolo.replace(".SA", ""),
-                color=CORES_GRAFICO[i % len(CORES_GRAFICO)],
-                linewidth=2.5,
-                marker="o",
-                markersize=4,
-            )
-            linhas_plot.append(linha)
+        linhas_plot = desenhar_series_comparacao(
+            eixo,
+            indices,
+            simbolos,
+            dados["series"],
+            CORES_GRAFICO,
+            modelo=self._modelo_grafico,
+        )
 
         try:
             valores_cdi = CdiServico().montar_indice_cdi_base100(datas_grafico)
