@@ -8,7 +8,7 @@ import customtkinter as ctk
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
 from src.Model.monitoramento import ROTULOS_TIPO_ATIVO, MonitoramentoItem
 from src.Tool.cotacao_dual_helper import codigo_exibicao
-from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha
+from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.Tool.validadores import validar_limites_monitoramento, validar_valor_monetario_opcional
 from src.View import mensagem_helper as messagebox
@@ -60,10 +60,7 @@ class JanelaEditarMonitoramento(ctk.CTkToplevel):
     def _centralizar_sobre_pai(self, pai: ctk.CTk | ctk.CTkToplevel) -> None:
         try:
             self.update_idletasks()
-            pai.update_idletasks()
-            x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - self._largura) / 2))
-            y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - self._altura) / 2))
-            self.geometry(f"{self._largura}x{self._altura}+{x}+{y}")
+            centralizar_janela_sobre_referencia(self, pai, self._largura, self._altura)
         except Exception:
             pass
 

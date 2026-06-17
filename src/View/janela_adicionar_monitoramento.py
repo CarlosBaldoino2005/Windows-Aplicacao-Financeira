@@ -13,8 +13,9 @@ from src.Model.monitoramento import (
     TipoAtivoMonitoramento,
 )
 from src.Model.resultado_busca import ResultadoBusca
+from src.Tool.blacklist_ativos_helper import confirmar_cadastro_blacklist
 from src.Tool.cotacao_dual_helper import codigo_exibicao
-from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha
+from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.Tool.validadores import validar_limites_monitoramento, validar_valor_monetario_opcional
 from src.View.janela_calcular_limites_monitoramento import abrir_calcular_limites_monitoramento
@@ -85,10 +86,7 @@ class JanelaAdicionarMonitoramento(ctk.CTkToplevel):
     def _centralizar_sobre_pai(self, pai: ctk.CTk) -> None:
         try:
             self.update_idletasks()
-            pai.update_idletasks()
-            x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - self._largura) / 2))
-            y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - self._altura) / 2))
-            self.geometry(f"{self._largura}x{self._altura}+{x}+{y}")
+            centralizar_janela_sobre_referencia(self, pai, self._largura, self._altura)
         except Exception:
             pass
 
@@ -490,6 +488,9 @@ class JanelaAdicionarMonitoramento(ctk.CTkToplevel):
         )
         if erro_limites:
             messagebox.showwarning("Limites", erro_limites, parent=self)
+            return
+
+        if not confirmar_cadastro_blacklist(simbolo, parent=self):
             return
 
         tipo = self._tipo_selecionado()

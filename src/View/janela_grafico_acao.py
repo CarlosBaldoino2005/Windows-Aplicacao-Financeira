@@ -48,7 +48,8 @@ from src.View.painel_comparacao_periodo import (
 )
 from src.View.tema import CORES
 from src.View import mensagem_helper as messagebox
-from src.View.formatadores import formatar_moeda, formatar_variacao
+from src.View.janela_blacklist_ativos import abrir_blacklist_ativos
+from src.View.janela_grafico_tempo_real import abrir_grafico_tempo_real
 
 PERIODOS = PERIODOS_MERCADO
 ALTURA_GRAFICO_PX = 480
@@ -80,6 +81,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._janela_resumo_periodo: ctk.CTkToplevel | None = None
         self._janela_grafico_ampliado: ctk.CTkToplevel | None = None
         self._janela_adicionar_monitoramento: ctk.CTkToplevel | None = None
+        self._janela_grafico_agora: ctk.CTkToplevel | None = None
+        self._janela_blacklist: ctk.CTkToplevel | None = None
         self._controlador_monitoramento = ControladorMonitoramento()
         self._config_ini = ConfigPainelIni()
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
@@ -114,6 +117,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             "_janela_resumo_periodo",
             "_janela_grafico_ampliado",
             "_janela_adicionar_monitoramento",
+            "_janela_grafico_agora",
+            "_janela_blacklist",
         ):
             janela = getattr(self, attr, None)
             if janela is not None:
@@ -190,6 +195,26 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            barra,
+            text="Agora",
+            command=self._abrir_grafico_agora,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=90,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            barra,
+            text="Black List",
+            command=self._abrir_blacklist,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=110,
         ).pack(side="left", padx=(0, 16))
 
         ctk.CTkLabel(barra, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
@@ -518,6 +543,33 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             self._controlador,
             self._simbolo,
             self._executar_em_thread,
+        )
+
+    def _abrir_grafico_agora(self) -> None:
+        if self._janela_grafico_agora is not None:
+            try:
+                if self._janela_grafico_agora.winfo_exists():
+                    self._janela_grafico_agora._ao_fechar()
+            except Exception:
+                pass
+        self._janela_grafico_agora = abrir_grafico_tempo_real(
+            self,
+            self._controlador,
+            self._simbolo,
+        )
+
+    def _abrir_blacklist(self) -> None:
+        if self._janela_blacklist is not None:
+            try:
+                if self._janela_blacklist.winfo_exists():
+                    self._janela_blacklist.focus_force()
+                    return
+            except Exception:
+                pass
+
+        self._janela_blacklist = abrir_blacklist_ativos(
+            self,
+            simbolo_sugerido=self._simbolo,
         )
 
     def _carregar_grafico(self) -> None:

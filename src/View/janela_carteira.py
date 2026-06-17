@@ -38,11 +38,14 @@ from src.Tool.janela_helper import (
     executar_em_thread,
     janela_ui_ainda_ativa,
     liberar_modal_janela_filha,
+    centralizar_janela_sobre_referencia,
 )
 from src.View.formatadores import formatar_moeda
 from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
 from src.View.janela_carteira_posicoes_tela_cheia import JanelaCarteiraPosicoesTelaCheia
+from src.View.janela_blacklist_ativos import abrir_blacklist_ativos
 from src.View.janela_grafico_acao import JanelaGraficoAcao
+from src.View.janela_grafico_tempo_real import JanelaGraficoTempoReal, abrir_grafico_tempo_real
 from src.View.painel_grafico_carteira_helper import PainelGraficoCarteira
 from src.View.tabela_carteira_helper import (
     criar_grid_carteira,
@@ -69,6 +72,8 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._config_painel = ConfigPainelIni()
         self._janela_form = None
         self._janela_grafico: JanelaGraficoAcao | None = None
+        self._janela_grafico_agora: JanelaGraficoTempoReal | None = None
+        self._janela_blacklist = None
         self._janela_posicoes_tela_cheia: JanelaCarteiraPosicoesTelaCheia | None = None
         self._painel_grafico: PainelGraficoCarteira | None = None
         self._tabela: ttk.Treeview | None = None
@@ -113,6 +118,12 @@ class JanelaCarteira(ctk.CTkToplevel):
             try:
                 if self._janela_grafico.winfo_exists():
                     self._janela_grafico._ao_fechar()
+            except Exception:
+                pass
+        if self._janela_grafico_agora is not None:
+            try:
+                if self._janela_grafico_agora.winfo_exists():
+                    self._janela_grafico_agora._ao_fechar()
             except Exception:
                 pass
         self.destroy()
@@ -292,6 +303,26 @@ class JanelaCarteira(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            grupo_esquerda,
+            text="Agora",
+            command=self._abrir_grafico_agora,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=90,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            grupo_esquerda,
+            text="Black List",
+            command=self._abrir_blacklist,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=110,
         ).pack(side="left")
 
         grupo_direita = ctk.CTkFrame(barra, fg_color="transparent")
@@ -454,10 +485,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         """Centraliza dialogo no monitor da janela carteira (pai imediato)."""
         try:
             dialogo.update_idletasks()
-            self.update_idletasks()
-            x = int(self.winfo_rootx() + max(0, (self.winfo_width() - largura) / 2))
-            y = int(self.winfo_rooty() + max(0, (self.winfo_height() - altura) / 2))
-            dialogo.geometry(f"{largura}x{altura}+{x}+{y}")
+            centralizar_janela_sobre_referencia(dialogo, self, largura, altura)
         except Exception:
             pass
 
@@ -1170,6 +1198,60 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._janela_grafico = JanelaGraficoAcao(self, controlador, linha.posicao.simbolo)
         codigo = codigo_exibicao(linha.posicao.simbolo)
         self._janela_grafico.title(f"Grafico — {codigo}")
+
+    def _abrir_grafico_agora(self) -> None:
+        selecionados = self._obter_ids_selecionados()
+        if len(selecionados) != 1:
+            messagebox.showwarning(
+                "Agora",
+                "Selecione exatamente uma posicao na grid para acompanhar em tempo real.",
+                parent=self,
+            )
+            return
+
+        linha = self._linhas_cache.get(selecionados[0])
+        if linha is None:
+            messagebox.showwarning("Agora", "Posicao nao encontrada.", parent=self)
+            return
+
+        tipo_mon: TipoAtivoMonitoramento = tipo_carteira_para_monitoramento(  # type: ignore[assignment]
+            linha.posicao.tipo_ativo
+        )
+        controlador = obter_controlador_por_tipo(tipo_mon)
+
+        if self._janela_grafico_agora is not None:
+            try:
+                if self._janela_grafico_agora.winfo_exists():
+                    self._janela_grafico_agora._ao_fechar()
+            except Exception:
+                pass
+
+        self._janela_grafico_agora = abrir_grafico_tempo_real(
+            self,
+            controlador,
+            linha.posicao.simbolo,
+        )
+
+    def _abrir_blacklist(self) -> None:
+        simbolo_sugerido: str | None = None
+        selecionados = self._obter_ids_selecionados()
+        if len(selecionados) == 1:
+            linha = self._linhas_cache.get(selecionados[0])
+            if linha is not None:
+                simbolo_sugerido = linha.posicao.simbolo
+
+        if self._janela_blacklist is not None:
+            try:
+                if self._janela_blacklist.winfo_exists():
+                    self._janela_blacklist.focus_force()
+                    return
+            except Exception:
+                pass
+
+        self._janela_blacklist = abrir_blacklist_ativos(
+            self,
+            simbolo_sugerido=simbolo_sugerido,
+        )
 
 
 def abrir_carteira(pai: ctk.CTk) -> JanelaCarteira | None:

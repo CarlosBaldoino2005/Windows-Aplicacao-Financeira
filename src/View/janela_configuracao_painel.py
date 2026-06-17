@@ -14,7 +14,7 @@ from src.Model.opcoes_atualizacao_automatica import (
 )
 from src.Model.opcoes_fonte_grid import FONTE_MEDIO, ROTULOS_FONTE_GRID
 from src.Tool.config_painel import ConfigPainelIni
-from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha
+from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
 from src.Tool.validadores import (
     validar_fonte_grid,
     validar_intervalo_atualizacao_segundos,
@@ -58,10 +58,7 @@ class ResultadoConfiguracaoPainel:
 def _centralizar_sobre_pai(janela: ctk.CTkToplevel, pai: ctk.CTk) -> None:
     try:
         janela.update_idletasks()
-        pai.update_idletasks()
-        x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - _LARGURA) / 2))
-        y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - _ALTURA) / 2))
-        janela.geometry(f"{_LARGURA}x{_ALTURA}+{x}+{y}")
+        centralizar_janela_sobre_referencia(janela, pai, _LARGURA, _ALTURA)
     except Exception:
         pass
 

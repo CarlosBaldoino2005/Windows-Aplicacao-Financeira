@@ -9,7 +9,7 @@ from src.Tool.calcular_limites_monitoramento_helper import (
     calcular_limites_monitoramento,
     validar_percentual_margem,
 )
-from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha
+from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.Tool.validadores import validar_valor_monetario_ptbr
 from src.View import mensagem_helper as messagebox
@@ -56,10 +56,7 @@ class JanelaCalcularLimitesMonitoramento(ctk.CTkToplevel):
     def _centralizar_sobre_pai(self, pai: ctk.CTk | ctk.CTkToplevel) -> None:
         try:
             self.update_idletasks()
-            pai.update_idletasks()
-            x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - _LARGURA) / 2))
-            y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - _ALTURA) / 2))
-            self.geometry(f"{_LARGURA}x{_ALTURA}+{x}+{y}")
+            centralizar_janela_sobre_referencia(self, pai, _LARGURA, _ALTURA)
         except Exception:
             pass
 

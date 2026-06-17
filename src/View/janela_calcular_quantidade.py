@@ -10,6 +10,7 @@ from src.Tool.janela_helper import (
     configurar_janela_filha_modal,
     executar_em_thread,
     liberar_modal_janela_filha,
+    centralizar_janela_sobre_referencia,
 )
 
 from src.Tool.calcular_quantidade_helper import calcular_quantidade_por_valor
@@ -31,10 +32,7 @@ def _centralizar_sobre_pai(janela: ctk.CTkToplevel, pai: ctk.CTk, largura: int, 
     """Posiciona a janela auxiliar no centro da tela pai."""
     try:
         janela.update_idletasks()
-        pai.update_idletasks()
-        x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - largura) / 2))
-        y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - altura) / 2))
-        janela.geometry(f"{largura}x{altura}+{x}+{y}")
+        centralizar_janela_sobre_referencia(janela, pai, largura, altura)
     except Exception:
         pass
 

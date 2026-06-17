@@ -15,9 +15,10 @@ from src.Model.carteira import (
     TipoAtivoCarteira,
 )
 from src.Model.resultado_busca import ResultadoBusca
+from src.Tool.blacklist_ativos_helper import confirmar_cadastro_blacklist
 from src.Tool.carteira_ativo_helper import normalizar_simbolo_carteira
 from src.Tool.cotacao_dual_helper import codigo_exibicao
-from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha
+from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.View.tema import CORES
 
@@ -73,10 +74,8 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
     def _centralizar_sobre_pai(self, pai: ctk.CTk | ctk.CTkToplevel) -> None:
         try:
             self.update_idletasks()
-            pai.update_idletasks()
-            x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - _LARGURA) / 2))
-            y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - _ALTURA) / 2))
-            self.geometry(f"{_LARGURA}x{_ALTURA}+{x}+{y}")
+            altura = max(_ALTURA, int(self.winfo_reqheight()))
+            centralizar_janela_sobre_referencia(self, pai, _LARGURA, altura)
         except Exception:
             pass
 
@@ -466,6 +465,12 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         quantidade = self._entrada_quantidade.get()
         preco = self._entrada_preco.get()
         data = self._entrada_data.get().strip()
+
+        precisa_aviso_blacklist = not self._editando
+        if self._editando and self._posicao and simbolo != self._posicao.simbolo:
+            precisa_aviso_blacklist = True
+        if precisa_aviso_blacklist and not confirmar_cadastro_blacklist(simbolo, parent=self):
+            return
 
         if self._editando and self._posicao:
             _, erro = self._controlador.atualizar_posicao(

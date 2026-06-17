@@ -4,6 +4,7 @@
 _MARCA_PERIOD_DIAS = "__dias__"
 
 MAPEAMENTO_PERIODO_YFINANCE = {
+    "agora": {"period": "1d", "interval": "1m"},
     "dia": {"period": "1d", "interval": "5m"},
     "semana": {"period": "5d", "interval": "30m"},
     "mes": {"period": "1mo", "interval": "1d"},
@@ -15,6 +16,7 @@ MAPEAMENTO_PERIODO_YFINANCE = {
 }
 
 MAPEAMENTO_PERIODO_YAHOO_CHART = {
+    "agora": {"range": "1d", "interval": "1m"},
     "dia": {"range": "1d", "interval": "5m"},
     "semana": {"range": "5d", "interval": "30m"},
     "mes": {"range": "1mo", "interval": "1d"},
@@ -26,6 +28,7 @@ MAPEAMENTO_PERIODO_YAHOO_CHART = {
 }
 
 MAPEAMENTO_PERIODO_BRAPI = {
+    "agora": {"range": "1d", "interval": "1d"},
     "dia": {"range": "1d", "interval": "1d"},
     "semana": {"range": "5d", "interval": "1d"},
     "mes": {"range": "1mo", "interval": "1d"},

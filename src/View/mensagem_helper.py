@@ -5,7 +5,7 @@ from typing import Literal
 
 import customtkinter as ctk
 
-from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha
+from src.Tool.janela_helper import configurar_janela_filha_modal, liberar_modal_janela_filha, centralizar_janela_na_tela, centralizar_janela_sobre_referencia
 from src.View.tema import CORES
 
 TipoMensagem = Literal["info", "aviso", "erro", "pergunta"]
@@ -235,14 +235,9 @@ class _DialogoMensagem(ctk.CTkToplevel):
             self.minsize(largura, altura)
 
             if pai is not None:
-                pai.update_idletasks()
-                x = int(pai.winfo_rootx() + max(0, (pai.winfo_width() - largura) / 2))
-                y = int(pai.winfo_rooty() + max(0, (pai.winfo_height() - altura) / 2))
+                centralizar_janela_sobre_referencia(self, pai, largura, altura)
             else:
-                x = int((self.winfo_screenwidth() - largura) / 2)
-                y = int((self.winfo_screenheight() - altura) / 2)
-
-            self.geometry(f"{largura}x{altura}+{x}+{y}")
+                centralizar_janela_na_tela(self, largura, altura)
         except Exception:
             self.geometry(f"{self._largura}x{self._altura}")
 

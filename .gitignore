@@ -19,6 +19,7 @@ dados/favoritos.json
 dados/favoritos_cripto.json
 dados/favoritos_dividendos.json
 dados/favoritos_fiis.json
+dados/blacklist_ativos.json
 dados/monitoramento.json
 dados/carteira.json
 dados/painel.ini

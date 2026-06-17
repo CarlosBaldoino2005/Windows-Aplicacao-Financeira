@@ -212,6 +212,46 @@ def _monitor_de_janela(janela) -> int | None:
         return None
 
 
+def _retangulo_area_trabalho_ponto(x: int, y: int) -> tuple[int, int, int, int] | None:
+    """Area de trabalho do monitor que contem o ponto (coordenadas de tela)."""
+    if not _eh_windows():
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        ponto = wintypes.POINT(int(x), int(y))
+        handle = _user32().MonitorFromPoint(ponto, _MONITOR_PADRAO_MAIS_PROXIMO)
+        if not handle:
+            return None
+        info = _info_de_handle_monitor(handle)
+        return info.retangulo_trabalho() if info else None
+    except Exception:
+        return None
+
+
+def _obter_area_trabalho_referencia(referencia) -> tuple[int, int, int, int] | None:
+    """Resolve a area util do monitor da janela de referencia (sem barra de tarefas)."""
+    area = _retangulo_monitor_windows_api(referencia)
+    if area is not None:
+        return area
+
+    try:
+        referencia.update_idletasks()
+        cx = int(referencia.winfo_rootx() + referencia.winfo_width() // 2)
+        cy = int(referencia.winfo_rooty() + referencia.winfo_height() // 2)
+        area = _retangulo_area_trabalho_ponto(cx, cy)
+        if area is not None:
+            return area
+    except Exception:
+        pass
+
+    monitor = obter_monitor_principal()
+    if monitor is not None:
+        return monitor.retangulo_trabalho()
+    return None
+
+
 def _retangulo_area_trabalho_monitor(janela) -> tuple[int, int, int, int] | None:
     """
     Retorna (x, y, largura, altura) da area de trabalho do monitor onde a janela esta.
@@ -221,6 +261,19 @@ def _retangulo_area_trabalho_monitor(janela) -> tuple[int, int, int, int] | None
         retorno = _retangulo_monitor_windows_api(janela)
         if retorno:
             return retorno
+        try:
+            janela.update_idletasks()
+            cx = int(janela.winfo_rootx() + janela.winfo_width() // 2)
+            cy = int(janela.winfo_rooty() + janela.winfo_height() // 2)
+            retorno = _retangulo_area_trabalho_ponto(cx, cy)
+            if retorno:
+                return retorno
+        except Exception:
+            pass
+
+    monitor = obter_monitor_principal()
+    if monitor is not None:
+        return monitor.retangulo_trabalho()
 
     try:
         janela.update_idletasks()
@@ -494,6 +547,160 @@ def posicionar_janela_na_area_trabalho(
             janela.geometry(f"{largura}x{altura}+{x}+{y}")
 
         janela.update_idletasks()
+    except Exception:
+        pass
+
+
+_MARGEM_CENTRALIZAR_MODAL = 12
+
+
+def _aplicar_posicao_modal_centralizado(
+    janela,
+    referencia,
+    largura: int,
+    altura: int,
+    *,
+    margem: int = _MARGEM_CENTRALIZAR_MODAL,
+) -> tuple[int, int, int, int]:
+    """Calcula e aplica posicao central na area de trabalho; retorna (largura, altura, x, y)."""
+    janela.update_idletasks()
+    largura = max(200, int(largura))
+    altura = max(120, int(altura))
+
+    area = _obter_area_trabalho_referencia(referencia)
+    if area is None:
+        referencia.update_idletasks()
+        px = int(referencia.winfo_rootx())
+        py = int(referencia.winfo_rooty())
+        plarg = int(referencia.winfo_width())
+        palt = int(referencia.winfo_height())
+        x = px + max(0, (plarg - largura) // 2)
+        y = py + max(0, (palt - altura) // 2)
+        janela.geometry(f"{largura}x{altura}+{x}+{y}")
+        posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
+        return largura, altura, x, y
+
+    ax, ay, alarg, aalt = area
+    largura = min(largura, alarg - 2 * margem)
+    altura = min(altura, aalt - 2 * margem)
+    x = ax + max(margem, (alarg - largura) // 2)
+    y = ay + max(margem, (aalt - altura) // 2)
+    x = max(ax + margem, min(x, ax + alarg - largura - margem))
+    y = max(ay + margem, min(y, ay + aalt - altura - margem))
+
+    janela.geometry(f"{largura}x{altura}+{x}+{y}")
+    posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
+    return largura, altura, x, y
+
+
+def centralizar_janela_sobre_referencia(
+    janela,
+    referencia,
+    largura: int,
+    altura: int,
+    *,
+    margem: int = _MARGEM_CENTRALIZAR_MODAL,
+    reagendar: bool = True,
+) -> None:
+    """
+    Centraliza janela modal na area de trabalho do monitor (acima da barra de tarefas).
+    Reaplica a posicao ao exibir a janela para o Windows nao sobrescrever o geometry.
+    """
+    try:
+        _aplicar_posicao_modal_centralizado(
+            janela,
+            referencia,
+            largura,
+            altura,
+            margem=margem,
+        )
+        if not reagendar:
+            return
+
+        estado = {"largura": largura, "altura": altura}
+
+        def reaplicar() -> None:
+            if not janela_ui_ainda_ativa(janela):
+                return
+            try:
+                janela.update_idletasks()
+                largura_atual = max(estado["largura"], int(janela.winfo_reqwidth()))
+                altura_atual = max(estado["altura"], int(janela.winfo_reqheight()))
+                estado["largura"] = largura_atual
+                estado["altura"] = altura_atual
+                _aplicar_posicao_modal_centralizado(
+                    janela,
+                    referencia,
+                    largura_atual,
+                    altura_atual,
+                    margem=margem,
+                )
+            except Exception:
+                pass
+
+        def ao_exibir(_evento=None) -> None:
+            agendar_na_ui(janela, reaplicar)
+
+        if not getattr(janela, "_financeiro_reagendar_centralizar", False):
+            janela._financeiro_reagendar_centralizar = True
+            try:
+                janela.bind("<Map>", ao_exibir, add=True)
+            except Exception:
+                pass
+
+        agendar_na_ui(janela, reaplicar)
+        try:
+            janela.after(80, reaplicar)
+            janela.after(250, reaplicar)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def centralizar_janela_na_tela(
+    janela,
+    largura: int,
+    altura: int,
+    *,
+    margem: int = _MARGEM_CENTRALIZAR_MODAL,
+) -> None:
+    """Centraliza na area de trabalho do monitor principal."""
+    try:
+        monitor = obter_monitor_principal()
+        if monitor is None:
+            janela.update_idletasks()
+            largura = max(200, int(largura))
+            altura = max(120, int(altura))
+            x = int((janela.winfo_screenwidth() - largura) / 2)
+            y = int((janela.winfo_screenheight() - altura) / 2)
+            janela.geometry(f"{largura}x{altura}+{x}+{y}")
+            return
+
+        class _ReferenciaMonitor:
+            def winfo_rootx(self) -> int:
+                return monitor.x
+
+            def winfo_rooty(self) -> int:
+                return monitor.y
+
+            def winfo_width(self) -> int:
+                return monitor.largura
+
+            def winfo_height(self) -> int:
+                return monitor.altura
+
+            def update_idletasks(self) -> None:
+                pass
+
+        centralizar_janela_sobre_referencia(
+            janela,
+            _ReferenciaMonitor(),
+            largura,
+            altura,
+            margem=margem,
+            reagendar=True,
+        )
     except Exception:
         pass
 
