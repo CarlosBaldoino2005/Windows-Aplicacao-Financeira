@@ -6,6 +6,7 @@ from pathlib import Path
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
 from src.Model.carteira import (
     LinhaCarteira,
+    LinhaVendaCarteira,
     PosicaoCarteira,
     ResultadoBuscaCarteira,
     TipoAtivoCarteira,
@@ -104,11 +105,71 @@ class ControladorCarteira:
         self,
         posicao_id: str,
         quantidade_texto: str,
+        preco_venda_texto: str,
+        data_venda_texto: str | None = None,
     ) -> tuple[bool, str | None]:
         quantidade, erro = self._persistencia.parse_quantidade(quantidade_texto)
         if erro:
             return False, erro
-        return self._persistencia.registrar_venda(posicao_id, quantidade or 0)
+        preco_venda, erro_preco = self._persistencia.parse_preco(preco_venda_texto)
+        if erro_preco:
+            return False, erro_preco
+
+        data_venda = (data_venda_texto or "").strip()
+        if not data_venda:
+            from datetime import datetime
+
+            data_venda = datetime.now().strftime("%d/%m/%Y")
+        _, erro_data = validar_data_ptbr(data_venda)
+        if erro_data:
+            return False, erro_data
+
+        posicao = self._persistencia.obter(posicao_id)
+        if posicao is None:
+            return False, "Posicao nao encontrada."
+
+        dividendos = 0.0
+        if posicao.tipo_ativo != "indices":
+            detalhes, _ = self._detalhes.obter_detalhes(posicao.simbolo)
+            if detalhes is not None:
+                dividendos = calcular_dividendos_recebidos(
+                    detalhes.pagamentos_dividendos,
+                    posicao.data_compra,
+                    quantidade or 0,
+                    data_fim_texto=data_venda,
+                )
+
+        return self._persistencia.registrar_venda(
+            posicao_id,
+            quantidade or 0,
+            preco_venda or 0,
+            data_venda,
+            dividendos,
+        )
+
+    def obter_linhas_vendas_carteira(self) -> tuple[list[LinhaVendaCarteira], str | None]:
+        vendas = self._persistencia.listar_vendas()
+        if not vendas:
+            return [], None
+
+        linhas: list[LinhaVendaCarteira] = []
+        for venda in vendas:
+            nome = codigo_exibicao(venda.simbolo)
+            moeda = self._moeda_por_venda(venda)
+            if venda.tipo_ativo != "indices":
+                detalhes, _ = self._detalhes.obter_detalhes(venda.simbolo)
+                if detalhes is not None and detalhes.nome_empresa:
+                    nome = detalhes.nome_empresa
+            linhas.append(LinhaVendaCarteira(venda=venda, nome=nome, moeda=moeda))
+        return linhas, None
+
+    @staticmethod
+    def _moeda_por_venda(venda) -> str:
+        if venda.tipo_ativo == "cripto":
+            return "USD"
+        if venda.tipo_ativo == "fiis" or venda.simbolo.endswith(".SA"):
+            return "BRL"
+        return "USD"
 
     def remover_posicao(self, posicao_id: str) -> tuple[bool, str | None]:
         return self._persistencia.remover(posicao_id)

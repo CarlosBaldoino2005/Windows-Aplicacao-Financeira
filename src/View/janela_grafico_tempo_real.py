@@ -9,11 +9,29 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
+from src.Model.carteira import LinhaCarteira
+from src.Service.carteira_servico import CarteiraServico
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread, janela_ui_ainda_ativa
+from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
+from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
 from src.View.destaque_cotacao_helper import buscar_cotacao_com_cambio
 from src.View.formatadores import formatar_moeda, formatar_variacao
-from src.View.grafico_helper import aplicar_tema_matplotlib, configurar_rotulos_eixo_x, configurar_tooltip_acao
+from src.View.grafico_helper import (
+    aplicar_tema_matplotlib,
+    configurar_eixo_horario_pregao_agora,
+    configurar_tooltip_acao,
+    extrair_minutos_dia_de_ponto,
+    minutos_dia_para_horario,
+)
+from src.View.grafico_modelo_helper import (
+    ModeloGrafico,
+    desenhar_serie_preco_principal,
+    montar_seletor_modelo_grafico,
+)
+from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
+from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
 INTERVALO_ATUALIZACAO_MS = 5_000
@@ -28,19 +46,34 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         pai: ctk.CTk,
         controlador: Any,
         simbolo: str,
+        linha_carteira: LinhaCarteira | None = None,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
         self._simbolo = simbolo
+        self._linha_carteira = linha_carteira
+        self._config_painel = ConfigPainelIni()
+        self._resumo_carteira: ResumoCarteiraAgora | None = buscar_resumo_carteira(
+            simbolo,
+            linha_carteira,
+        )
+        self._alerta_valorizacao_limite: float | None = self._config_painel.carregar_alerta_valorizacao_agora(
+            simbolo
+        )
+        self._alerta_venda_ativo = False
+        self._preco_atual_cotacao: float | None = None
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._eixo = None
         self._linha_grafico = None
+        self._controle_zoom = None
         self._area_grafico = None
         self._job_atualizacao: str | None = None
         self._ao_vivo = True
         self._carregando = False
         self._periodo_usado = "agora"
+        self._modelo_grafico: ModeloGrafico = "linha"
+        self._dados_grafico_atual: dict | None = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo}")
@@ -134,6 +167,15 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         self._btn_pausar.pack(side="right")
 
+        barra_modelo = ctk.CTkFrame(barra_topo, fg_color="transparent")
+        barra_modelo.pack(side="right", padx=(0, 12))
+        montar_seletor_modelo_grafico(
+            barra_modelo,
+            modelo_inicial=self._modelo_grafico,
+            ao_mudar=self._alternar_modelo_grafico,
+            largura_combo=110,
+        )
+
         ctk.CTkButton(
             barra_topo,
             text="Atualizar agora",
@@ -178,6 +220,100 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         self._label_detalhes.pack(anchor="w", padx=16, pady=(0, 10))
 
+        self._frame_painel_carteira = ctk.CTkFrame(
+            cabecalho,
+            fg_color=CORES.get("infoFundo", CORES["fundo"]),
+            corner_radius=10,
+            border_width=1,
+            border_color=CORES["borda"],
+        )
+
+        titulo_carteira = ctk.CTkLabel(
+            self._frame_painel_carteira,
+            text="Sua posicao na carteira",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+            anchor="w",
+        )
+        titulo_carteira.pack(anchor="w", padx=14, pady=(10, 6))
+
+        grade_carteira = ctk.CTkFrame(self._frame_painel_carteira, fg_color="transparent")
+        grade_carteira.pack(fill="x", padx=14, pady=(0, 8))
+        for coluna in range(3):
+            grade_carteira.grid_columnconfigure(coluna, weight=1)
+
+        def _criar_campo_resumo(coluna: int, rotulo: str) -> ctk.CTkLabel:
+            quadro = ctk.CTkFrame(grade_carteira, fg_color=CORES["superficie"], corner_radius=8)
+            quadro.grid(row=0, column=coluna, sticky="nsew", padx=(0 if coluna == 0 else 6, 0))
+            ctk.CTkLabel(
+                quadro,
+                text=rotulo,
+                font=ctk.CTkFont(size=11),
+                text_color=CORES["textoSecundario"],
+                anchor="w",
+            ).pack(anchor="w", padx=10, pady=(8, 2))
+            valor = ctk.CTkLabel(
+                quadro,
+                text="—",
+                font=ctk.CTkFont(size=15, weight="bold"),
+                text_color=CORES["texto"],
+                anchor="w",
+            )
+            valor.pack(anchor="w", padx=10, pady=(0, 8))
+            return valor
+
+        self._label_carteira_qtd = _criar_campo_resumo(0, "Quantidade")
+        self._label_carteira_compra = _criar_campo_resumo(1, "Preco de compra")
+        self._label_carteira_valorizacao = _criar_campo_resumo(2, "Valorizacao")
+
+        linha_alerta = ctk.CTkFrame(self._frame_painel_carteira, fg_color="transparent")
+        linha_alerta.pack(fill="x", padx=14, pady=(0, 8))
+
+        ctk.CTkLabel(
+            linha_alerta,
+            text="Alerta de valorizacao (R$)",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+        ).pack(side="left", padx=(0, 8))
+
+        self._entrada_alerta_valorizacao = ctk.CTkEntry(
+            linha_alerta,
+            width=150,
+            placeholder_text="Ex.: R$ 500,00",
+        )
+        self._entrada_alerta_valorizacao.pack(side="left", padx=(0, 8))
+        aplicar_mascara_moeda_ptbr(self._entrada_alerta_valorizacao)
+        self._preencher_entrada_alerta()
+
+        ctk.CTkButton(
+            linha_alerta,
+            text="Salvar alerta",
+            command=self._salvar_alerta_valorizacao,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=110,
+            height=32,
+        ).pack(side="left")
+
+        self._label_alerta_venda = ctk.CTkLabel(
+            self._frame_painel_carteira,
+            text="",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            fg_color=CORES["erro"],
+            corner_radius=8,
+            anchor="w",
+            justify="left",
+            wraplength=860,
+        )
+        self._label_alerta_venda.pack(fill="x", padx=14, pady=(0, 10))
+        self._label_alerta_venda.pack_forget()
+
+        if self._resumo_carteira is not None:
+            self._frame_painel_carteira.pack(fill="x", padx=16, pady=(0, 8))
+            self._atualizar_campos_carteira(None)
+
         self._label_status = ctk.CTkLabel(
             cabecalho,
             text="",
@@ -185,6 +321,10 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             text_color=CORES["textoSecundario"],
         )
         self._label_status.pack(anchor="w", padx=16, pady=(0, 10))
+
+        barra_zoom = ctk.CTkFrame(self, fg_color="transparent")
+        barra_zoom.pack(fill="x", padx=16, pady=(0, 4))
+        montar_botoes_zoom_grafico(barra_zoom, lambda: self._controle_zoom)
 
         self._frame_grafico = ctk.CTkFrame(
             self,
@@ -248,6 +388,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
             cotacao_dados, serie, erro_hist, periodo = resultado
             self._periodo_usado = periodo
+            self._atualizar_resumo_carteira()
             self._atualizar_painel_preco(cotacao_dados)
 
             if erro_hist or serie is None or not getattr(serie, "pontos", None):
@@ -258,20 +399,26 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 return
 
             pontos = serie.pontos
-            labels = [p.data_exibicao for p in pontos]
-            valores = [p.preco_fechamento for p in pontos]
+            posicoes_x, valores, pontos_tooltip = self._montar_serie_intraday(pontos)
+            if not valores:
+                self._label_status.configure(
+                    text="Grafico intraday indisponivel (horarios invalidos).",
+                    text_color=CORES["erro"],
+                )
+                return
+
             moeda = cotacao_dados[0].moeda if cotacao_dados[0] else "BRL"
             intervalo = "1 min" if periodo == "agora" else "5 min"
             titulo = f"Intraday — {codigo_exibicao(self._simbolo)} ({intervalo})"
-            pontos_tooltip = [
-                {
-                    "data": p.data_exibicao,
-                    "preco": p.preco_fechamento,
-                    "volume": p.volume,
-                }
-                for p in pontos
-            ]
-            self._desenhar_grafico(labels, valores, titulo, self._simbolo, moeda, pontos_tooltip)
+            self._dados_grafico_atual = {
+                "posicoes_x": posicoes_x,
+                "valores": valores,
+                "titulo": titulo,
+                "simbolo": self._simbolo,
+                "moeda": moeda,
+                "pontos_tooltip": pontos_tooltip,
+            }
+            self._aplicar_dados_grafico(self._dados_grafico_atual)
 
             agora = datetime.now().strftime("%H:%M:%S")
             self._label_status.configure(
@@ -281,15 +428,264 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
         executar_em_thread(self, buscar, ao_concluir)
 
+    def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
+        self._modelo_grafico = modelo
+        dados = self._dados_grafico_atual
+        if not dados:
+            return
+        self._aplicar_dados_grafico(dados)
+
+    def _grafico_tem_visualizacao_alterada(self) -> bool:
+        """Indica zoom ou deslocamento manual em relacao a visao inicial."""
+        if self._canvas is None or self._eixo is None or self._controle_zoom is None:
+            return False
+
+        controle = self._controle_zoom
+        if controle._xlim_base is None or controle._ylim_base is None:
+            return False
+
+        if controle._esta_ampliado():
+            return True
+
+        tolerancia_x = 0.5
+        span_y_base = max(controle._ylim_base[1] - controle._ylim_base[0], 1.0)
+        tolerancia_y = span_y_base * 0.01
+
+        xlim = self._eixo.get_xlim()
+        ylim = self._eixo.get_ylim()
+        for atual, base in zip(xlim, controle._xlim_base, strict=True):
+            if abs(atual - base) > tolerancia_x:
+                return True
+        for atual, base in zip(ylim, controle._ylim_base, strict=True):
+            if abs(atual - base) > tolerancia_y:
+                return True
+        return False
+
+    def _aplicar_dados_grafico(self, dados: dict) -> None:
+        if not self._grafico_tem_visualizacao_alterada():
+            self._desenhar_grafico(
+                dados["posicoes_x"],
+                dados["valores"],
+                dados["titulo"],
+                dados["simbolo"],
+                dados["moeda"],
+                dados["pontos_tooltip"],
+            )
+            return
+
+        self._atualizar_serie_grafico_preservando_zoom(
+            dados["posicoes_x"],
+            dados["valores"],
+            dados["titulo"],
+            dados["simbolo"],
+            dados["moeda"],
+            dados["pontos_tooltip"],
+        )
+
+    def _atualizar_serie_grafico_preservando_zoom(
+        self,
+        posicoes_x: list[float],
+        valores: list[float],
+        titulo: str,
+        simbolo: str,
+        moeda: str,
+        pontos_tooltip: list[dict],
+    ) -> None:
+        """Atualiza apenas a serie, mantendo zoom e posicao do grafico."""
+        if not valores or self._eixo is None or self._canvas is None or self._figura is None:
+            self._desenhar_grafico(posicoes_x, valores, titulo, simbolo, moeda, pontos_tooltip)
+            return
+
+        xlim = self._eixo.get_xlim()
+        ylim = self._eixo.get_ylim()
+
+        self._eixo.clear()
+
+        posicoes = np.asarray(posicoes_x, dtype=float)
+        linha = desenhar_serie_preco_principal(
+            self._eixo,
+            posicoes,
+            valores,
+            pontos_tooltip,
+            modelo=self._modelo_grafico,
+            cor=CORES["primaria"],
+            label="Preco",
+        )
+        self._eixo.set_title(titulo, fontsize=14, fontweight="bold")
+        self._eixo.set_ylabel("Preco", fontsize=11)
+        self._eixo.set_xlabel("Horario", fontsize=11)
+        self._eixo.set_xlim(xlim)
+        self._eixo.set_ylim(ylim)
+        self._eixo.grid(True, alpha=0.25, color=CORES["borda"])
+        aplicar_tema_matplotlib(self._eixo, self._figura)
+
+        from matplotlib.ticker import FuncFormatter
+
+        self._eixo.xaxis.set_major_formatter(
+            FuncFormatter(lambda valor, _pos: minutos_dia_para_horario(valor))
+        )
+
+        self._linha_grafico = linha
+        configurar_tooltip_acao(
+            self._canvas,
+            self._eixo,
+            linha,
+            pontos_tooltip,
+            simbolo,
+            moeda,
+            somente_horario=True,
+        )
+        self._canvas.draw_idle()
+
+    def _montar_serie_intraday(self, pontos) -> tuple[list[float], list[float], list[dict]]:
+        """Mapeia cada ponto para minutos do dia (eixo 10:00–18:00)."""
+        posicoes_x: list[float] = []
+        valores: list[float] = []
+        pontos_tooltip: list[dict] = []
+
+        for ponto in pontos:
+            minutos = extrair_minutos_dia_de_ponto(ponto.data_exibicao, data_iso=ponto.data_iso)
+            if minutos is None:
+                continue
+            posicoes_x.append(minutos)
+            valores.append(ponto.preco_fechamento)
+            pontos_tooltip.append(
+                {
+                    "data": ponto.data_exibicao,
+                    "data_iso": ponto.data_iso,
+                    "fechamento": ponto.preco_fechamento,
+                    "abertura": ponto.preco_abertura,
+                    "volume": ponto.volume,
+                    "minutos_dia": minutos,
+                }
+            )
+
+        return posicoes_x, valores, pontos_tooltip
+
+    def _atualizar_resumo_carteira(self) -> None:
+        self._resumo_carteira = buscar_resumo_carteira(self._simbolo, self._linha_carteira)
+        if self._resumo_carteira is None:
+            self._frame_painel_carteira.pack_forget()
+            return
+        if not self._frame_painel_carteira.winfo_ismapped():
+            self._frame_painel_carteira.pack(fill="x", padx=16, pady=(0, 8))
+
+    def _preencher_entrada_alerta(self) -> None:
+        if self._alerta_valorizacao_limite is None or self._alerta_valorizacao_limite <= 0:
+            return
+        centavos = int(round(self._alerta_valorizacao_limite * 100))
+        self._entrada_alerta_valorizacao.insert(0, f"R$ {formatar_centavos_ptbr(centavos)}")
+
+    def _salvar_alerta_valorizacao(self) -> None:
+        texto = self._entrada_alerta_valorizacao.get().strip()
+        if not texto or texto == "R$":
+            self._alerta_valorizacao_limite = None
+            try:
+                self._config_painel.salvar_alerta_valorizacao_agora(self._simbolo, None)
+            except OSError:
+                self._label_status.configure(
+                    text="Nao foi possivel salvar o alerta no painel.ini.",
+                    text_color=CORES["erro"],
+                )
+                return
+            self._label_status.configure(
+                text="Alerta de valorizacao removido.",
+                text_color=CORES["textoSecundario"],
+            )
+            self._verificar_alerta_venda(self._valorizacao_atual)
+            return
+
+        valor, erro = CarteiraServico.parse_preco(texto)
+        if erro or valor is None or valor <= 0:
+            self._label_status.configure(
+                text=erro or "Informe um valor de alerta valido em reais.",
+                text_color=CORES["erro"],
+            )
+            return
+
+        self._alerta_valorizacao_limite = valor
+        try:
+            self._config_painel.salvar_alerta_valorizacao_agora(self._simbolo, valor)
+        except OSError:
+            self._label_status.configure(
+                text="Nao foi possivel salvar o alerta no painel.ini.",
+                text_color=CORES["erro"],
+            )
+            return
+
+        self._label_status.configure(
+            text=f"Alerta salvo: vender quando a valorizacao atingir {formatar_moeda(valor)}.",
+            text_color=CORES["sucesso"],
+        )
+        self._verificar_alerta_venda(self._valorizacao_atual)
+
+    @property
+    def _valorizacao_atual(self) -> float | None:
+        if self._resumo_carteira is None or self._preco_atual_cotacao is None:
+            return None
+        return self._resumo_carteira.valorizacao_reais(self._preco_atual_cotacao)
+
+    def _atualizar_campos_carteira(self, preco_atual: float | None) -> None:
+        if self._resumo_carteira is None:
+            return
+
+        resumo = self._resumo_carteira
+        moeda = resumo.moeda
+        self._label_carteira_qtd.configure(text=_formatar_quantidade(resumo.quantidade))
+        self._label_carteira_compra.configure(text=formatar_moeda(resumo.preco_compra, moeda))
+
+        if preco_atual is None or preco_atual <= 0:
+            self._label_carteira_valorizacao.configure(text="—", text_color=CORES["textoSecundario"])
+            self._verificar_alerta_venda(None)
+            return
+
+        valor_reais = resumo.valorizacao_reais(preco_atual)
+        valor_pct = resumo.valorizacao_percentual(preco_atual) or 0.0
+        cor = CORES["sucesso"] if valor_reais >= 0 else CORES["erro"]
+        self._label_carteira_valorizacao.configure(
+            text=formatar_variacao(valor_reais, valor_pct, moeda),
+            text_color=cor,
+        )
+        self._verificar_alerta_venda(valor_reais)
+
+    def _verificar_alerta_venda(self, valorizacao_reais: float | None) -> None:
+        limite = self._alerta_valorizacao_limite
+        if (
+            limite is None
+            or limite <= 0
+            or valorizacao_reais is None
+            or valorizacao_reais < limite
+        ):
+            self._alerta_venda_ativo = False
+            self._label_alerta_venda.pack_forget()
+            return
+
+        self._alerta_venda_ativo = True
+        moeda = self._resumo_carteira.moeda if self._resumo_carteira else "BRL"
+        self._label_alerta_venda.configure(
+            text=(
+                f"VENDER — a valorizacao atingiu {formatar_moeda(valorizacao_reais, moeda)} "
+                f"(alerta: {formatar_moeda(limite, moeda)} ou mais). "
+                "Considere realizar a venda."
+            ),
+            fg_color=CORES["erro"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+        )
+        if not self._label_alerta_venda.winfo_ismapped():
+            self._label_alerta_venda.pack(fill="x", padx=14, pady=(0, 10))
+
     def _atualizar_painel_preco(self, cotacao_dados: tuple) -> None:
         cotacao, taxa, aviso = cotacao_dados
         if cotacao is None:
+            self._preco_atual_cotacao = None
             self._label_preco.configure(text="—")
             self._label_variacao.configure(text=aviso or "Cotacao indisponivel", text_color=CORES["erro"])
             self._label_detalhes.configure(text="")
+            self._atualizar_campos_carteira(None)
             return
 
         moeda = cotacao.moeda or "BRL"
+        self._preco_atual_cotacao = cotacao.preco
         self._label_preco.configure(text=formatar_moeda(cotacao.preco, moeda))
 
         cor_var = CORES["sucesso"] if cotacao.variacao_percentual >= 0 else CORES["erro"]
@@ -306,10 +702,11 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if aviso:
             detalhes.append(aviso)
         self._label_detalhes.configure(text="  ·  ".join(detalhes))
+        self._atualizar_campos_carteira(cotacao.preco)
 
     def _desenhar_grafico(
         self,
-        labels: list[str],
+        posicoes_x: list[float],
         valores: list[float],
         titulo: str,
         simbolo: str,
@@ -336,6 +733,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._figura = None
         self._eixo = None
         self._linha_grafico = None
+        self._controle_zoom = None
 
         largura_px = max(500, self._frame_grafico.winfo_width() - 16)
         altura_px = max(400, ALTURA_GRAFICO_PX - 16)
@@ -346,20 +744,36 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
-        indices = np.arange(len(valores))
+        posicoes = np.asarray(posicoes_x, dtype=float)
         cor_linha = CORES["primaria"]
 
-        eixo.fill_between(indices, valores, alpha=0.18, color=cor_linha)
-        linha, = eixo.plot(indices, valores, color=cor_linha, linewidth=2)
+        linha = desenhar_serie_preco_principal(
+            eixo,
+            posicoes,
+            valores,
+            pontos_tooltip,
+            modelo=self._modelo_grafico,
+            cor=cor_linha,
+            label="Preco",
+        )
         eixo.set_title(titulo, fontsize=14, fontweight="bold")
         eixo.set_ylabel("Preco", fontsize=11)
-        configurar_rotulos_eixo_x(eixo, labels, max_rotulos=12)
+        eixo.set_xlabel("Horario", fontsize=11)
+        configurar_eixo_horario_pregao_agora(eixo)
         eixo.grid(True, alpha=0.25, color=CORES["borda"])
         aplicar_tema_matplotlib(eixo, figura)
         figura.subplots_adjust(bottom=0.18, left=0.07, right=0.98, top=0.92)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
-        configurar_tooltip_acao(canvas, eixo, linha, pontos_tooltip, simbolo, moeda)
+        configurar_tooltip_acao(
+            canvas,
+            eixo,
+            linha,
+            pontos_tooltip,
+            simbolo,
+            moeda,
+            somente_horario=True,
+        )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -367,6 +781,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._canvas = canvas
         self._eixo = eixo
         self._linha_grafico = linha
+        self._controle_zoom = criar_controle_zoom(canvas, eixo)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
 
     def _ajustar_grafico_ao_redimensionar(self, tentativa: int = 0) -> None:
@@ -388,8 +803,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             pass
 
 
-def abrir_grafico_tempo_real(pai: ctk.CTk, controlador: Any, simbolo: str) -> JanelaGraficoTempoReal | None:
+def abrir_grafico_tempo_real(
+    pai: ctk.CTk,
+    controlador: Any,
+    simbolo: str,
+    linha_carteira: LinhaCarteira | None = None,
+) -> JanelaGraficoTempoReal | None:
     """Abre a tela Agora para acompanhar o ativo em tempo quase real."""
     if not pai.winfo_exists():
         return None
-    return JanelaGraficoTempoReal(pai, controlador, simbolo)
+    return JanelaGraficoTempoReal(pai, controlador, simbolo, linha_carteira=linha_carteira)

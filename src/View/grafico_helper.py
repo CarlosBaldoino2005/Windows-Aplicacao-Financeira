@@ -80,6 +80,83 @@ def aplicar_tema_matplotlib(eixo, figura=None) -> None:
             texto.set_color(cor_texto)
 
 
+HORA_INICIO_PREGAO_AGORA = 10
+HORA_FIM_PREGAO_AGORA = 18
+INTERVALO_TICKS_HORARIO_AGORA = 2
+
+
+def horario_para_minutos_dia(horario: str) -> float | None:
+    """Converte HH:MM em minutos desde a meia-noite."""
+    texto = str(horario or "").strip()
+    if not re.match(r"^\d{2}:\d{2}", texto):
+        texto = extrair_horario_exibicao(texto)
+    try:
+        hora, minuto = map(int, texto.split(":")[:2])
+        if hora < 0 or hora > 23 or minuto < 0 or minuto > 59:
+            return None
+        return float(hora * 60 + minuto)
+    except (ValueError, TypeError):
+        return None
+
+
+def minutos_dia_para_horario(minutos: float) -> str:
+    """Converte minutos desde a meia-noite em HH:MM."""
+    total = max(0, int(round(minutos)))
+    hora = (total // 60) % 24
+    minuto = total % 60
+    return f"{hora:02d}:{minuto:02d}"
+
+
+def extrair_minutos_dia_de_ponto(data_exibicao: str, *, data_iso: str | None = None) -> float | None:
+    """Obtem minutos do dia a partir de data_exibicao ou data_iso."""
+    horario = extrair_horario_exibicao(data_exibicao, data_iso=data_iso)
+    return horario_para_minutos_dia(horario)
+
+
+def configurar_eixo_horario_pregao_agora(
+    eixo,
+    *,
+    hora_inicio: int = HORA_INICIO_PREGAO_AGORA,
+    hora_fim: int = HORA_FIM_PREGAO_AGORA,
+    intervalo_horas: int = INTERVALO_TICKS_HORARIO_AGORA,
+) -> None:
+    """Fixa o eixo X no horario de pregao (ex.: 10:00 ate 18:00) com ticks a cada 2 h."""
+    inicio = hora_inicio * 60
+    fim = hora_fim * 60
+    passo = max(1, intervalo_horas) * 60
+    ticks = list(range(inicio, fim + 1, passo))
+    rotulos = [minutos_dia_para_horario(posicao) for posicao in ticks]
+
+    eixo.set_xlim(inicio, fim)
+    eixo.xaxis.set_major_locator(FixedLocator(ticks))
+    eixo.xaxis.set_major_formatter(FixedFormatter(rotulos))
+    eixo.xaxis.set_minor_locator(NullLocator())
+    eixo.xaxis.set_minor_formatter(NullFormatter())
+    eixo.tick_params(axis="x", rotation=0, labelsize=9)
+    for rotulo in eixo.get_xticklabels():
+        rotulo.set_ha("center")
+
+
+def extrair_horario_exibicao(texto: str, *, data_iso: str | None = None) -> str:
+    """Extrai HH:MM de data_exibicao ou data_iso para graficos intraday."""
+    limpo = str(texto or "").strip()
+    correspondencia = re.match(r"^\d{2}/\d{2}/\d{4}\s+(\d{2}:\d{2})", limpo)
+    if correspondencia:
+        return correspondencia.group(1)
+    if re.match(r"^\d{2}:\d{2}", limpo):
+        return limpo[:5]
+    if data_iso:
+        try:
+            from datetime import datetime
+
+            bruto = str(data_iso).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(bruto)
+            return dt.strftime("%H:%M")
+        except Exception:
+            pass
+    return limpo
+
+
 def _formatar_rotulo_data_eixo(texto: str) -> str:
     """Exibe so dd/mm/aaaa no eixo (remove hora 00:00 duplicada visualmente)."""
     limpo = str(texto or "").strip()
@@ -95,6 +172,7 @@ def configurar_rotulos_eixo_x(
     rotacao: int = 25,
     tamanho_fonte: int = 8,
     max_rotulos: int = 10,
+    somente_horario: bool = False,
 ) -> None:
     """
     Define rotulos espacados no eixo X com FixedLocator (evita ticks duplicados).
@@ -103,7 +181,10 @@ def configurar_rotulos_eixo_x(
     if quantidade == 0:
         return
 
-    rotulos = [_formatar_rotulo_data_eixo(item) for item in labels]
+    if somente_horario:
+        rotulos = [extrair_horario_exibicao(item) for item in labels]
+    else:
+        rotulos = [_formatar_rotulo_data_eixo(item) for item in labels]
     if quantidade <= max_rotulos:
         posicoes = list(range(quantidade))
     else:
@@ -613,13 +694,23 @@ def configurar_tooltip_acao(
     pontos: list[dict],
     simbolo: str,
     moeda: str = "BRL",
+    *,
+    somente_horario: bool = False,
 ) -> None:
     def texto_tooltip(indice: int) -> str:
         p = pontos[indice]
-        data = _formatar_rotulo_data_eixo(p["data"])
+        if somente_horario:
+            rotulo_tempo = "Horario"
+            data = extrair_horario_exibicao(
+                str(p.get("data", "")),
+                data_iso=p.get("data_iso"),
+            )
+        else:
+            rotulo_tempo = "Data"
+            data = _formatar_rotulo_data_eixo(p["data"])
         valor = formatar_moeda(p["fechamento"], moeda)
         linhas = [
-            f"Data: {data}",
+            f"{rotulo_tempo}: {data}",
             f"Valor: {valor}",
         ]
         if p.get("abertura") is not None:
@@ -703,7 +794,21 @@ def configurar_tooltip_comparacao(
     canvas.mpl_connect("axes_leave_event", ao_sair)
 
 
+def _desconectar_eventos_tooltip(canvas: FigureCanvasTkAgg) -> None:
+    """Remove handlers de tooltip anteriores para evitar duplicacao ao atualizar o grafico."""
+    ids = getattr(canvas, "_ids_tooltip_grafico", None)
+    if not ids:
+        return
+    for identificador in ids:
+        try:
+            canvas.mpl_disconnect(identificador)
+        except Exception:
+            pass
+    canvas._ids_tooltip_grafico = []
+
+
 def _configurar_tooltip(eixo, canvas, linha, texto_fn) -> None:
+    _desconectar_eventos_tooltip(canvas)
     guia = _criar_guia_mouse(eixo)
 
     def ao_mover(evento):
@@ -732,5 +837,6 @@ def _configurar_tooltip(eixo, canvas, linha, texto_fn) -> None:
     def ao_sair(_evento) -> None:
         _esconder_guia_mouse(guia, canvas)
 
-    canvas.mpl_connect("motion_notify_event", ao_mover)
-    canvas.mpl_connect("axes_leave_event", ao_sair)
+    cid_mover = canvas.mpl_connect("motion_notify_event", ao_mover)
+    cid_sair = canvas.mpl_connect("axes_leave_event", ao_sair)
+    canvas._ids_tooltip_grafico = [cid_mover, cid_sair]

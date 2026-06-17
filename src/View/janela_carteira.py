@@ -33,6 +33,7 @@ from src.Tool.controlador_ativo_helper import obter_controlador_por_tipo
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.icone_engrenagem_helper import criar_botao_engrenagem
 from src.Tool.janela_helper import (
+    ajustar_janela_area_trabalho,
     configurar_janela_filha_modal,
     configurar_janela_maximizada,
     executar_em_thread,
@@ -40,12 +41,14 @@ from src.Tool.janela_helper import (
     liberar_modal_janela_filha,
     centralizar_janela_sobre_referencia,
 )
+from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.View.formatadores import formatar_moeda
 from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
 from src.View.janela_carteira_posicoes_tela_cheia import JanelaCarteiraPosicoesTelaCheia
 from src.View.janela_blacklist_ativos import abrir_blacklist_ativos
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_grafico_tempo_real import JanelaGraficoTempoReal, abrir_grafico_tempo_real
+from src.View.janela_vendas_carteira import abrir_vendas_carteira
 from src.View.painel_grafico_carteira_helper import PainelGraficoCarteira
 from src.View.tabela_carteira_helper import (
     criar_grid_carteira,
@@ -75,6 +78,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._janela_grafico_agora: JanelaGraficoTempoReal | None = None
         self._janela_blacklist = None
         self._janela_posicoes_tela_cheia: JanelaCarteiraPosicoesTelaCheia | None = None
+        self._janela_vendas = None
         self._painel_grafico: PainelGraficoCarteira | None = None
         self._tabela: ttk.Treeview | None = None
         self._linhas_cache: dict[str, LinhaCarteira] = {}
@@ -85,10 +89,14 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         self.title("Carteira de investimentos")
         self.configure(fg_color=CORES["fundo"])
-        self.minsize(1020, 820)
+        self.minsize(1020, 680)
 
         self._montar_interface()
-        configurar_janela_maximizada(self, janela_pai=pai)
+        configurar_janela_maximizada(
+            self,
+            janela_pai=pai,
+            ao_apos_layout=self._ajustar_layout_carteira,
+        )
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
 
@@ -101,6 +109,14 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._atualizador_auto.iniciar()
         self._atualizar_indicador_automatico()
         self.after(200, lambda: self._atualizar_lista(forcar=True))
+        self.after(700, self._ajustar_layout_carteira)
+
+    def _ajustar_layout_carteira(self) -> None:
+        """Garante area util do monitor e reaplica o grafico apos o layout estabilizar."""
+        if not janela_ui_ainda_ativa(self):
+            return
+        ajustar_janela_area_trabalho(self, self._janela_pai)
+        self._reaplicar_grafico_carteira()
 
     def _ao_fechar(self) -> None:
         self._versao_atualizacao += 1
@@ -129,8 +145,11 @@ class JanelaCarteira(ctk.CTkToplevel):
         self.destroy()
 
     def _montar_interface(self) -> None:
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
-        cabecalho.pack(fill="x")
+        cabecalho.grid(row=0, column=0, sticky="ew")
 
         ctk.CTkLabel(
             cabecalho,
@@ -277,6 +296,16 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         ctk.CTkButton(
             grupo_esquerda,
+            text="Vendas realizadas",
+            command=self._abrir_vendas_realizadas,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=150,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            grupo_esquerda,
             text="Remover selecionados",
             command=self._remover_selecionados,
             fg_color=CORES["primaria"],
@@ -338,9 +367,9 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._area_rolagem = ctk.CTkScrollableFrame(
             self,
             fg_color=CORES["fundo"],
-            label_text="Posicoes e grafico — role a pagina para ver tudo",
+            label_text="Posicoes e grafico — role para ver tudo",
         )
-        self._area_rolagem.pack(fill="both", expand=True, padx=0, pady=0)
+        self._area_rolagem.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
 
         frame_tabela = ctk.CTkFrame(self._area_rolagem, fg_color="transparent")
         frame_tabela.pack(fill="x", padx=16, pady=(8, 0))
@@ -358,18 +387,20 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._painel_grafico = PainelGraficoCarteira(self, self._controlador)
         card_grafico = self._painel_grafico.montar(self._area_rolagem)
         card_grafico.pack(fill="x", padx=16, pady=(8, 12))
-        self.after(600, self._reaplicar_grafico_carteira)
 
-        rodape = ctk.CTkFrame(self, fg_color="transparent")
-        rodape.pack(fill="x", padx=16, pady=(0, 12))
+        rodape = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
+        rodape.grid(row=2, column=0, sticky="ew", padx=0, pady=0)
+        barra_rodape = ctk.CTkFrame(rodape, fg_color="transparent")
+        barra_rodape.pack(fill="x", padx=16, pady=12)
         ctk.CTkButton(
-            rodape,
+            barra_rodape,
             text="Fechar",
             command=self._ao_fechar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
+            height=36,
         ).pack(side="right")
 
     def _reaplicar_grafico_carteira(self) -> None:
@@ -476,6 +507,21 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         self._abrir_dialogo_venda(posicao)
 
+    def _abrir_vendas_realizadas(self) -> None:
+        if self._janela_vendas is not None and self._janela_vendas.winfo_exists():
+            self._janela_vendas.lift()
+            self._janela_vendas.focus_force()
+            return
+        try:
+            self._janela_vendas = abrir_vendas_carteira(self)
+        except Exception as exc:
+            messagebox.showerror(
+                "Vendas realizadas",
+                f"Nao foi possivel abrir a tela de vendas:\n{exc}",
+                parent=self,
+            )
+            self._janela_vendas = None
+
     def _centralizar_dialogo_sobre_pai(
         self,
         dialogo: ctk.CTkToplevel,
@@ -490,6 +536,8 @@ class JanelaCarteira(ctk.CTkToplevel):
             pass
 
     def _abrir_dialogo_venda(self, posicao: PosicaoCarteira) -> None:
+        from datetime import datetime
+
         dialogo = ctk.CTkToplevel(self)
         dialogo.title(f"Vender {codigo_exibicao(posicao.simbolo)}")
         dialogo.configure(fg_color=CORES["fundo"])
@@ -503,18 +551,52 @@ class JanelaCarteira(ctk.CTkToplevel):
             text=f"Quantidade a vender (max. {posicao.quantidade})",
             font=ctk.CTkFont(size=13),
             text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(16, 8))
+        ).pack(anchor="w", padx=16, pady=(16, 4))
 
-        entrada = ctk.CTkEntry(painel, width=200, placeholder_text="Ex.: 50")
-        entrada.pack(anchor="w", padx=16, pady=(0, 12))
-        entrada.focus_set()
+        entrada_qtd = ctk.CTkEntry(painel, width=220, placeholder_text="Ex.: 50")
+        entrada_qtd.pack(anchor="w", padx=16, pady=(0, 10))
+        entrada_qtd.focus_set()
+
+        ctk.CTkLabel(
+            painel,
+            text="Preco de venda (por cota)",
+            font=ctk.CTkFont(size=13),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+
+        entrada_preco = ctk.CTkEntry(painel, width=220, placeholder_text="Ex.: 32,50")
+        entrada_preco.pack(anchor="w", padx=16, pady=(0, 10))
+        aplicar_mascara_moeda_ptbr(entrada_preco)
+
+        ctk.CTkLabel(
+            painel,
+            text="Data da venda (dd/mm/aaaa)",
+            font=ctk.CTkFont(size=13),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+
+        entrada_data = ctk.CTkEntry(painel, width=220)
+        entrada_data.pack(anchor="w", padx=16, pady=(0, 10))
+        entrada_data.insert(0, datetime.now().strftime("%d/%m/%Y"))
+
+        ctk.CTkLabel(
+            painel,
+            text=f"Preco medio de compra: {formatar_moeda(posicao.preco_compra)}",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+        ).pack(anchor="w", padx=16, pady=(0, 8))
 
         def fechar_dialogo() -> None:
             liberar_modal_janela_filha(dialogo)
             dialogo.destroy()
 
         def confirmar() -> None:
-            ok, erro = self._controlador.registrar_venda(posicao.id, entrada.get())
+            ok, erro = self._controlador.registrar_venda(
+                posicao.id,
+                entrada_qtd.get(),
+                entrada_preco.get(),
+                entrada_data.get(),
+            )
             if erro:
                 messagebox.showwarning("Venda", erro, parent=dialogo)
                 return
@@ -542,9 +624,11 @@ class JanelaCarteira(ctk.CTkToplevel):
             width=100,
         ).pack(side="right", padx=(0, 8))
 
-        entrada.bind("<Return>", lambda _e: confirmar())
+        entrada_qtd.bind("<Return>", lambda _e: confirmar())
+        entrada_preco.bind("<Return>", lambda _e: confirmar())
+        entrada_data.bind("<Return>", lambda _e: confirmar())
 
-        largura, altura = 360, 200
+        largura, altura = 380, 360
         self._centralizar_dialogo_sobre_pai(dialogo, largura, altura)
         configurar_janela_filha_modal(dialogo, self)
         dialogo.protocol("WM_DELETE_WINDOW", fechar_dialogo)
@@ -1230,6 +1314,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             self,
             controlador,
             linha.posicao.simbolo,
+            linha_carteira=linha,
         )
 
     def _abrir_blacklist(self) -> None:

@@ -102,6 +102,53 @@ class LinhaCarteira:
         return round((self.resultado_reais / self.posicao.valor_investido) * 100, 2)
 
 
+@dataclass(frozen=True)
+class VendaCarteira:
+    """Venda registrada pelo usuario com dados da operacao."""
+
+    id: str
+    posicao_id: str
+    simbolo: str
+    tipo_ativo: TipoAtivoCarteira
+    quantidade: float
+    preco_compra: float
+    preco_venda: float
+    data_compra: str
+    data_venda: str
+    dividendos_recebidos: float = 0.0
+
+    @property
+    def valor_compra(self) -> float:
+        return round(self.quantidade * self.preco_compra, 4)
+
+    @property
+    def valor_venda(self) -> float:
+        return round(self.quantidade * self.preco_venda, 4)
+
+    @property
+    def lucro_capital(self) -> float:
+        return round(self.valor_venda - self.valor_compra, 4)
+
+    @property
+    def lucro_total(self) -> float:
+        return round(self.lucro_capital + self.dividendos_recebidos, 4)
+
+    @property
+    def lucro_percentual(self) -> float | None:
+        if self.valor_compra <= 0:
+            return None
+        return round((self.lucro_total / self.valor_compra) * 100, 2)
+
+
+@dataclass(frozen=True)
+class LinhaVendaCarteira:
+    """Venda com nome do ativo e moeda para exibicao."""
+
+    venda: VendaCarteira
+    nome: str = ""
+    moeda: str = "BRL"
+
+
 def tipo_carteira_para_monitoramento(tipo: TipoAtivoCarteira) -> str:
     """Mapeia tipo da carteira para o monitoramento de precos."""
     if tipo == "cripto":

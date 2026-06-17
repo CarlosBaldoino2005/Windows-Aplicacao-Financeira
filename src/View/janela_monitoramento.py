@@ -82,8 +82,11 @@ class JanelaMonitoramento(ctk.CTkToplevel):
         self.destroy()
 
     def _montar_interface(self) -> None:
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
-        cabecalho.pack(fill="x")
+        cabecalho.grid(row=0, column=0, sticky="ew")
 
         ctk.CTkLabel(
             cabecalho,
@@ -212,7 +215,9 @@ class JanelaMonitoramento(ctk.CTkToplevel):
         ).pack(side="right", padx=(8, 0))
 
         container = ctk.CTkFrame(self, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+        container.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
 
         self._tabela = criar_grid_monitoramento(
             container,
@@ -222,7 +227,7 @@ class JanelaMonitoramento(ctk.CTkToplevel):
         )
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
-        rodape.pack(fill="x", padx=16, pady=(0, 12))
+        rodape.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
         ctk.CTkButton(
             rodape,
             text="Fechar",

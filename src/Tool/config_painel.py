@@ -67,6 +67,7 @@ CHAVE_CARTEIRA_INTERVALO_ATUALIZACAO_SEGUNDOS = "carteira_atualizacao_intervalo_
 CHAVE_CARTEIRA_RELATORIO_AUTOMATICO = "carteira_relatorio_automatico"
 CHAVE_CARTEIRA_RELATORIO_HORARIOS = "carteira_relatorio_horarios"
 CHAVE_CARTEIRA_RELATORIO_EMAILS = "carteira_relatorio_emails"
+SECAO_AGORA_ALERTAS = "AGORA_ALERTAS"
 CARTEIRA_VARIACAO_PADRAO_PCT = 10.0
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
@@ -616,6 +617,44 @@ class ConfigPainelIni:
             parser[SECAO_JANELA] = {}
         parser[SECAO_JANELA][CHAVE_MONITOR_DISPOSITIVO] = nome
         self._gravar(parser)
+
+    def carregar_alerta_valorizacao_agora(self, simbolo: str) -> float | None:
+        """Valor em reais de valorizacao para alerta de venda na tela Agora."""
+        chave = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave:
+            return None
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            return None
+        texto = parser[SECAO_AGORA_ALERTAS].get(chave, "").strip()
+        if not texto:
+            return None
+        try:
+            valor = float(texto.replace(",", "."))
+        except ValueError:
+            return None
+        return round(valor, 2) if valor > 0 else None
+
+    def salvar_alerta_valorizacao_agora(self, simbolo: str, valor: float | None) -> None:
+        """Persiste o limite de valorizacao (R$) para alerta na tela Agora."""
+        chave = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave:
+            return
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            parser[SECAO_AGORA_ALERTAS] = {}
+        if valor is None or valor <= 0:
+            parser[SECAO_AGORA_ALERTAS].pop(chave, None)
+        else:
+            parser[SECAO_AGORA_ALERTAS][chave] = f"{round(valor, 2):.2f}"
+        self._gravar(parser)
+
+    @staticmethod
+    def _chave_alerta_valorizacao_agora(simbolo: str) -> str:
+        texto = (simbolo or "").strip().upper()
+        if not texto:
+            return ""
+        return texto.replace(".", "_").replace("-", "_")
 
     def _ler_ou_criar_secao(self) -> dict[str, str]:
         if not self._caminho_ini.exists():

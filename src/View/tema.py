@@ -52,6 +52,14 @@ def aplicar_modo_aparencia(modo: str) -> str:
     ctk.set_default_color_theme("blue")
     CORES.clear()
     CORES.update(carregar_paleta(modo_norm))
+
+    try:
+        from src.Tool.janela_helper import aplicar_tema_barra_titulo_janelas_abertas
+
+        aplicar_tema_barra_titulo_janelas_abertas()
+    except Exception:
+        pass
+
     return modo_norm
 
 

@@ -11,9 +11,11 @@ from src.Model.carteira import (
     TIPOS_ATIVO_CARTEIRA,
     PosicaoCarteira,
     TipoAtivoCarteira,
+    VendaCarteira,
     tipo_carteira_para_monitoramento,
 )
 from src.Model.monitoramento import TipoAtivoMonitoramento
+from src.Service.carteira_vendas_servico import CarteiraVendasServico
 from src.Service.monitoramento_servico import MonitoramentoServico
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.registrador_log import RegistradorLog
@@ -38,6 +40,7 @@ class CarteiraServico:
         self._caminho_arquivo = self._pasta_dados / _ARQUIVO_NOME
         self._log = RegistradorLog(raiz)
         self._monitoramento = MonitoramentoServico(pasta_base)
+        self._vendas = CarteiraVendasServico(pasta_base)
         self._config = ConfigPainelIni(pasta_base)
 
     def listar(self) -> list[PosicaoCarteira]:
@@ -135,9 +138,19 @@ class CarteiraServico:
         self,
         posicao_id: str,
         quantidade_vendida: float,
+        preco_venda: float,
+        data_venda: str,
+        dividendos_recebidos: float = 0.0,
     ) -> tuple[bool, str | None]:
         if quantidade_vendida <= 0:
             return False, "Quantidade de venda invalida."
+
+        if preco_venda <= 0:
+            return False, "Preco de venda deve ser maior que zero."
+
+        _, erro_data = validar_data_ptbr(data_venda)
+        if erro_data:
+            return False, erro_data
 
         posicoes = self.listar()
         indice = next((i for i, p in enumerate(posicoes) if p.id == posicao_id), -1)
@@ -152,6 +165,19 @@ class CarteiraServico:
         removida_tipo = atual.tipo_ativo
         removida_simbolo = atual.simbolo
 
+        venda = self._vendas.criar_venda(
+            posicao_id=atual.id,
+            simbolo=atual.simbolo,
+            tipo_ativo=atual.tipo_ativo,
+            quantidade=quantidade_vendida,
+            preco_compra=atual.preco_compra,
+            preco_venda=preco_venda,
+            data_compra=atual.data_compra,
+            data_venda=data_venda.strip(),
+            dividendos_recebidos=dividendos_recebidos,
+        )
+        self._vendas.registrar(venda)
+
         if restante == 0:
             posicoes.pop(indice)
         else:
@@ -160,6 +186,9 @@ class CarteiraServico:
         self._salvar(posicoes)
         self._atualizar_monitoramento_grupo(removida_tipo, removida_simbolo, posicoes)
         return True, None
+
+    def listar_vendas(self) -> list[VendaCarteira]:
+        return self._vendas.listar()
 
     def remover(self, posicao_id: str) -> tuple[bool, str | None]:
         posicoes = self.listar()

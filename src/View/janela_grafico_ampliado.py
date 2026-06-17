@@ -10,8 +10,13 @@ from matplotlib.figure import Figure
 
 from src.Service.cdi_servico import CdiServico
 from src.Tool.janela_helper import configurar_janela_maximizada
+from src.View.grafico_modelo_helper import (
+    ModeloGrafico,
+    desenhar_serie_preco_principal,
+    montar_seletor_modelo_grafico,
+    normalizar_modelo_grafico,
+)
 from src.View.grafico_helper import (
-    COR_LINHA_CDI,
     _publicar_payload_com_cdi,
     aplicar_tema_matplotlib,
     configurar_rotulos_eixo_x,
@@ -45,6 +50,9 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._controle_zoom = None
+        self._modelo_grafico: ModeloGrafico = normalizar_modelo_grafico(
+            dados_grafico.get("modelo_grafico")
+        )
 
         self.title(titulo_janela)
         self.configure(fg_color=CORES["fundo"])
@@ -79,6 +87,14 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 10))
 
+        barra_modelo = ctk.CTkFrame(self, fg_color="transparent")
+        barra_modelo.pack(fill="x", padx=16, pady=(0, 4))
+        montar_seletor_modelo_grafico(
+            barra_modelo,
+            modelo_inicial=self._modelo_grafico,
+            ao_mudar=self._alternar_modelo_grafico,
+        )
+
         barra_zoom = ctk.CTkFrame(self, fg_color="transparent")
         barra_zoom.pack(fill="x", padx=16, pady=(0, 4))
         montar_botoes_zoom_grafico(barra_zoom, lambda: self._controle_zoom)
@@ -98,6 +114,11 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
             width=120,
         ).pack(side="right")
 
+        self._desenhar_grafico()
+
+    def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
+        self._modelo_grafico = modelo
+        self._dados_grafico["modelo_grafico"] = modelo
         self._desenhar_grafico()
 
     def _desenhar_grafico(self) -> None:
@@ -133,13 +154,13 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         eixo = figura.add_subplot(111)
 
         indices = np.arange(len(valores))
-        linha, = eixo.plot(
+        linha = desenhar_serie_preco_principal(
+            eixo,
             indices,
             valores,
-            color=CORES["primaria"],
-            linewidth=2.5,
-            marker="o",
-            markersize=4,
+            pontos_tooltip,
+            modelo=self._modelo_grafico,
+            cor=CORES["primaria"],
             label="Acao (fechamento)",
         )
         if valores_cdi and len(valores_cdi) == len(valores):

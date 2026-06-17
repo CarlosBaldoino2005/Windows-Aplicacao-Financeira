@@ -22,6 +22,7 @@ dados/favoritos_fiis.json
 dados/blacklist_ativos.json
 dados/monitoramento.json
 dados/carteira.json
+dados/carteira_vendas.json
 dados/painel.ini
 dados/email.ini
 dados/relatorio_automatico_estado.json

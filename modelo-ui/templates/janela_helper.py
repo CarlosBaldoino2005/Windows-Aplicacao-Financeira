@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -10,13 +11,16 @@ _GA_RAIZ = 2
 _SW_MAXIMIZE = 3
 _SW_RESTORE = 9
 _SWP_SHOWWINDOW = 0x0040
+_DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+_DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19
 _MONITORINFOF_PRIMARIO = 1
 _MS_FINALIZAR_ABERTURA = 500
 _MS_ENTRE_TENTATIVAS_MAX = 120
 _MAX_TENTATIVAS_ABERTURA = 6
 _LARGURA_INICIAL_FILHA = 960
 _ALTURA_INICIAL_FILHA = 640
-_TOLERANCIA_COBRE_MONITOR_PX = 24
+_TOLERANCIA_COBRE_MONITOR_PX = 12
+_MARGEM_INFERIOR_AREA_TRABALHO_PX = 8
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,12 @@ def _user32():
     import ctypes
 
     return ctypes.windll.user32
+
+
+def _dwmapi():
+    import ctypes
+
+    return ctypes.windll.dwmapi
 
 
 def normalizar_dispositivo_monitor(nome: str) -> str:
@@ -315,6 +325,37 @@ def _janela_esta_maximizada(janela) -> bool:
         return False
 
 
+def _retangulo_janela_externo(janela) -> tuple[int, int, int, int] | None:
+    """Retorna (x, y, largura, altura) do retangulo externo da janela (inclui bordas)."""
+    if _eh_windows():
+        hwnd = _hwnd(janela)
+        if hwnd:
+            try:
+                import ctypes
+                from ctypes import wintypes
+
+                rect = wintypes.RECT()
+                if _user32().GetWindowRect(hwnd, ctypes.byref(rect)):
+                    return (
+                        int(rect.left),
+                        int(rect.top),
+                        int(rect.right - rect.left),
+                        int(rect.bottom - rect.top),
+                    )
+            except Exception:
+                pass
+    try:
+        janela.update_idletasks()
+        return (
+            int(janela.winfo_rootx()),
+            int(janela.winfo_rooty()),
+            int(janela.winfo_width()),
+            int(janela.winfo_height()),
+        )
+    except Exception:
+        return None
+
+
 def _area_trabalho_referencia(referencia) -> tuple[int, int, int, int] | None:
     """Area de trabalho do monitor onde a janela de referencia (pai) esta."""
     return _retangulo_area_trabalho_monitor(referencia)
@@ -325,15 +366,23 @@ def _janela_cobre_area(
     area: tuple[int, int, int, int],
     tolerancia: int = _TOLERANCIA_COBRE_MONITOR_PX,
 ) -> bool:
-    """Verifica se a janela ja ocupa praticamente toda a area informada."""
+    """Verifica se a janela ocupa a area de trabalho sem cobrir a barra de tarefas."""
     x, y, largura, altura = area
+    retangulo = _retangulo_janela_externo(janela)
+    if retangulo is None:
+        return False
     try:
-        janela.update_idletasks()
+        jx, jy, jw, jh = retangulo
+        limite_inferior = y + altura - _MARGEM_INFERIOR_AREA_TRABALHO_PX
+        if jx + jw > x + largura + tolerancia:
+            return False
+        if jy + jh > limite_inferior + tolerancia:
+            return False
         return (
-            abs(int(janela.winfo_rootx()) - x) <= 8
-            and abs(int(janela.winfo_rooty()) - y) <= 8
-            and abs(int(janela.winfo_width()) - largura) <= tolerancia
-            and abs(int(janela.winfo_height()) - altura) <= tolerancia
+            abs(jx - x) <= tolerancia
+            and abs(jy - y) <= tolerancia
+            and abs(jw - largura) <= tolerancia + 24
+            and abs(jh - altura) <= tolerancia + 24
         )
     except Exception:
         return False
@@ -353,8 +402,8 @@ def _garantir_tamanho_monitor_final(
     area_trabalho: tuple[int, int, int, int] | None = None,
 ) -> None:
     """
-    Passo final da abertura: forca a janela a ocupar toda a area util do monitor.
-    Restaurar -> tamanho do monitor -> maximizar; se preciso, geometry exata.
+    Preenche a area util do monitor (rcWork) sem cobrir a barra de tarefas.
+    Usa geometry exata em vez de state('zoomed'), que no Windows costuma invadir a taskbar.
     """
     ref = referencia or janela
     area = area_trabalho or _area_trabalho_referencia(ref)
@@ -367,11 +416,8 @@ def _garantir_tamanho_monitor_final(
     x, y, largura, altura = area
     _preparar_janela_visivel(janela, ref)
     _restaurar_janela(janela)
-    posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
-    _maximizar_janela_tk(janela)
-
-    if not _janela_cobre_area(janela, area):
-        posicionar_janela_na_area_trabalho(janela, x, y, largura, altura)
+    altura_util = max(200, altura - _MARGEM_INFERIOR_AREA_TRABALHO_PX)
+    posicionar_janela_na_area_trabalho(janela, x, y, largura, altura_util)
 
     try:
         janela.update_idletasks()
@@ -450,16 +496,9 @@ def _maximizar_na_abertura_unica(
     area = area_trabalho or _area_trabalho_referencia(ref)
 
     if area is not None:
-        x, y, _, _ = area
-        posicionar_janela_na_area_trabalho(
-            janela,
-            x,
-            y,
-            _LARGURA_INICIAL_FILHA,
-            _ALTURA_INICIAL_FILHA,
-        )
+        _posicionar_no_monitor_antes_maximizar(janela, area)
 
-    _maximizar_janela_tk(janela)
+    _garantir_tamanho_monitor_final(janela, ref, area)
 
 
 def restaurar_e_maximizar_janela(
@@ -480,7 +519,6 @@ def restaurar_e_maximizar_janela(
     if area is not None:
         _posicionar_no_monitor_antes_maximizar(janela, area)
 
-    _maximizar_janela_tk(janela)
     _garantir_tamanho_monitor_final(janela, ref, area)
     return _janela_abertura_ok(janela, ref)
 
@@ -772,6 +810,107 @@ def maximizar_janela(
     restaurar_e_maximizar_janela(janela, ref, area_trabalho=area)
 
 
+def ajustar_janela_area_trabalho(
+    janela,
+    referencia=None,
+    area_trabalho: tuple[int, int, int, int] | None = None,
+) -> None:
+    """Recoloca a janela na area util do monitor, sem cobrir a barra de tarefas."""
+    ref = referencia or janela
+    area = area_trabalho or _area_trabalho_referencia(ref)
+    _garantir_tamanho_monitor_final(janela, ref, area)
+
+
+def aplicar_tema_barra_titulo_janela(janela, escuro: bool | None = None) -> None:
+    """Aplica barra de titulo escura ou clara no Windows conforme o tema do programa."""
+    if not _eh_windows():
+        return
+    try:
+        janela.update_idletasks()
+    except Exception:
+        pass
+
+    hwnd = _hwnd(janela)
+    if not hwnd:
+        return
+
+    if escuro is None:
+        try:
+            from src.View.tema import obter_modo_aparencia
+
+            escuro = obter_modo_aparencia() == "escuro"
+        except Exception:
+            escuro = False
+
+    try:
+        import ctypes
+
+        valor = ctypes.c_int(1 if escuro else 0)
+        for atributo in (_DWMWA_USE_IMMERSIVE_DARK_MODE, _DWMWA_USE_IMMERSIVE_DARK_MODE_OLD):
+            try:
+                if _dwmapi().DwmSetWindowAttribute(
+                    hwnd,
+                    atributo,
+                    ctypes.byref(valor),
+                    ctypes.sizeof(valor),
+                ) == 0:
+                    break
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def _vincular_tema_barra_titulo_janela(janela) -> None:
+    if getattr(janela, "_financeiro_tema_titulo_vinculado", False):
+        return
+    janela._financeiro_tema_titulo_vinculado = True
+
+    def reaplicar(_evento=None) -> None:
+        if not janela_ui_ainda_ativa(janela):
+            return
+        aplicar_tema_barra_titulo_janela(janela)
+
+    try:
+        janela.bind("<Map>", reaplicar, add=True)
+    except Exception:
+        pass
+    agendar_na_ui(janela, reaplicar)
+
+
+def configurar_aparencia_janela(janela) -> None:
+    """Aplica barra de titulo escura/clara alinhada ao tema global."""
+    _vincular_tema_barra_titulo_janela(janela)
+    aplicar_tema_barra_titulo_janela(janela)
+
+
+def aplicar_tema_barra_titulo_janelas_abertas() -> None:
+    """Reaplica o tema da barra de titulo em todas as janelas CustomTkinter abertas."""
+    try:
+        import customtkinter as ctk
+
+        raiz = tk._default_root
+        if raiz is None:
+            return
+
+        pilha = [raiz]
+        visitados: set[str] = set()
+        while pilha:
+            widget = pilha.pop()
+            wid = str(widget)
+            if wid in visitados:
+                continue
+            visitados.add(wid)
+            if isinstance(widget, (ctk.CTk, ctk.CTkToplevel)):
+                aplicar_tema_barra_titulo_janela(widget)
+            try:
+                pilha.extend(widget.winfo_children())
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def configurar_janela_maximizada(
     janela,
     ao_apos_layout: Callable[[], None] | None = None,
@@ -812,6 +951,7 @@ def configurar_janela_maximizada(
             else _area_trabalho_referencia(referencia)
         )
         _maximizar_na_abertura_unica(janela, referencia, area_alvo)
+        configurar_aparencia_janela(janela)
 
         if ao_apos_layout is not None:
             try:
@@ -930,6 +1070,7 @@ def configurar_janela_filha_modal(janela, janela_pai=None) -> None:
 
     janela._financeiro_modal_configurada = True
     janela._financeiro_janela_pai_modal = pai
+    configurar_aparencia_janela(janela)
 
     try:
         janela.transient(pai)

@@ -15,6 +15,11 @@ from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximiz
 from src.Tool.mascara_moeda_helper import aplicar_mascara_inteiro_ptbr, formatar_inteiro_ptbr
 from src.Tool.validadores import validar_quantidade_cotas
 from src.Service.cdi_servico import CdiServico
+from src.View.grafico_modelo_helper import (
+    ModeloGrafico,
+    desenhar_serie_preco_principal,
+    montar_seletor_modelo_grafico,
+)
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
     TEXTO_INSTRUCAO_GRAFICO_ACAO,
@@ -89,6 +94,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._dados_grafico_atual: dict | None = None
         self._controle_zoom = None
         self._carregando_grafico = False
+        self._modelo_grafico: ModeloGrafico = "linha"
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Grafico — {codigo}")
@@ -187,6 +193,12 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
         self._combo_periodo.set("Mes")
         self._combo_periodo.pack(side="left", padx=(0, 16))
+
+        self._combo_modelo_grafico = montar_seletor_modelo_grafico(
+            barra,
+            modelo_inicial=self._modelo_grafico,
+            ao_mudar=self._alternar_modelo_grafico,
+        )
 
         ctk.CTkButton(
             barra,
@@ -650,6 +662,24 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
 
         self._executar_em_thread(buscar, ao_concluir)
 
+    def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
+        self._modelo_grafico = modelo
+        self._redesenhar_grafico_em_cache()
+
+    def _redesenhar_grafico_em_cache(self) -> None:
+        dados = self._dados_grafico_atual
+        if not dados:
+            return
+        self._desenhar_grafico(
+            dados["labels"],
+            dados["valores"],
+            dados["titulo"],
+            dados["simbolo"],
+            dados["moeda"],
+            dados["pontos_tooltip"],
+            valores_cdi=dados.get("valores_cdi"),
+        )
+
     def _desenhar_grafico(
         self,
         labels: list,
@@ -688,13 +718,13 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         eixo = figura.add_subplot(111)
 
         indices = np.arange(len(valores))
-        linha, = eixo.plot(
+        linha = desenhar_serie_preco_principal(
+            eixo,
             indices,
             valores,
-            color=CORES["primaria"],
-            linewidth=2,
-            marker="o",
-            markersize=3,
+            pontos_tooltip,
+            modelo=self._modelo_grafico,
+            cor=CORES["primaria"],
             label="Acao (fechamento)",
         )
         if valores_cdi and len(valores_cdi) == len(valores):
@@ -755,6 +785,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             "moeda": moeda,
             "pontos_tooltip": pontos_tooltip,
             "valores_cdi": valores_cdi,
+            "modelo_grafico": self._modelo_grafico,
         }
         atualizar_estado_botao_grafico_ampliado(self._btn_grafico_ampliado, True)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))

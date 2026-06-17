@@ -14,6 +14,7 @@ def calcular_dividendos_recebidos(
     quantidade: float,
     *,
     referencia: datetime | None = None,
+    data_fim_texto: str | None = None,
 ) -> float:
     """Soma dividendos pagos desde a data de compra ate hoje."""
     data_compra, _ = validar_data_ptbr(data_compra_texto)
@@ -21,6 +22,12 @@ def calcular_dividendos_recebidos(
         return 0.0
 
     hoje = referencia or datetime.now()
+    fim = hoje
+    if data_fim_texto:
+        data_fim, _ = validar_data_ptbr(data_fim_texto)
+        if data_fim is not None:
+            fim = data_fim.replace(hour=23, minute=59, second=59, microsecond=999999)
+
     total = 0.0
     inicio = data_compra.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -28,7 +35,7 @@ def calcular_dividendos_recebidos(
         data_pag, _ = validar_data_ptbr(item.data_pagamento)
         if data_pag is None or item.valor_por_cota <= 0:
             continue
-        if data_pag < inicio or data_pag > hoje:
+        if data_pag < inicio or data_pag > fim:
             continue
         total += item.valor_por_cota * quantidade
 
