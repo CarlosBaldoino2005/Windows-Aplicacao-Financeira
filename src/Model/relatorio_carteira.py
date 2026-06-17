@@ -49,6 +49,7 @@ class LinhaRelatorioMercado:
     variacao_pct: float
     variacao_valor: float
     moeda: str
+    ohlc_dia: OhlcDia | None = None
 
 
 @dataclass(frozen=True)
