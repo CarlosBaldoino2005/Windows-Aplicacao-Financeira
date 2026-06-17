@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+import time
 
 import customtkinter as ctk
 import numpy as np
@@ -13,11 +14,18 @@ from src.Model.carteira import LinhaCarteira
 from src.Service.carteira_servico import CarteiraServico
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
-from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread, janela_ui_ainda_ativa
+from src.Tool.janela_helper import (
+    ajustar_janela_area_trabalho,
+    configurar_janela_maximizada,
+    executar_em_thread,
+    janela_ui_ainda_ativa,
+)
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
+from src.Service.agora_metricas_mercado_servico import AgoraMetricasMercadoServico, MetricasMercadoAgora
 from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
+from src.View.agora_painel_metricas_helper import PainelMetricasAgora
 from src.View.destaque_cotacao_helper import buscar_cotacao_com_cambio
-from src.View.formatadores import formatar_moeda, formatar_variacao
+from src.View.formatadores import formatar_moeda, formatar_variacao_com_rotulo
 from src.View.grafico_helper import (
     aplicar_tema_matplotlib,
     configurar_eixo_horario_pregao_agora,
@@ -35,7 +43,9 @@ from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
 INTERVALO_ATUALIZACAO_MS = 5_000
-ALTURA_GRAFICO_PX = 520
+INTERVALO_METRICAS_MS = 60_000
+ALTURA_GRAFICO_MINIMA_PX = 280
+_ALTURA_INFO_ROLAGEM_PX = 220
 
 
 class JanelaGraficoTempoReal(ctk.CTkToplevel):
@@ -74,6 +84,10 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._periodo_usado = "agora"
         self._modelo_grafico: ModeloGrafico = "linha"
         self._dados_grafico_atual: dict | None = None
+        self._servico_metricas = AgoraMetricasMercadoServico()
+        self._painel_metricas: PainelMetricasAgora | None = None
+        self._ultima_busca_metricas_ms = 0
+        self._job_redimensionar_grafico: str | None = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo}")
@@ -83,16 +97,22 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._montar_interface()
         configurar_janela_maximizada(
             self,
-            ao_apos_layout=self._ajustar_grafico_ao_redimensionar,
+            ao_apos_layout=self._ao_layout_inicial,
             janela_pai=pai,
         )
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
-        self.after(400, self._atualizar_dados)
+        self.after(400, lambda: self._atualizar_dados(forcar_metricas=True))
         self._agendar_proxima_atualizacao()
 
     def _ao_fechar(self) -> None:
         self._ao_vivo = False
+        if self._job_redimensionar_grafico is not None:
+            try:
+                self.after_cancel(self._job_redimensionar_grafico)
+            except Exception:
+                pass
+            self._job_redimensionar_grafico = None
         if self._job_atualizacao is not None:
             try:
                 self.after_cancel(self._job_atualizacao)
@@ -107,30 +127,11 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self.destroy()
 
     def _montar_interface(self) -> None:
-        rodape = ctk.CTkFrame(self, fg_color="transparent")
-        rodape.pack(side="bottom", fill="x", padx=16, pady=(0, 12))
-
-        self._label_rodape = ctk.CTkLabel(
-            rodape,
-            text="Atualizacao automatica a cada 5 segundos. Dados via Yahoo Finance (podem ter atraso de mercado).",
-            font=ctk.CTkFont(size=11),
-            text_color=CORES["textoSecundario"],
-            anchor="w",
-        )
-        self._label_rodape.pack(side="left", fill="x", expand=True)
-
-        ctk.CTkButton(
-            rodape,
-            text="Fechar",
-            command=self._ao_fechar,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=120,
-        ).pack(side="right")
+        self.grid_rowconfigure(2, weight=1, minsize=ALTURA_GRAFICO_MINIMA_PX)
+        self.grid_columnconfigure(0, weight=1)
 
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
-        cabecalho.pack(side="top", fill="x")
+        cabecalho.grid(row=0, column=0, sticky="ew")
 
         barra_topo = ctk.CTkFrame(cabecalho, fg_color="transparent")
         barra_topo.pack(fill="x", padx=16, pady=(12, 4))
@@ -179,7 +180,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         ctk.CTkButton(
             barra_topo,
             text="Atualizar agora",
-            command=self._atualizar_dados,
+            command=lambda: self._atualizar_dados(forcar_metricas=True),
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
@@ -195,21 +196,37 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         painel_preco.pack(fill="x", padx=16, pady=(4, 8))
 
+        linha_preco = ctk.CTkFrame(painel_preco, fg_color="transparent")
+        linha_preco.pack(fill="x", padx=16, pady=(10, 4))
+
         self._label_preco = ctk.CTkLabel(
-            painel_preco,
+            linha_preco,
             text="—",
-            font=ctk.CTkFont(size=36, weight="bold"),
+            font=ctk.CTkFont(size=40, weight="bold"),
             text_color=CORES["texto"],
         )
-        self._label_preco.pack(anchor="w", padx=16, pady=(10, 0))
+        self._label_preco.pack(side="left", anchor="s", pady=(0, 2))
 
-        self._label_variacao = ctk.CTkLabel(
-            painel_preco,
+        self._frame_indicadores = ctk.CTkFrame(linha_preco, fg_color="transparent")
+        self._frame_indicadores.pack(side="left", anchor="s", padx=(20, 0), pady=(0, 4))
+
+        self._label_variacao_dia = ctk.CTkLabel(
+            self._frame_indicadores,
             text="Carregando...",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(size=17, weight="bold"),
             text_color=CORES["textoSecundario"],
+            anchor="w",
         )
-        self._label_variacao.pack(anchor="w", padx=16, pady=(0, 4))
+        self._label_variacao_dia.pack(anchor="w")
+
+        self._label_variacao_compra = ctk.CTkLabel(
+            self._frame_indicadores,
+            text="",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+        )
+        self._label_variacao_compra.pack(anchor="w", pady=(4, 0))
 
         self._label_detalhes = ctk.CTkLabel(
             painel_preco,
@@ -220,8 +237,26 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         self._label_detalhes.pack(anchor="w", padx=16, pady=(0, 10))
 
+        self._container_info = ctk.CTkFrame(
+            self,
+            fg_color=CORES["fundo"],
+            height=_ALTURA_INFO_ROLAGEM_PX,
+        )
+        self._container_info.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 4))
+        self._container_info.pack_propagate(False)
+
+        self._area_rolagem = ctk.CTkScrollableFrame(
+            self._container_info,
+            fg_color=CORES["fundo"],
+            label_text="",
+        )
+        self._area_rolagem.pack(fill="both", expand=True)
+
+        self._painel_metricas = PainelMetricasAgora(self._area_rolagem)
+        self._painel_metricas.montar().pack(fill="x", pady=(0, 8))
+
         self._frame_painel_carteira = ctk.CTkFrame(
-            cabecalho,
+            self._area_rolagem,
             fg_color=CORES.get("infoFundo", CORES["fundo"]),
             corner_radius=10,
             border_width=1,
@@ -264,7 +299,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
         self._label_carteira_qtd = _criar_campo_resumo(0, "Quantidade")
         self._label_carteira_compra = _criar_campo_resumo(1, "Preco de compra")
-        self._label_carteira_valorizacao = _criar_campo_resumo(2, "Valorizacao")
+        self._label_carteira_valorizacao = _criar_campo_resumo(2, "Resultado (R$)")
 
         linha_alerta = ctk.CTkFrame(self._frame_painel_carteira, fg_color="transparent")
         linha_alerta.pack(fill="x", padx=14, pady=(0, 8))
@@ -311,29 +346,56 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._label_alerta_venda.pack_forget()
 
         if self._resumo_carteira is not None:
-            self._frame_painel_carteira.pack(fill="x", padx=16, pady=(0, 8))
+            self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
             self._atualizar_campos_carteira(None)
 
+        self._container_grafico = ctk.CTkFrame(self, fg_color="transparent")
+        self._container_grafico.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        self._container_grafico.grid_rowconfigure(2, weight=1)
+        self._container_grafico.grid_columnconfigure(0, weight=1)
+
         self._label_status = ctk.CTkLabel(
-            cabecalho,
+            self._container_grafico,
             text="",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
+            anchor="w",
         )
-        self._label_status.pack(anchor="w", padx=16, pady=(0, 10))
+        self._label_status.grid(row=0, column=0, sticky="ew", pady=(0, 4))
 
-        barra_zoom = ctk.CTkFrame(self, fg_color="transparent")
-        barra_zoom.pack(fill="x", padx=16, pady=(0, 4))
-        montar_botoes_zoom_grafico(barra_zoom, lambda: self._controle_zoom)
+        self._barra_zoom = ctk.CTkFrame(self._container_grafico, fg_color="transparent")
+        self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
 
         self._frame_grafico = ctk.CTkFrame(
-            self,
+            self._container_grafico,
             fg_color=CORES["superficie"],
             corner_radius=12,
-            height=ALTURA_GRAFICO_PX,
         )
-        self._frame_grafico.pack(fill="both", expand=True, padx=16, pady=(8, 8))
-        self._frame_grafico.pack_propagate(False)
+        self._frame_grafico.grid(row=2, column=0, sticky="nsew", pady=(0, 4))
+        self._frame_grafico.bind("<Configure>", self._ao_configurar_frame_grafico)
+
+        rodape = ctk.CTkFrame(self, fg_color="transparent")
+        rodape.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+
+        self._label_rodape = ctk.CTkLabel(
+            rodape,
+            text="Atualizacao automatica a cada 5 segundos. Dados via Yahoo Finance (podem ter atraso de mercado).",
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+        )
+        self._label_rodape.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkButton(
+            rodape,
+            text="Fechar",
+            command=self._ao_fechar,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=120,
+        ).pack(side="right")
 
     def _alternar_pausa(self) -> None:
         self._ao_vivo = not self._ao_vivo
@@ -363,11 +425,12 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._atualizar_dados()
         self._agendar_proxima_atualizacao()
 
-    def _atualizar_dados(self) -> None:
+    def _atualizar_dados(self, *, forcar_metricas: bool = False) -> None:
         if self._carregando or not janela_ui_ainda_ativa(self):
             return
         self._carregando = True
         self._label_status.configure(text="Atualizando cotacao e grafico...")
+        buscar_metricas = forcar_metricas or self._deve_atualizar_metricas()
 
         def buscar():
             cotacao_dados = buscar_cotacao_com_cambio(self._controlador, self._simbolo)
@@ -376,7 +439,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             if erro or serie is None:
                 serie, erro = self._controlador.obter_historico(self._simbolo, "dia")
                 periodo = "dia"
-            return cotacao_dados, serie, erro, periodo
+            metricas = None
+            if buscar_metricas:
+                try:
+                    metricas = self._servico_metricas.obter_metricas(self._simbolo)
+                except Exception:
+                    metricas = None
+            return cotacao_dados, serie, erro, periodo, metricas
 
         def ao_concluir(resultado, erro_thread):
             self._carregando = False
@@ -385,11 +454,27 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             if erro_thread:
                 self._label_status.configure(text=f"Erro: {erro_thread}", text_color=CORES["erro"])
                 return
+            if resultado is None:
+                self._label_status.configure(
+                    text="Nao foi possivel carregar os dados.",
+                    text_color=CORES["erro"],
+                )
+                return
 
-            cotacao_dados, serie, erro_hist, periodo = resultado
+            try:
+                cotacao_dados, serie, erro_hist, periodo, metricas = resultado
+            except (TypeError, ValueError) as exc:
+                self._label_status.configure(
+                    text=f"Erro ao processar dados: {exc}",
+                    text_color=CORES["erro"],
+                )
+                return
+
             self._periodo_usado = periodo
             self._atualizar_resumo_carteira()
             self._atualizar_painel_preco(cotacao_dados)
+            if metricas is not None:
+                self._aplicar_metricas_mercado(metricas)
 
             if erro_hist or serie is None or not getattr(serie, "pontos", None):
                 self._label_status.configure(
@@ -427,6 +512,18 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             )
 
         executar_em_thread(self, buscar, ao_concluir)
+
+    def _deve_atualizar_metricas(self) -> bool:
+        """Evita consultar metricas completas a cada 5 segundos."""
+        if self._ultima_busca_metricas_ms <= 0:
+            return True
+        decorrido = int(time.monotonic() * 1000) - self._ultima_busca_metricas_ms
+        return decorrido >= INTERVALO_METRICAS_MS
+
+    def _aplicar_metricas_mercado(self, metricas: MetricasMercadoAgora) -> None:
+        self._ultima_busca_metricas_ms = int(time.monotonic() * 1000)
+        if self._painel_metricas is not None:
+            self._painel_metricas.atualizar(metricas)
 
     def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
         self._modelo_grafico = modelo
@@ -568,7 +665,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._frame_painel_carteira.pack_forget()
             return
         if not self._frame_painel_carteira.winfo_ismapped():
-            self._frame_painel_carteira.pack(fill="x", padx=16, pady=(0, 8))
+            self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
 
     def _preencher_entrada_alerta(self) -> None:
         if self._alerta_valorizacao_limite is None or self._alerta_valorizacao_limite <= 0:
@@ -640,13 +737,61 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             return
 
         valor_reais = resumo.valorizacao_reais(preco_atual)
-        valor_pct = resumo.valorizacao_percentual(preco_atual) or 0.0
         cor = CORES["sucesso"] if valor_reais >= 0 else CORES["erro"]
         self._label_carteira_valorizacao.configure(
-            text=formatar_variacao(valor_reais, valor_pct, moeda),
+            text=formatar_moeda(valor_reais, moeda),
             text_color=cor,
         )
         self._verificar_alerta_venda(valor_reais)
+
+    def _formatar_carimbo_agora(self, moeda: str) -> str:
+        """Data/hora no estilo da cotacao ao vivo (ex.: 17 de jun., 13:00:17 UTC-3 · BRL)."""
+        agora = datetime.now()
+        meses = (
+            "jan.",
+            "fev.",
+            "mar.",
+            "abr.",
+            "mai.",
+            "jun.",
+            "jul.",
+            "ago.",
+            "set.",
+            "out.",
+            "nov.",
+            "dez.",
+        )
+        codigo_moeda = "BRL" if moeda == "BRL" else "USD"
+        return (
+            f"{agora.day} de {meses[agora.month - 1]}, "
+            f"{agora.strftime('%H:%M:%S')} UTC-3 · {codigo_moeda}"
+        )
+
+    def _atualizar_indicador_compra(self, preco_atual: float | None) -> None:
+        """Exibe percentual e valor da posicao em relacao ao preco de compra."""
+        if self._resumo_carteira is None or preco_atual is None or preco_atual <= 0:
+            self._label_variacao_compra.pack_forget()
+            return
+
+        resumo = self._resumo_carteira
+        valor_reais = resumo.valorizacao_reais(preco_atual)
+        valor_pct = resumo.valorizacao_percentual(preco_atual)
+        if valor_pct is None:
+            self._label_variacao_compra.pack_forget()
+            return
+
+        cor = CORES["sucesso"] if valor_reais >= 0 else CORES["erro"]
+        self._label_variacao_compra.configure(
+            text=formatar_variacao_com_rotulo(
+                valor_reais,
+                valor_pct,
+                "Na sua compra",
+                resumo.moeda,
+            ),
+            text_color=cor,
+        )
+        if not self._label_variacao_compra.winfo_ismapped():
+            self._label_variacao_compra.pack(anchor="w", pady=(4, 0))
 
     def _verificar_alerta_venda(self, valorizacao_reais: float | None) -> None:
         limite = self._alerta_valorizacao_limite
@@ -679,7 +824,11 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if cotacao is None:
             self._preco_atual_cotacao = None
             self._label_preco.configure(text="—")
-            self._label_variacao.configure(text=aviso or "Cotacao indisponivel", text_color=CORES["erro"])
+            self._label_variacao_dia.configure(
+                text=aviso or "Cotacao indisponivel",
+                text_color=CORES["erro"],
+            )
+            self._label_variacao_compra.pack_forget()
             self._label_detalhes.configure(text="")
             self._atualizar_campos_carteira(None)
             return
@@ -689,19 +838,24 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._label_preco.configure(text=formatar_moeda(cotacao.preco, moeda))
 
         cor_var = CORES["sucesso"] if cotacao.variacao_percentual >= 0 else CORES["erro"]
-        self._label_variacao.configure(
-            text=formatar_variacao(cotacao.variacao_valor, cotacao.variacao_percentual, moeda),
+        self._label_variacao_dia.configure(
+            text=formatar_variacao_com_rotulo(
+                cotacao.variacao_valor,
+                cotacao.variacao_percentual,
+                "Hoje",
+                moeda,
+            ),
             text_color=cor_var,
         )
 
-        detalhes = [cotacao.nome or codigo_exibicao(cotacao.simbolo)]
-        if cotacao.volume is not None:
-            detalhes.append(f"Volume: {cotacao.volume:,}".replace(",", "."))
+        nome = cotacao.nome or codigo_exibicao(cotacao.simbolo)
+        detalhes = [nome, self._formatar_carimbo_agora(moeda)]
         if taxa:
             detalhes.append(f"US$ 1 = {formatar_moeda(taxa, 'BRL')}")
         if aviso:
             detalhes.append(aviso)
         self._label_detalhes.configure(text="  ·  ".join(detalhes))
+        self._atualizar_indicador_compra(cotacao.preco)
         self._atualizar_campos_carteira(cotacao.preco)
 
     def _desenhar_grafico(
@@ -712,8 +866,25 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         simbolo: str,
         moeda: str,
         pontos_tooltip: list[dict],
+        tentativa: int = 0,
     ) -> None:
         if not valores:
+            return
+
+        if not self._area_grafico_pronta():
+            if tentativa < 40:
+                self.after(
+                    80,
+                    lambda: self._desenhar_grafico(
+                        posicoes_x,
+                        valores,
+                        titulo,
+                        simbolo,
+                        moeda,
+                        pontos_tooltip,
+                        tentativa + 1,
+                    ),
+                )
             return
 
         if self._canvas is not None:
@@ -735,8 +906,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._linha_grafico = None
         self._controle_zoom = None
 
-        largura_px = max(500, self._frame_grafico.winfo_width() - 16)
-        altura_px = max(400, ALTURA_GRAFICO_PX - 16)
+        largura_px = max(400, self._medir_largura_frame_grafico())
+        altura_px = max(120, self._medir_altura_frame_grafico())
         dpi = 100
         figura = Figure(
             figsize=(largura_px / dpi, altura_px / dpi),
@@ -784,18 +955,56 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
 
+    def _medir_largura_frame_grafico(self) -> int:
+        self._frame_grafico.update_idletasks()
+        return max(1, self._frame_grafico.winfo_width() - 16)
+
+    def _medir_altura_frame_grafico(self) -> int:
+        self._frame_grafico.update_idletasks()
+        return max(1, self._frame_grafico.winfo_height() - 16)
+
+    def _area_grafico_pronta(self) -> bool:
+        try:
+            return (
+                self._frame_grafico.winfo_width() > 120
+                and self._frame_grafico.winfo_height() > 120
+            )
+        except Exception:
+            return False
+
+    def _ao_configurar_frame_grafico(self, event) -> None:
+        if event.widget is not self._frame_grafico:
+            return
+        if self._job_redimensionar_grafico is not None:
+            try:
+                self.after_cancel(self._job_redimensionar_grafico)
+            except Exception:
+                pass
+        self._job_redimensionar_grafico = self.after(
+            120,
+            self._executar_redimensionamento_grafico,
+        )
+
+    def _executar_redimensionamento_grafico(self) -> None:
+        self._job_redimensionar_grafico = None
+        self._ajustar_grafico_ao_redimensionar()
+
+    def _ao_layout_inicial(self) -> None:
+        ajustar_janela_area_trabalho(self)
+        self._ajustar_grafico_ao_redimensionar()
+
     def _ajustar_grafico_ao_redimensionar(self, tentativa: int = 0) -> None:
         if self._canvas is None or self._figura is None:
             if tentativa < 30:
                 self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
             return
         try:
-            self._frame_grafico.update_idletasks()
-            largura_px = max(500, self._frame_grafico.winfo_width() - 16)
-            altura_px = max(400, self._frame_grafico.winfo_height() - 16)
-            if largura_px < 520 and tentativa < 30:
-                self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
+            if not self._area_grafico_pronta():
+                if tentativa < 30:
+                    self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
                 return
+            largura_px = max(400, self._medir_largura_frame_grafico())
+            altura_px = max(120, self._medir_altura_frame_grafico())
             dpi = self._figura.get_dpi()
             self._figura.set_size_inches(largura_px / dpi, altura_px / dpi, forward=True)
             self._canvas.draw_idle()

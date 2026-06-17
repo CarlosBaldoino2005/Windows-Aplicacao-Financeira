@@ -13,6 +13,17 @@ def formatar_variacao(valor: float, percentual: float, moeda: str = "BRL") -> st
     return f"{sinal}{percentual:.2f}% ({sinal}{formatar_moeda(valor, moeda)})"
 
 
+def formatar_variacao_com_rotulo(
+    valor: float,
+    percentual: float,
+    rotulo: str,
+    moeda: str = "BRL",
+) -> str:
+    """Variacao com icone de tendencia e rotulo (ex.: Hoje, Na sua compra)."""
+    icone = "▲" if percentual >= 0 else "▼"
+    return f"{icone} {formatar_variacao(valor, percentual, moeda)} {rotulo}"
+
+
 def formatar_percentual(valor: float | None, casas: int = 2) -> str:
     if valor is None:
         return "—"
