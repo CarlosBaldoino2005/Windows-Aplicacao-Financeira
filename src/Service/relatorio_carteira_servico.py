@@ -93,6 +93,13 @@ class RelatorioCarteiraServico:
                 )
             )
 
+        posicoes_relatorio.sort(
+            key=lambda item: (
+                item.resultado_reais is None,
+                -(item.resultado_reais if item.resultado_reais is not None else 0.0),
+            )
+        )
+
         acoes_alta = self._listar_mercado(
             self._mercado_acoes.listar_em_alta,
             self._QUANTIDADE_DESTAQUES,

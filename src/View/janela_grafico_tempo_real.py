@@ -14,6 +14,10 @@ from src.Model.carteira import LinhaCarteira
 from src.Service.carteira_servico import CarteiraServico
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
+from src.Tool.intraday_agora_helper import (
+    calcular_atraso_candles_minutos,
+    completar_serie_intraday_com_cotacao,
+)
 from src.Tool.janela_helper import (
     ajustar_janela_area_trabalho,
     configurar_janela_maximizada,
@@ -26,16 +30,21 @@ from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_ca
 from src.View.agora_painel_metricas_helper import PainelMetricasAgora
 from src.View.destaque_cotacao_helper import buscar_cotacao_com_cambio
 from src.View.formatadores import formatar_moeda, formatar_variacao_com_rotulo
+from src.View.grafico_agora_helper import (
+    calcular_limites_eixo_agora,
+    calcular_preco_fechamento_anterior,
+    configurar_eixo_intraday_agora,
+    desenhar_linha_fechamento_anterior,
+    desenhar_serie_agora,
+    obter_cor_tendencia_agora,
+)
 from src.View.grafico_helper import (
     aplicar_tema_matplotlib,
-    configurar_eixo_horario_pregao_agora,
     configurar_tooltip_acao,
     extrair_minutos_dia_de_ponto,
-    minutos_dia_para_horario,
 )
 from src.View.grafico_modelo_helper import (
     ModeloGrafico,
-    desenhar_serie_preco_principal,
     montar_seletor_modelo_grafico,
 )
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
@@ -82,7 +91,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._ao_vivo = True
         self._carregando = False
         self._periodo_usado = "agora"
-        self._modelo_grafico: ModeloGrafico = "linha"
+        self._modelo_grafico: ModeloGrafico = "area"
         self._dados_grafico_atual: dict | None = None
         self._servico_metricas = AgoraMetricasMercadoServico()
         self._painel_metricas: PainelMetricasAgora | None = None
@@ -483,7 +492,16 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 )
                 return
 
-            pontos = serie.pontos
+            pontos_originais = serie.pontos
+            cotacao_viva = cotacao_dados[0] if cotacao_dados else None
+            preco_vivo = cotacao_viva.preco if cotacao_viva else None
+            atraso_candles = calcular_atraso_candles_minutos(pontos_originais)
+
+            if periodo == "agora":
+                pontos = completar_serie_intraday_com_cotacao(pontos_originais, preco_vivo)
+            else:
+                pontos = pontos_originais
+
             posicoes_x, valores, pontos_tooltip = self._montar_serie_intraday(pontos)
             if not valores:
                 self._label_status.configure(
@@ -493,6 +511,12 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 return
 
             moeda = cotacao_dados[0].moeda if cotacao_dados[0] else "BRL"
+            preco_fechamento_anterior = None
+            if cotacao_viva is not None:
+                preco_fechamento_anterior = calcular_preco_fechamento_anterior(
+                    cotacao_viva.preco,
+                    cotacao_viva.variacao_valor,
+                )
             intervalo = "1 min" if periodo == "agora" else "5 min"
             titulo = f"Intraday — {codigo_exibicao(self._simbolo)} ({intervalo})"
             self._dados_grafico_atual = {
@@ -502,12 +526,19 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 "simbolo": self._simbolo,
                 "moeda": moeda,
                 "pontos_tooltip": pontos_tooltip,
+                "preco_fechamento_anterior": preco_fechamento_anterior,
             }
             self._aplicar_dados_grafico(self._dados_grafico_atual)
 
             agora = datetime.now().strftime("%H:%M:%S")
+            status = f"Ultima atualizacao as {agora} · intervalo {intervalo} · {len(pontos)} pontos"
+            if periodo == "agora" and atraso_candles and atraso_candles >= 2:
+                status += (
+                    f" · candles Yahoo ~{atraso_candles} min atrasados"
+                    " · preco ao vivo ate o minuto atual"
+                )
             self._label_status.configure(
-                text=f"Ultima atualizacao as {agora} · intervalo {intervalo} · {len(pontos)} pontos",
+                text=status,
                 text_color=CORES["textoSecundario"],
             )
 
@@ -579,6 +610,54 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             dados["pontos_tooltip"],
         )
 
+    def _aplicar_camadas_grafico_agora(
+        self,
+        eixo,
+        figura,
+        posicoes_x: list[float],
+        valores: list[float],
+        pontos_tooltip: list[dict],
+        *,
+        titulo: str,
+        moeda: str,
+        preco_fechamento_anterior: float | None,
+        xlim_fixo: tuple[float, float] | None = None,
+        ylim_fixo: tuple[float, float] | None = None,
+    ):
+        posicoes = np.asarray(posicoes_x, dtype=float)
+        if xlim_fixo is None or ylim_fixo is None:
+            xlim, ylim = calcular_limites_eixo_agora(
+                posicoes,
+                valores,
+                preco_fechamento_anterior=preco_fechamento_anterior,
+            )
+        else:
+            xlim, ylim = xlim_fixo, ylim_fixo
+
+        cor = obter_cor_tendencia_agora(
+            valores[-1] if valores else None,
+            preco_fechamento_anterior,
+        )
+        linha = desenhar_serie_agora(
+            eixo,
+            posicoes,
+            valores,
+            pontos_tooltip,
+            modelo=self._modelo_grafico,
+            cor=cor,
+            y_base=ylim[0],
+        )
+        desenhar_linha_fechamento_anterior(eixo, preco_fechamento_anterior, moeda, xlim)
+        configurar_eixo_intraday_agora(eixo, xlim, ylim)
+        eixo.set_title(titulo, fontsize=11, fontweight="bold", pad=8)
+        eixo.set_ylabel("")
+        eixo.set_xlabel("")
+        eixo.grid(True, axis="y", alpha=0.22, color=CORES["borda"])
+        eixo.grid(False, axis="x")
+        aplicar_tema_matplotlib(eixo, figura)
+        figura.subplots_adjust(bottom=0.14, left=0.06, right=0.90, top=0.92)
+        return linha, xlim, ylim
+
     def _atualizar_serie_grafico_preservando_zoom(
         self,
         posicoes_x: list[float],
@@ -595,32 +674,27 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
         xlim = self._eixo.get_xlim()
         ylim = self._eixo.get_ylim()
+        preservar_zoom = self._grafico_tem_visualizacao_alterada()
 
         self._eixo.clear()
 
-        posicoes = np.asarray(posicoes_x, dtype=float)
-        linha = desenhar_serie_preco_principal(
+        dados = self._dados_grafico_atual or {}
+        linha, _, _ = self._aplicar_camadas_grafico_agora(
             self._eixo,
-            posicoes,
+            self._figura,
+            posicoes_x,
             valores,
             pontos_tooltip,
-            modelo=self._modelo_grafico,
-            cor=CORES["primaria"],
-            label="Preco",
+            titulo=titulo,
+            moeda=moeda,
+            preco_fechamento_anterior=dados.get("preco_fechamento_anterior"),
+            xlim_fixo=tuple(xlim) if preservar_zoom else None,
+            ylim_fixo=tuple(ylim) if preservar_zoom else None,
         )
-        self._eixo.set_title(titulo, fontsize=14, fontweight="bold")
-        self._eixo.set_ylabel("Preco", fontsize=11)
-        self._eixo.set_xlabel("Horario", fontsize=11)
-        self._eixo.set_xlim(xlim)
-        self._eixo.set_ylim(ylim)
-        self._eixo.grid(True, alpha=0.25, color=CORES["borda"])
-        aplicar_tema_matplotlib(self._eixo, self._figura)
 
-        from matplotlib.ticker import FuncFormatter
-
-        self._eixo.xaxis.set_major_formatter(
-            FuncFormatter(lambda valor, _pos: minutos_dia_para_horario(valor))
-        )
+        if preservar_zoom:
+            self._eixo.set_xlim(xlim)
+            self._eixo.set_ylim(ylim)
 
         self._linha_grafico = linha
         configurar_tooltip_acao(
@@ -915,25 +989,17 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
         eixo = figura.add_subplot(111)
-        posicoes = np.asarray(posicoes_x, dtype=float)
-        cor_linha = CORES["primaria"]
-
-        linha = desenhar_serie_preco_principal(
+        dados = self._dados_grafico_atual or {}
+        linha, _, _ = self._aplicar_camadas_grafico_agora(
             eixo,
-            posicoes,
+            figura,
+            posicoes_x,
             valores,
             pontos_tooltip,
-            modelo=self._modelo_grafico,
-            cor=cor_linha,
-            label="Preco",
+            titulo=titulo,
+            moeda=moeda,
+            preco_fechamento_anterior=dados.get("preco_fechamento_anterior"),
         )
-        eixo.set_title(titulo, fontsize=14, fontweight="bold")
-        eixo.set_ylabel("Preco", fontsize=11)
-        eixo.set_xlabel("Horario", fontsize=11)
-        configurar_eixo_horario_pregao_agora(eixo)
-        eixo.grid(True, alpha=0.25, color=CORES["borda"])
-        aplicar_tema_matplotlib(eixo, figura)
-        figura.subplots_adjust(bottom=0.18, left=0.07, right=0.98, top=0.92)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
         configurar_tooltip_acao(
