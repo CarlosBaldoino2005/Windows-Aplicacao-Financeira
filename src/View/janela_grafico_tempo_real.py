@@ -79,7 +79,11 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._alerta_valorizacao_limite: float | None = self._config_painel.carregar_alerta_valorizacao_agora(
             simbolo
         )
+        self._alerta_compra_limite: float | None = self._config_painel.carregar_alerta_compra_acao(
+            simbolo
+        )
         self._alerta_venda_ativo = False
+        self._alerta_compra_ativo = False
         self._preco_atual_cotacao: float | None = None
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
@@ -354,8 +358,81 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._label_alerta_venda.pack(fill="x", padx=14, pady=(0, 10))
         self._label_alerta_venda.pack_forget()
 
+        self._frame_painel_compra = ctk.CTkFrame(
+            self._area_rolagem,
+            fg_color=CORES.get("infoFundo", CORES["fundo"]),
+            corner_radius=10,
+            border_width=1,
+            border_color=CORES["borda"],
+        )
+
+        ctk.CTkLabel(
+            self._frame_painel_compra,
+            text="Alerta de compra",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+            anchor="w",
+        ).pack(anchor="w", padx=14, pady=(10, 4))
+
+        ctk.CTkLabel(
+            self._frame_painel_compra,
+            text=(
+                "Informe o preco alvo da acao. Quando a cotacao atual ficar igual ou menor, "
+                "o sistema avisa para comprar."
+            ),
+            font=ctk.CTkFont(size=11),
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+            justify="left",
+            wraplength=860,
+        ).pack(anchor="w", padx=14, pady=(0, 8))
+
+        linha_alerta_compra = ctk.CTkFrame(self._frame_painel_compra, fg_color="transparent")
+        linha_alerta_compra.pack(fill="x", padx=14, pady=(0, 8))
+
+        ctk.CTkLabel(
+            linha_alerta_compra,
+            text="Alerta de preco (R$)",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+        ).pack(side="left", padx=(0, 8))
+
+        self._entrada_alerta_compra = ctk.CTkEntry(
+            linha_alerta_compra,
+            width=150,
+            placeholder_text="Ex.: R$ 43,50",
+        )
+        self._entrada_alerta_compra.pack(side="left", padx=(0, 8))
+        aplicar_mascara_moeda_ptbr(self._entrada_alerta_compra)
+        self._preencher_entrada_alerta_compra()
+
+        ctk.CTkButton(
+            linha_alerta_compra,
+            text="Salvar alerta",
+            command=self._salvar_alerta_compra,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=110,
+            height=32,
+        ).pack(side="left")
+
+        self._label_alerta_compra = ctk.CTkLabel(
+            self._frame_painel_compra,
+            text="",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            fg_color=CORES["sucesso"],
+            corner_radius=8,
+            anchor="w",
+            justify="left",
+            wraplength=860,
+        )
+        self._label_alerta_compra.pack(fill="x", padx=14, pady=(0, 10))
+        self._label_alerta_compra.pack_forget()
+
+        self._sincronizar_painel_carteira_ou_compra()
         if self._resumo_carteira is not None:
-            self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
             self._atualizar_campos_carteira(None)
 
         self._container_grafico = ctk.CTkFrame(self, fg_color="transparent")
@@ -735,11 +812,73 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
     def _atualizar_resumo_carteira(self) -> None:
         self._resumo_carteira = buscar_resumo_carteira(self._simbolo, self._linha_carteira)
-        if self._resumo_carteira is None:
-            self._frame_painel_carteira.pack_forget()
+        self._sincronizar_painel_carteira_ou_compra()
+
+    def _sincronizar_painel_carteira_ou_compra(self) -> None:
+        if self._resumo_carteira is not None:
+            self._frame_painel_compra.pack_forget()
+            self._alerta_compra_ativo = False
+            self._label_alerta_compra.pack_forget()
+            if not self._frame_painel_carteira.winfo_ismapped():
+                self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
             return
-        if not self._frame_painel_carteira.winfo_ismapped():
-            self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
+
+        self._frame_painel_carteira.pack_forget()
+        self._alerta_venda_ativo = False
+        self._label_alerta_venda.pack_forget()
+        if not self._frame_painel_compra.winfo_ismapped():
+            self._frame_painel_compra.pack(fill="x", pady=(0, 8))
+
+    def _preencher_entrada_alerta_compra(self) -> None:
+        if self._alerta_compra_limite is None or self._alerta_compra_limite <= 0:
+            return
+        centavos = int(round(self._alerta_compra_limite * 100))
+        self._entrada_alerta_compra.insert(0, f"R$ {formatar_centavos_ptbr(centavos)}")
+
+    def _salvar_alerta_compra(self) -> None:
+        texto = self._entrada_alerta_compra.get().strip()
+        if not texto or texto == "R$":
+            self._alerta_compra_limite = None
+            try:
+                self._config_painel.salvar_alerta_compra_acao(self._simbolo, None)
+            except OSError:
+                self._label_status.configure(
+                    text="Nao foi possivel salvar o alerta no painel.ini.",
+                    text_color=CORES["erro"],
+                )
+                return
+            self._label_status.configure(
+                text="Alerta de compra removido.",
+                text_color=CORES["textoSecundario"],
+            )
+            self._verificar_alerta_compra(self._preco_atual_cotacao, None)
+            return
+
+        valor, erro = CarteiraServico.parse_preco(texto)
+        if erro or valor is None or valor <= 0:
+            self._label_status.configure(
+                text=erro or "Informe um preco alvo valido em reais.",
+                text_color=CORES["erro"],
+            )
+            return
+
+        self._alerta_compra_limite = valor
+        try:
+            self._config_painel.salvar_alerta_compra_acao(self._simbolo, valor)
+        except OSError:
+            self._label_status.configure(
+                text="Nao foi possivel salvar o alerta no painel.ini.",
+                text_color=CORES["erro"],
+            )
+            return
+
+        self._label_status.configure(
+            text=f"Alerta salvo: comprar quando o preco atingir {formatar_moeda(valor)} ou menos.",
+            text_color=CORES["sucesso"],
+        )
+        moeda = "BRL"
+        if self._preco_atual_cotacao is not None:
+            self._verificar_alerta_compra(self._preco_atual_cotacao, moeda)
 
     def _preencher_entrada_alerta(self) -> None:
         if self._alerta_valorizacao_limite is None or self._alerta_valorizacao_limite <= 0:
@@ -893,6 +1032,37 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if not self._label_alerta_venda.winfo_ismapped():
             self._label_alerta_venda.pack(fill="x", padx=14, pady=(0, 10))
 
+    def _verificar_alerta_compra(self, preco_atual: float | None, moeda: str | None) -> None:
+        if self._resumo_carteira is not None:
+            self._alerta_compra_ativo = False
+            self._label_alerta_compra.pack_forget()
+            return
+
+        limite = self._alerta_compra_limite
+        if limite is None or limite <= 0 or preco_atual is None or preco_atual <= 0:
+            self._alerta_compra_ativo = False
+            self._label_alerta_compra.pack_forget()
+            return
+
+        moeda_fmt = moeda or "BRL"
+        if preco_atual <= limite:
+            self._alerta_compra_ativo = True
+            self._label_alerta_compra.configure(
+                text=(
+                    f"COMPRAR — o preco atual {formatar_moeda(preco_atual, moeda_fmt)} "
+                    f"esta no alvo ou abaixo de {formatar_moeda(limite, moeda_fmt)}. "
+                    "Considere realizar a compra."
+                ),
+                fg_color=CORES["sucesso"],
+                text_color=CORES.get("textoInverso", "#FFFFFF"),
+            )
+            if not self._label_alerta_compra.winfo_ismapped():
+                self._label_alerta_compra.pack(fill="x", padx=14, pady=(0, 10))
+            return
+
+        self._alerta_compra_ativo = False
+        self._label_alerta_compra.pack_forget()
+
     def _atualizar_painel_preco(self, cotacao_dados: tuple) -> None:
         cotacao, taxa, aviso = cotacao_dados
         if cotacao is None:
@@ -905,6 +1075,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._label_variacao_compra.pack_forget()
             self._label_detalhes.configure(text="")
             self._atualizar_campos_carteira(None)
+            self._verificar_alerta_compra(None, None)
             return
 
         moeda = cotacao.moeda or "BRL"
@@ -931,6 +1102,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._label_detalhes.configure(text="  ·  ".join(detalhes))
         self._atualizar_indicador_compra(cotacao.preco)
         self._atualizar_campos_carteira(cotacao.preco)
+        self._verificar_alerta_compra(cotacao.preco, moeda)
 
     def _desenhar_grafico(
         self,

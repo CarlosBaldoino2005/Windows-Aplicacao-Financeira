@@ -649,6 +649,39 @@ class ConfigPainelIni:
             parser[SECAO_AGORA_ALERTAS][chave] = f"{round(valor, 2):.2f}"
         self._gravar(parser)
 
+    def carregar_alerta_compra_acao(self, simbolo: str) -> float | None:
+        """Valor alvo para aviso de compra no grafico da acao."""
+        chave_base = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave_base:
+            return None
+        chave = f"COMPRA_{chave_base}"
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            return None
+        texto = parser[SECAO_AGORA_ALERTAS].get(chave, "").strip()
+        if not texto:
+            return None
+        try:
+            valor = float(texto.replace(",", "."))
+        except ValueError:
+            return None
+        return round(valor, 2) if valor > 0 else None
+
+    def salvar_alerta_compra_acao(self, simbolo: str, valor: float | None) -> None:
+        """Persiste o preco alvo para sinal de compra na tela de acao."""
+        chave_base = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave_base:
+            return
+        chave = f"COMPRA_{chave_base}"
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            parser[SECAO_AGORA_ALERTAS] = {}
+        if valor is None or valor <= 0:
+            parser[SECAO_AGORA_ALERTAS].pop(chave, None)
+        else:
+            parser[SECAO_AGORA_ALERTAS][chave] = f"{round(valor, 2):.2f}"
+        self._gravar(parser)
+
     @staticmethod
     def _chave_alerta_valorizacao_agora(simbolo: str) -> str:
         texto = (simbolo or "").strip().upper()

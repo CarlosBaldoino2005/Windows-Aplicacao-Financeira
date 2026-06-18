@@ -3,8 +3,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.Controller.controlador_carteira import ControladorCarteira
-from src.Model.carteira import LinhaCarteira
+from src.Model.carteira import LinhaCarteira, PosicaoCarteira, TipoAtivoCarteira
+from src.Service.carteira_servico import CarteiraServico
+
+
+def _moeda_padrao_por_tipo(tipo: TipoAtivoCarteira) -> str:
+    return "USD" if tipo == "cripto" else "BRL"
 
 
 @dataclass(frozen=True)
@@ -26,7 +30,7 @@ class ResumoCarteiraAgora:
 
     @classmethod
     def de_linha(cls, linha: LinhaCarteira) -> ResumoCarteiraAgora:
-        moeda = linha.cotacao.moeda if linha.cotacao else "BRL"
+        moeda = linha.cotacao.moeda if linha.cotacao else _moeda_padrao_por_tipo(linha.posicao.tipo_ativo)
         return cls(
             quantidade=linha.posicao.quantidade,
             preco_compra=linha.posicao.preco_compra,
@@ -34,33 +38,41 @@ class ResumoCarteiraAgora:
             moeda=moeda,
         )
 
+    @classmethod
+    def de_posicao(cls, posicao: PosicaoCarteira) -> ResumoCarteiraAgora:
+        return cls(
+            quantidade=posicao.quantidade,
+            preco_compra=posicao.preco_compra,
+            valor_investido=posicao.valor_investido,
+            moeda=_moeda_padrao_por_tipo(posicao.tipo_ativo),
+        )
+
 
 def buscar_resumo_carteira(
     simbolo: str,
     linha: LinhaCarteira | None = None,
 ) -> ResumoCarteiraAgora | None:
-    """Retorna resumo da posicao; usa a linha informada ou agrega por simbolo."""
+    """Retorna resumo da posicao sem buscar cotacoes na rede (leitura local)."""
     if linha is not None:
         return ResumoCarteiraAgora.de_linha(linha)
 
-    controlador = ControladorCarteira()
-    linhas, erro = controlador.obter_linhas_carteira()
-    if erro or not linhas:
+    posicoes = CarteiraServico().listar()
+    if not posicoes:
         return None
 
     simbolo_norm = simbolo.strip().upper()
     correspondentes = [
-        item for item in linhas if item.posicao.simbolo.strip().upper() == simbolo_norm
+        item for item in posicoes if item.simbolo.strip().upper() == simbolo_norm
     ]
     if not correspondentes:
         return None
     if len(correspondentes) == 1:
-        return ResumoCarteiraAgora.de_linha(correspondentes[0])
+        return ResumoCarteiraAgora.de_posicao(correspondentes[0])
 
-    quantidade = sum(item.posicao.quantidade for item in correspondentes)
-    investido = sum(item.posicao.valor_investido for item in correspondentes)
+    quantidade = sum(item.quantidade for item in correspondentes)
+    investido = sum(item.valor_investido for item in correspondentes)
     preco_medio = investido / quantidade if quantidade > 0 else 0.0
-    moeda = correspondentes[0].cotacao.moeda if correspondentes[0].cotacao else "BRL"
+    moeda = _moeda_padrao_por_tipo(correspondentes[0].tipo_ativo)
     return ResumoCarteiraAgora(
         quantidade=quantidade,
         preco_compra=round(preco_medio, 4),

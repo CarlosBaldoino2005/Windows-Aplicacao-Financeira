@@ -18,6 +18,8 @@ from src.View.hub_painel_config_helper import ConfiguracaoHubPainel
 from src.View.janela_comparar_acoes import JanelaCompararAcoes
 from src.View.janela_favoritas import JanelaFavoritas
 from src.View.janela_grafico_acao import JanelaGraficoAcao
+from src.View.janela_grafico_tempo_real import JanelaGraficoTempoReal
+from src.View.hub_agora_helper import abrir_agora_da_selecao_grid, obter_tabela_aba_ativa
 from src.View.janela_hub_empresas_dividendos import JanelaHubEmpresasDividendos
 from src.View.janela_hub_painel_periodo import JanelaHubPainelPeriodo
 from src.View.janela_noticias_mercado import JanelaNoticiasMercado
@@ -43,6 +45,7 @@ class JanelaHubAcoes(ctk.CTkToplevel):
         self._janela_comparar: JanelaCompararAcoes | None = None
         self._janela_noticias: JanelaNoticiasMercado | None = None
         self._janela_grafico: JanelaGraficoAcao | None = None
+        self._janela_grafico_agora: JanelaGraficoTempoReal | None = None
         self._janela_periodo: JanelaHubPainelPeriodo | None = None
         self._janela_dividendos: JanelaHubEmpresasDividendos | None = None
         self._carga_inicial_feita = False
@@ -82,6 +85,7 @@ class JanelaHubAcoes(ctk.CTkToplevel):
             "_janela_comparar",
             "_janela_noticias",
             "_janela_grafico",
+            "_janela_grafico_agora",
             "_janela_periodo",
             "_janela_dividendos",
         ):
@@ -178,6 +182,16 @@ class JanelaHubAcoes(ctk.CTkToplevel):
             text_color=CORES["textoSecundario"],
         )
         self._label_status.pack(side="left")
+
+        ctk.CTkButton(
+            barra,
+            text="Agora",
+            command=self._abrir_grafico_agora,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=90,
+        ).pack(side="right", padx=(0, 8))
 
         ctk.CTkButton(
             barra,
@@ -333,6 +347,25 @@ class JanelaHubAcoes(ctk.CTkToplevel):
         self._janela_grafico = JanelaGraficoAcao(self, self._controlador, simbolo)
         codigo = simbolo.replace(".SA", "")
         self._janela_grafico.title(f"Grafico — {codigo}")
+
+    def _obter_tabela_ativa(self) -> ttk.Treeview | None:
+        return obter_tabela_aba_ativa(
+            self._seletor_abas.get(),
+            {
+                "Em alta": self._tabela_alta,
+                "Em queda": self._tabela_queda,
+                "Todas": self._tabela_todas,
+            },
+            padrao="Em alta",
+        )
+
+    def _abrir_grafico_agora(self) -> None:
+        self._janela_grafico_agora = abrir_agora_da_selecao_grid(
+            self,
+            self._controlador,
+            self._obter_tabela_ativa(),
+            self._janela_grafico_agora,
+        )
 
     def _executar_em_thread(self, funcao, ao_concluir) -> None:
         executar_em_thread(self, funcao, ao_concluir)

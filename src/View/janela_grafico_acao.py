@@ -558,12 +558,27 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         )
 
     def _abrir_grafico_agora(self) -> None:
-        if self._janela_grafico_agora is not None:
+        janela = self._janela_grafico_agora
+        if janela is not None:
             try:
-                if self._janela_grafico_agora.winfo_exists():
-                    self._janela_grafico_agora._ao_fechar()
+                if janela.winfo_exists():
+                    if getattr(janela, "_simbolo", None) == self._simbolo:
+                        janela.focus_force()
+                        janela.lift()
+                        return
+                    janela._ao_fechar()
             except Exception:
                 pass
+
+        self._label_status.configure(
+            text="Abrindo tela Agora...",
+            text_color=CORES["textoSecundario"],
+        )
+        self.after(50, self._criar_janela_grafico_agora)
+
+    def _criar_janela_grafico_agora(self) -> None:
+        if not self.winfo_exists():
+            return
         self._janela_grafico_agora = abrir_grafico_tempo_real(
             self,
             self._controlador,

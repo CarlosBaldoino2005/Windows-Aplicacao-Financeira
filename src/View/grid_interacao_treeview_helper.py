@@ -49,6 +49,19 @@ def obter_simbolo_duplo_clique_treeview(tabela: ttk.Treeview, evento) -> str | N
         return None
 
 
+def obter_simbolo_unico_selecionado_treeview(tabela: ttk.Treeview | None) -> str | None:
+    """Retorna o simbolo/iid quando ha exatamente uma linha selecionada na grid."""
+    if not treeview_ainda_ativa(tabela):
+        return None
+    try:
+        selecionados = tabela.selection()
+        if len(selecionados) == 1:
+            return selecionados[0]
+    except tk.TclError:
+        return None
+    return None
+
+
 def _cores_destaque_linha_treeview() -> tuple[str, str]:
     """Mesmo azul para hover e para linha selecionada com clique."""
     return CORES["selecao"], CORES["selecaoTexto"]
