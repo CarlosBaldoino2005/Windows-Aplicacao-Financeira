@@ -18,9 +18,10 @@ from src.View.grafico_modelo_helper import (
 )
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
-    aplicar_tema_matplotlib,
+    MARGEM_GRAFICO_BOTTOM_ROTULOS,
     configurar_selecao_periodo_comparacao,
     configurar_tooltip_comparacao,
+    finalizar_figura_grafico,
 )
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
 from src.View.janela_grafico_comparacao import CORES_GRAFICO, JanelaGraficoComparacao
@@ -54,7 +55,7 @@ class PainelGraficoCarteira:
         self._desenhando = False
         self._tem_posicoes = False
         self._janela_grafico_ampliado: JanelaGraficoComparacao | None = None
-        self._modelo_grafico: ModeloGrafico = "linha"
+        self._modelo_grafico: ModeloGrafico = "area"
 
     def montar(self, pai: ctk.CTkFrame) -> ctk.CTkFrame:
         """Monta o painel; o chamador posiciona o card retornado (ex.: grid row=1)."""
@@ -373,12 +374,14 @@ class PainelGraficoCarteira:
 
         eixo.set_xticks(indices)
         eixo.set_xticklabels(datas_grafico, rotation=30, ha="right", fontsize=8)
-        eixo.set_title("Desempenho relativo dos ativos da carteira", fontsize=12, fontweight="bold")
         eixo.set_ylabel("Indice relativo (base 100)", fontsize=10)
         eixo.legend(loc="best", fontsize=9)
-        eixo.grid(True, alpha=0.3, color=CORES["borda"])
-        aplicar_tema_matplotlib(eixo, figura)
-        figura.subplots_adjust(bottom=0.22, left=0.08, right=0.96, top=0.9)
+        finalizar_figura_grafico(
+            eixo,
+            figura,
+            "Desempenho relativo dos ativos da carteira",
+            bottom=MARGEM_GRAFICO_BOTTOM_ROTULOS,
+        )
 
         self._figura = figura
         self._canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)

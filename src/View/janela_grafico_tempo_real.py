@@ -39,9 +39,9 @@ from src.View.grafico_agora_helper import (
     obter_cor_tendencia_agora,
 )
 from src.View.grafico_helper import (
-    aplicar_tema_matplotlib,
     configurar_tooltip_acao,
     extrair_minutos_dia_de_ponto,
+    finalizar_figura_grafico,
 )
 from src.View.grafico_modelo_helper import (
     ModeloGrafico,
@@ -55,6 +55,7 @@ INTERVALO_ATUALIZACAO_MS = 5_000
 INTERVALO_METRICAS_MS = 60_000
 ALTURA_GRAFICO_MINIMA_PX = 280
 _ALTURA_INFO_ROLAGEM_PX = 220
+_FONTE_BANNER_ALERTA = 39  # 3x do tamanho base — apenas mensagem VENDER/COMPRAR
 
 
 class JanelaGraficoTempoReal(ctk.CTkToplevel):
@@ -76,7 +77,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             simbolo,
             linha_carteira,
         )
-        self._alerta_valorizacao_limite: float | None = self._config_painel.carregar_alerta_valorizacao_agora(
+        self._alerta_preco_venda_limite: float | None = self._config_painel.carregar_alerta_preco_venda_agora(
             simbolo
         )
         self._alerta_compra_limite: float | None = self._config_painel.carregar_alerta_compra_acao(
@@ -100,6 +101,9 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._servico_metricas = AgoraMetricasMercadoServico()
         self._painel_metricas: PainelMetricasAgora | None = None
         self._ultima_busca_metricas_ms = 0
+        self._preco_referencia_5_dias: float | None = None
+        self._editando_alerta = False
+        self._bloqueio_foco_alerta = False
         self._job_redimensionar_grafico: str | None = None
 
         codigo = codigo_exibicao(simbolo)
@@ -241,6 +245,49 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         self._label_variacao_compra.pack(anchor="w", pady=(4, 0))
 
+        self._frame_alerta_topo = ctk.CTkFrame(
+            linha_preco,
+            fg_color=CORES["superficie"],
+            corner_radius=8,
+            border_width=2,
+            border_color=CORES["primaria"],
+        )
+        self._frame_alerta_topo.pack(side="right", fill="both", expand=True, padx=(20, 0), pady=(0, 2))
+
+        self._frame_alerta_topo_venda = ctk.CTkFrame(self._frame_alerta_topo, fg_color="transparent")
+        self._montar_alerta_topo_venda(self._frame_alerta_topo_venda)
+
+        self._frame_alerta_topo_compra = ctk.CTkFrame(self._frame_alerta_topo, fg_color="transparent")
+        self._montar_alerta_topo_compra(self._frame_alerta_topo_compra)
+
+        self._label_alerta_venda = ctk.CTkLabel(
+            painel_preco,
+            text="",
+            font=ctk.CTkFont(size=_FONTE_BANNER_ALERTA, weight="bold"),
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            fg_color=CORES["erro"],
+            corner_radius=8,
+            anchor="w",
+            justify="left",
+            wraplength=1200,
+        )
+        self._label_alerta_venda.pack(fill="x", padx=16, pady=(8, 10))
+        self._label_alerta_venda.pack_forget()
+
+        self._label_alerta_compra = ctk.CTkLabel(
+            painel_preco,
+            text="",
+            font=ctk.CTkFont(size=_FONTE_BANNER_ALERTA, weight="bold"),
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            fg_color=CORES["sucesso"],
+            corner_radius=8,
+            anchor="w",
+            justify="left",
+            wraplength=1200,
+        )
+        self._label_alerta_compra.pack(fill="x", padx=16, pady=(8, 10))
+        self._label_alerta_compra.pack_forget()
+
         self._label_detalhes = ctk.CTkLabel(
             painel_preco,
             text="",
@@ -313,123 +360,6 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._label_carteira_qtd = _criar_campo_resumo(0, "Quantidade")
         self._label_carteira_compra = _criar_campo_resumo(1, "Preco de compra")
         self._label_carteira_valorizacao = _criar_campo_resumo(2, "Resultado (R$)")
-
-        linha_alerta = ctk.CTkFrame(self._frame_painel_carteira, fg_color="transparent")
-        linha_alerta.pack(fill="x", padx=14, pady=(0, 8))
-
-        ctk.CTkLabel(
-            linha_alerta,
-            text="Alerta de valorizacao (R$)",
-            font=ctk.CTkFont(size=12),
-            text_color=CORES["textoSecundario"],
-        ).pack(side="left", padx=(0, 8))
-
-        self._entrada_alerta_valorizacao = ctk.CTkEntry(
-            linha_alerta,
-            width=150,
-            placeholder_text="Ex.: R$ 500,00",
-        )
-        self._entrada_alerta_valorizacao.pack(side="left", padx=(0, 8))
-        aplicar_mascara_moeda_ptbr(self._entrada_alerta_valorizacao)
-        self._preencher_entrada_alerta()
-
-        ctk.CTkButton(
-            linha_alerta,
-            text="Salvar alerta",
-            command=self._salvar_alerta_valorizacao,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=110,
-            height=32,
-        ).pack(side="left")
-
-        self._label_alerta_venda = ctk.CTkLabel(
-            self._frame_painel_carteira,
-            text="",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            fg_color=CORES["erro"],
-            corner_radius=8,
-            anchor="w",
-            justify="left",
-            wraplength=860,
-        )
-        self._label_alerta_venda.pack(fill="x", padx=14, pady=(0, 10))
-        self._label_alerta_venda.pack_forget()
-
-        self._frame_painel_compra = ctk.CTkFrame(
-            self._area_rolagem,
-            fg_color=CORES.get("infoFundo", CORES["fundo"]),
-            corner_radius=10,
-            border_width=1,
-            border_color=CORES["borda"],
-        )
-
-        ctk.CTkLabel(
-            self._frame_painel_compra,
-            text="Alerta de compra",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=CORES["texto"],
-            anchor="w",
-        ).pack(anchor="w", padx=14, pady=(10, 4))
-
-        ctk.CTkLabel(
-            self._frame_painel_compra,
-            text=(
-                "Informe o preco alvo da acao. Quando a cotacao atual ficar igual ou menor, "
-                "o sistema avisa para comprar."
-            ),
-            font=ctk.CTkFont(size=11),
-            text_color=CORES["textoSecundario"],
-            anchor="w",
-            justify="left",
-            wraplength=860,
-        ).pack(anchor="w", padx=14, pady=(0, 8))
-
-        linha_alerta_compra = ctk.CTkFrame(self._frame_painel_compra, fg_color="transparent")
-        linha_alerta_compra.pack(fill="x", padx=14, pady=(0, 8))
-
-        ctk.CTkLabel(
-            linha_alerta_compra,
-            text="Alerta de preco (R$)",
-            font=ctk.CTkFont(size=12),
-            text_color=CORES["textoSecundario"],
-        ).pack(side="left", padx=(0, 8))
-
-        self._entrada_alerta_compra = ctk.CTkEntry(
-            linha_alerta_compra,
-            width=150,
-            placeholder_text="Ex.: R$ 43,50",
-        )
-        self._entrada_alerta_compra.pack(side="left", padx=(0, 8))
-        aplicar_mascara_moeda_ptbr(self._entrada_alerta_compra)
-        self._preencher_entrada_alerta_compra()
-
-        ctk.CTkButton(
-            linha_alerta_compra,
-            text="Salvar alerta",
-            command=self._salvar_alerta_compra,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=110,
-            height=32,
-        ).pack(side="left")
-
-        self._label_alerta_compra = ctk.CTkLabel(
-            self._frame_painel_compra,
-            text="",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            fg_color=CORES["sucesso"],
-            corner_radius=8,
-            anchor="w",
-            justify="left",
-            wraplength=860,
-        )
-        self._label_alerta_compra.pack(fill="x", padx=14, pady=(0, 10))
-        self._label_alerta_compra.pack_forget()
 
         self._sincronizar_painel_carteira_ou_compra()
         if self._resumo_carteira is not None:
@@ -537,87 +467,107 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._carregando = False
             if not janela_ui_ainda_ativa(self):
                 return
-            if erro_thread:
-                self._label_status.configure(text=f"Erro: {erro_thread}", text_color=CORES["erro"])
-                return
-            if resultado is None:
-                self._label_status.configure(
-                    text="Nao foi possivel carregar os dados.",
-                    text_color=CORES["erro"],
-                )
-                return
-
+            estado_foco = self._salvar_estado_foco_alerta()
+            entrada_alerta_focada, cursor_alerta = estado_foco
+            editando_alerta = entrada_alerta_focada is not None
+            self._bloqueio_foco_alerta = True
+            self._pausar_mascaras_alerta(True)
             try:
-                cotacao_dados, serie, erro_hist, periodo, metricas = resultado
-            except (TypeError, ValueError) as exc:
+                if erro_thread:
+                    self._label_status.configure(text=f"Erro: {erro_thread}", text_color=CORES["erro"])
+                    return
+                if resultado is None:
+                    self._label_status.configure(
+                        text="Nao foi possivel carregar os dados.",
+                        text_color=CORES["erro"],
+                    )
+                    return
+
+                try:
+                    cotacao_dados, serie, erro_hist, periodo, metricas = resultado
+                except (TypeError, ValueError) as exc:
+                    self._label_status.configure(
+                        text=f"Erro ao processar dados: {exc}",
+                        text_color=CORES["erro"],
+                    )
+                    return
+
+                self._periodo_usado = periodo
+                self._atualizar_resumo_carteira()
+                self._atualizar_painel_preco(cotacao_dados, atualizar_variacao_5d=not editando_alerta)
+                if metricas is not None:
+                    self._aplicar_metricas_mercado(
+                        metricas,
+                        atualizar_variacao_5d=not editando_alerta,
+                    )
+
+                if erro_hist or serie is None or not getattr(serie, "pontos", None):
+                    self._label_status.configure(
+                        text=erro_hist or "Grafico intraday indisponivel.",
+                        text_color=CORES["erro"],
+                    )
+                    return
+
+                pontos_originais = serie.pontos
+                cotacao_viva = cotacao_dados[0] if cotacao_dados else None
+                preco_vivo = cotacao_viva.preco if cotacao_viva else None
+                atraso_candles = calcular_atraso_candles_minutos(pontos_originais)
+
+                if periodo == "agora":
+                    pontos = completar_serie_intraday_com_cotacao(pontos_originais, preco_vivo)
+                else:
+                    pontos = pontos_originais
+
+                posicoes_x, valores, pontos_tooltip = self._montar_serie_intraday(pontos)
+                if not valores:
+                    self._label_status.configure(
+                        text="Grafico intraday indisponivel (horarios invalidos).",
+                        text_color=CORES["erro"],
+                    )
+                    return
+
+                moeda = cotacao_dados[0].moeda if cotacao_dados[0] else "BRL"
+                preco_fechamento_anterior = None
+                if cotacao_viva is not None:
+                    preco_fechamento_anterior = calcular_preco_fechamento_anterior(
+                        cotacao_viva.preco,
+                        cotacao_viva.variacao_valor,
+                    )
+                intervalo = "1 min" if periodo == "agora" else "5 min"
+                titulo = f"Intraday — {codigo_exibicao(self._simbolo)} ({intervalo})"
+                self._dados_grafico_atual = {
+                    "posicoes_x": posicoes_x,
+                    "valores": valores,
+                    "titulo": titulo,
+                    "simbolo": self._simbolo,
+                    "moeda": moeda,
+                    "pontos_tooltip": pontos_tooltip,
+                    "preco_fechamento_anterior": preco_fechamento_anterior,
+                }
+                self._aplicar_dados_grafico(self._dados_grafico_atual)
+
+                agora = datetime.now().strftime("%H:%M:%S")
+                status = f"Ultima atualizacao as {agora} · intervalo {intervalo} · {len(pontos)} pontos"
+                if periodo == "agora" and atraso_candles and atraso_candles >= 2:
+                    status += (
+                        f" · candles Yahoo ~{atraso_candles} min atrasados"
+                        " · preco ao vivo ate o minuto atual"
+                    )
                 self._label_status.configure(
-                    text=f"Erro ao processar dados: {exc}",
-                    text_color=CORES["erro"],
+                    text=status,
+                    text_color=CORES["textoSecundario"],
                 )
-                return
-
-            self._periodo_usado = periodo
-            self._atualizar_resumo_carteira()
-            self._atualizar_painel_preco(cotacao_dados)
-            if metricas is not None:
-                self._aplicar_metricas_mercado(metricas)
-
-            if erro_hist or serie is None or not getattr(serie, "pontos", None):
-                self._label_status.configure(
-                    text=erro_hist or "Grafico intraday indisponivel.",
-                    text_color=CORES["erro"],
-                )
-                return
-
-            pontos_originais = serie.pontos
-            cotacao_viva = cotacao_dados[0] if cotacao_dados else None
-            preco_vivo = cotacao_viva.preco if cotacao_viva else None
-            atraso_candles = calcular_atraso_candles_minutos(pontos_originais)
-
-            if periodo == "agora":
-                pontos = completar_serie_intraday_com_cotacao(pontos_originais, preco_vivo)
-            else:
-                pontos = pontos_originais
-
-            posicoes_x, valores, pontos_tooltip = self._montar_serie_intraday(pontos)
-            if not valores:
-                self._label_status.configure(
-                    text="Grafico intraday indisponivel (horarios invalidos).",
-                    text_color=CORES["erro"],
-                )
-                return
-
-            moeda = cotacao_dados[0].moeda if cotacao_dados[0] else "BRL"
-            preco_fechamento_anterior = None
-            if cotacao_viva is not None:
-                preco_fechamento_anterior = calcular_preco_fechamento_anterior(
-                    cotacao_viva.preco,
-                    cotacao_viva.variacao_valor,
-                )
-            intervalo = "1 min" if periodo == "agora" else "5 min"
-            titulo = f"Intraday — {codigo_exibicao(self._simbolo)} ({intervalo})"
-            self._dados_grafico_atual = {
-                "posicoes_x": posicoes_x,
-                "valores": valores,
-                "titulo": titulo,
-                "simbolo": self._simbolo,
-                "moeda": moeda,
-                "pontos_tooltip": pontos_tooltip,
-                "preco_fechamento_anterior": preco_fechamento_anterior,
-            }
-            self._aplicar_dados_grafico(self._dados_grafico_atual)
-
-            agora = datetime.now().strftime("%H:%M:%S")
-            status = f"Ultima atualizacao as {agora} · intervalo {intervalo} · {len(pontos)} pontos"
-            if periodo == "agora" and atraso_candles and atraso_candles >= 2:
-                status += (
-                    f" · candles Yahoo ~{atraso_candles} min atrasados"
-                    " · preco ao vivo ate o minuto atual"
-                )
-            self._label_status.configure(
-                text=status,
-                text_color=CORES["textoSecundario"],
-            )
+            finally:
+                self._bloqueio_foco_alerta = False
+                self._pausar_mascaras_alerta(False)
+                if editando_alerta:
+                    self.after(
+                        80,
+                        lambda e=entrada_alerta_focada, c=cursor_alerta: self._restaurar_foco_entrada(
+                            e,
+                            c,
+                        ),
+                    )
 
         executar_em_thread(self, buscar, ao_concluir)
 
@@ -628,10 +578,20 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         decorrido = int(time.monotonic() * 1000) - self._ultima_busca_metricas_ms
         return decorrido >= INTERVALO_METRICAS_MS
 
-    def _aplicar_metricas_mercado(self, metricas: MetricasMercadoAgora) -> None:
+    def _aplicar_metricas_mercado(
+        self,
+        metricas: MetricasMercadoAgora,
+        *,
+        atualizar_variacao_5d: bool = True,
+    ) -> None:
         self._ultima_busca_metricas_ms = int(time.monotonic() * 1000)
+        self._preco_referencia_5_dias = metricas.preco_referencia_5_dias
         if self._painel_metricas is not None:
             self._painel_metricas.atualizar(metricas)
+        if atualizar_variacao_5d:
+            self._atualizar_variacao_5_dias(self._preco_atual_cotacao)
+        if self._resumo_carteira is not None:
+            self._atualizar_campos_carteira(self._preco_atual_cotacao)
 
     def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
         self._modelo_grafico = modelo
@@ -667,8 +627,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         return False
 
     def _aplicar_dados_grafico(self, dados: dict) -> None:
-        if not self._grafico_tem_visualizacao_alterada():
-            self._desenhar_grafico(
+        if self._canvas is not None and self._eixo is not None:
+            self._atualizar_serie_grafico_preservando_zoom(
                 dados["posicoes_x"],
                 dados["valores"],
                 dados["titulo"],
@@ -677,8 +637,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 dados["pontos_tooltip"],
             )
             return
-
-        self._atualizar_serie_grafico_preservando_zoom(
+        self._desenhar_grafico(
             dados["posicoes_x"],
             dados["valores"],
             dados["titulo"],
@@ -726,13 +685,9 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         desenhar_linha_fechamento_anterior(eixo, preco_fechamento_anterior, moeda, xlim)
         configurar_eixo_intraday_agora(eixo, xlim, ylim)
-        eixo.set_title(titulo, fontsize=11, fontweight="bold", pad=8)
         eixo.set_ylabel("")
         eixo.set_xlabel("")
-        eixo.grid(True, axis="y", alpha=0.22, color=CORES["borda"])
-        eixo.grid(False, axis="x")
-        aplicar_tema_matplotlib(eixo, figura)
-        figura.subplots_adjust(bottom=0.14, left=0.06, right=0.90, top=0.92)
+        finalizar_figura_grafico(eixo, figura, titulo)
         return linha, xlim, ylim
 
     def _atualizar_serie_grafico_preservando_zoom(
@@ -811,14 +766,195 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         return posicoes_x, valores, pontos_tooltip
 
     def _atualizar_resumo_carteira(self) -> None:
+        tinha_posicao = self._resumo_carteira is not None
         self._resumo_carteira = buscar_resumo_carteira(self._simbolo, self._linha_carteira)
-        self._sincronizar_painel_carteira_ou_compra()
+        tem_posicao = self._resumo_carteira is not None
+        if tinha_posicao != tem_posicao:
+            self._sincronizar_painel_carteira_ou_compra()
+
+    def _montar_alerta_topo_venda(self, pai: ctk.CTkFrame) -> None:
+        fonte_titulo = ctk.CTkFont(size=14, weight="bold")
+        fonte_destaque = ctk.CTkFont(size=16, weight="bold")
+        fonte_resumo = ctk.CTkFont(size=13, weight="bold")
+
+        ctk.CTkLabel(
+            pai,
+            text="Alerta venda — preco alvo (R$)",
+            font=fonte_titulo,
+            text_color=CORES["texto"],
+            anchor="w",
+        ).pack(anchor="w", padx=12, pady=(10, 6))
+
+        linha_alerta = ctk.CTkFrame(pai, fg_color="transparent")
+        linha_alerta.pack(fill="x", padx=12)
+
+        self._entrada_alerta_valorizacao = ctk.CTkEntry(
+            linha_alerta,
+            width=170,
+            height=38,
+            font=fonte_destaque,
+            placeholder_text="Ex.: R$ 70,00",
+        )
+        self._entrada_alerta_valorizacao.pack(side="left", padx=(0, 10))
+        aplicar_mascara_moeda_ptbr(self._entrada_alerta_valorizacao)
+        self._configurar_entrada_alerta(self._entrada_alerta_valorizacao)
+        self._preencher_entrada_alerta()
+
+        ctk.CTkButton(
+            linha_alerta,
+            text="Salvar alerta",
+            command=self._salvar_alerta_valorizacao,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+            width=120,
+            height=38,
+        ).pack(side="left")
+
+        self._label_variacao_5_dias_carteira = ctk.CTkLabel(
+            pai,
+            text="—",
+            font=fonte_resumo,
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+            wraplength=480,
+            justify="left",
+        )
+        self._label_variacao_5_dias_carteira.pack(anchor="w", padx=12, pady=(8, 10))
+
+    def _montar_alerta_topo_compra(self, pai: ctk.CTkFrame) -> None:
+        fonte_titulo = ctk.CTkFont(size=14, weight="bold")
+        fonte_destaque = ctk.CTkFont(size=16, weight="bold")
+        fonte_resumo = ctk.CTkFont(size=13, weight="bold")
+
+        ctk.CTkLabel(
+            pai,
+            text="Alerta compra — preco alvo (R$)",
+            font=fonte_titulo,
+            text_color=CORES["texto"],
+            anchor="w",
+        ).pack(anchor="w", padx=12, pady=(10, 6))
+
+        linha_alerta = ctk.CTkFrame(pai, fg_color="transparent")
+        linha_alerta.pack(fill="x", padx=12)
+
+        self._entrada_alerta_compra = ctk.CTkEntry(
+            linha_alerta,
+            width=170,
+            height=38,
+            font=fonte_destaque,
+            placeholder_text="Ex.: R$ 43,50",
+        )
+        self._entrada_alerta_compra.pack(side="left", padx=(0, 10))
+        aplicar_mascara_moeda_ptbr(self._entrada_alerta_compra)
+        self._configurar_entrada_alerta(self._entrada_alerta_compra)
+        self._preencher_entrada_alerta_compra()
+
+        ctk.CTkButton(
+            linha_alerta,
+            text="Salvar alerta",
+            command=self._salvar_alerta_compra,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+            width=120,
+            height=38,
+        ).pack(side="left")
+
+        self._label_variacao_5_dias_compra = ctk.CTkLabel(
+            pai,
+            text="—",
+            font=fonte_resumo,
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+            wraplength=480,
+            justify="left",
+        )
+        self._label_variacao_5_dias_compra.pack(anchor="w", padx=12, pady=(8, 10))
+
+    def _configurar_entrada_alerta(self, entrada: ctk.CTkEntry) -> None:
+        entrada.bind("<FocusIn>", self._ao_focar_entrada_alerta, add="+")
+        entrada.bind("<FocusOut>", self._ao_sair_foco_entrada_alerta, add="+")
+
+    def _ao_focar_entrada_alerta(self, _evento=None) -> None:
+        self._editando_alerta = True
+
+    def _ao_sair_foco_entrada_alerta(self, _evento=None) -> None:
+        if self._bloqueio_foco_alerta:
+            return
+        self.after(120, self._verificar_fim_edicao_alerta)
+
+    def _verificar_fim_edicao_alerta(self) -> None:
+        if not janela_ui_ainda_ativa(self):
+            return
+        if self._bloqueio_foco_alerta:
+            self.after(120, self._verificar_fim_edicao_alerta)
+            return
+        if self._obter_entrada_alerta_com_foco() is None:
+            self._editando_alerta = False
+            self._atualizar_variacao_5_dias(self._preco_atual_cotacao)
+
+    def _obter_entrada_alerta_com_foco(self) -> ctk.CTkEntry | None:
+        foco = self.focus_get()
+        if foco is None:
+            return None
+        for entrada in (self._entrada_alerta_valorizacao, self._entrada_alerta_compra):
+            if foco == entrada:
+                return entrada
+            try:
+                if foco == entrada._entry:
+                    return entrada
+            except AttributeError:
+                pass
+        return None
+
+    def _salvar_estado_foco_alerta(self) -> tuple[ctk.CTkEntry | None, int | None]:
+        entrada = self._obter_entrada_alerta_com_foco()
+        if entrada is None:
+            return None, None
+        try:
+            cursor = int(entrada._entry.index("insert"))
+        except Exception:
+            cursor = None
+        return entrada, cursor
+
+    def _entrada_alerta_em_edicao(self) -> bool:
+        return self._obter_entrada_alerta_com_foco() is not None
+
+    def _pausar_mascaras_alerta(self, pausar: bool) -> None:
+        for entrada in (self._entrada_alerta_valorizacao, self._entrada_alerta_compra):
+            entrada._mascara_pausada = pausar
+
+    def _restaurar_foco_entrada(
+        self,
+        entrada: ctk.CTkEntry | None,
+        cursor: int | None = None,
+    ) -> None:
+        alvo = entrada
+        if alvo is None or not janela_ui_ainda_ativa(self):
+            return
+        try:
+            if not alvo.winfo_exists():
+                return
+            widget_interno = getattr(alvo, "_entry", alvo)
+            alvo.focus_set()
+            widget_interno.focus_set()
+            if cursor is not None:
+                widget_interno.icursor(cursor)
+            else:
+                widget_interno.icursor("end")
+        except Exception:
+            pass
 
     def _sincronizar_painel_carteira_ou_compra(self) -> None:
         if self._resumo_carteira is not None:
-            self._frame_painel_compra.pack_forget()
             self._alerta_compra_ativo = False
             self._label_alerta_compra.pack_forget()
+            self._frame_alerta_topo_compra.pack_forget()
+            if not self._frame_alerta_topo_venda.winfo_ismapped():
+                self._frame_alerta_topo_venda.pack(fill="both", expand=True)
             if not self._frame_painel_carteira.winfo_ismapped():
                 self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
             return
@@ -826,8 +962,9 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._frame_painel_carteira.pack_forget()
         self._alerta_venda_ativo = False
         self._label_alerta_venda.pack_forget()
-        if not self._frame_painel_compra.winfo_ismapped():
-            self._frame_painel_compra.pack(fill="x", pady=(0, 8))
+        self._frame_alerta_topo_venda.pack_forget()
+        if not self._frame_alerta_topo_compra.winfo_ismapped():
+            self._frame_alerta_topo_compra.pack(fill="both", expand=True)
 
     def _preencher_entrada_alerta_compra(self) -> None:
         if self._alerta_compra_limite is None or self._alerta_compra_limite <= 0:
@@ -881,17 +1018,17 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._verificar_alerta_compra(self._preco_atual_cotacao, moeda)
 
     def _preencher_entrada_alerta(self) -> None:
-        if self._alerta_valorizacao_limite is None or self._alerta_valorizacao_limite <= 0:
+        if self._alerta_preco_venda_limite is None or self._alerta_preco_venda_limite <= 0:
             return
-        centavos = int(round(self._alerta_valorizacao_limite * 100))
+        centavos = int(round(self._alerta_preco_venda_limite * 100))
         self._entrada_alerta_valorizacao.insert(0, f"R$ {formatar_centavos_ptbr(centavos)}")
 
     def _salvar_alerta_valorizacao(self) -> None:
         texto = self._entrada_alerta_valorizacao.get().strip()
         if not texto or texto == "R$":
-            self._alerta_valorizacao_limite = None
+            self._alerta_preco_venda_limite = None
             try:
-                self._config_painel.salvar_alerta_valorizacao_agora(self._simbolo, None)
+                self._config_painel.salvar_alerta_preco_venda_agora(self._simbolo, None)
             except OSError:
                 self._label_status.configure(
                     text="Nao foi possivel salvar o alerta no painel.ini.",
@@ -899,23 +1036,24 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 )
                 return
             self._label_status.configure(
-                text="Alerta de valorizacao removido.",
+                text="Alerta de preco da acao removido.",
                 text_color=CORES["textoSecundario"],
             )
-            self._verificar_alerta_venda(self._valorizacao_atual)
+            self._verificar_alerta_venda(self._preco_atual_cotacao)
+            self._atualizar_resumo_alertas_lateral(self._preco_atual_cotacao)
             return
 
         valor, erro = CarteiraServico.parse_preco(texto)
         if erro or valor is None or valor <= 0:
             self._label_status.configure(
-                text=erro or "Informe um valor de alerta valido em reais.",
+                text=erro or "Informe um preco alvo valido em reais.",
                 text_color=CORES["erro"],
             )
             return
 
-        self._alerta_valorizacao_limite = valor
+        self._alerta_preco_venda_limite = valor
         try:
-            self._config_painel.salvar_alerta_valorizacao_agora(self._simbolo, valor)
+            self._config_painel.salvar_alerta_preco_venda_agora(self._simbolo, valor)
         except OSError:
             self._label_status.configure(
                 text="Nao foi possivel salvar o alerta no painel.ini.",
@@ -923,17 +1061,16 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             )
             return
 
+        moeda = self._resumo_carteira.moeda if self._resumo_carteira else "BRL"
         self._label_status.configure(
-            text=f"Alerta salvo: vender quando a valorizacao atingir {formatar_moeda(valor)}.",
+            text=(
+                f"Alerta salvo: vender quando o preco da acao atingir "
+                f"{formatar_moeda(valor, moeda)} ou mais."
+            ),
             text_color=CORES["sucesso"],
         )
-        self._verificar_alerta_venda(self._valorizacao_atual)
-
-    @property
-    def _valorizacao_atual(self) -> float | None:
-        if self._resumo_carteira is None or self._preco_atual_cotacao is None:
-            return None
-        return self._resumo_carteira.valorizacao_reais(self._preco_atual_cotacao)
+        self._verificar_alerta_venda(self._preco_atual_cotacao)
+        self._atualizar_resumo_alertas_lateral(self._preco_atual_cotacao)
 
     def _atualizar_campos_carteira(self, preco_atual: float | None) -> None:
         if self._resumo_carteira is None:
@@ -955,7 +1092,64 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             text=formatar_moeda(valor_reais, moeda),
             text_color=cor,
         )
-        self._verificar_alerta_venda(valor_reais)
+        self._verificar_alerta_venda(preco_atual)
+
+    def _atualizar_resumo_alertas_lateral(self, preco_atual: float | None) -> None:
+        texto_carteira, cor_carteira = self._montar_resumo_alerta_lateral(
+            preco_atual,
+            incluir_compra=True,
+        )
+        texto_compra, cor_compra = self._montar_resumo_alerta_lateral(
+            preco_atual,
+            incluir_compra=False,
+        )
+        self._label_variacao_5_dias_carteira.configure(text=texto_carteira, text_color=cor_carteira)
+        self._label_variacao_5_dias_compra.configure(text=texto_compra, text_color=cor_compra)
+
+    def _montar_resumo_alerta_lateral(
+        self,
+        preco_atual: float | None,
+        *,
+        incluir_compra: bool,
+    ) -> tuple[str, str]:
+        if preco_atual is None or preco_atual <= 0:
+            return "—", CORES["textoSecundario"]
+
+        moeda = "BRL"
+        if incluir_compra and self._resumo_carteira is not None:
+            moeda = self._resumo_carteira.moeda
+        elif not incluir_compra:
+            moeda = "BRL" if self._simbolo.upper().endswith(".SA") else "USD"
+
+        partes: list[str] = [formatar_moeda(preco_atual, moeda)]
+
+        if incluir_compra and self._resumo_carteira is not None:
+            pct_compra = self._resumo_carteira.valorizacao_percentual(preco_atual)
+            if pct_compra is not None:
+                sinal = "+" if pct_compra >= 0 else ""
+                partes.append(f"{sinal}{pct_compra:.2f}% na compra")
+
+        pct_5d = AgoraMetricasMercadoServico.calcular_variacao_percentual_5_dias(
+            preco_atual,
+            self._preco_referencia_5_dias,
+        )
+        if pct_5d is not None:
+            icone = "▲" if pct_5d >= 0 else "▼"
+            sinal = "+" if pct_5d >= 0 else ""
+            partes.append(f"{icone} {sinal}{pct_5d:.2f}% em 5 dias")
+
+        limite = self._alerta_preco_venda_limite if incluir_compra else None
+        cor = CORES["textoSecundario"]
+        if pct_5d is not None:
+            cor = CORES["sucesso"] if pct_5d >= 0 else CORES["erro"]
+        if incluir_compra and limite and preco_atual >= limite:
+            cor = CORES["sucesso"]
+            partes.append(f"preco alvo {formatar_moeda(limite, moeda)} atingido")
+
+        return "  ·  ".join(partes), cor
+
+    def _atualizar_variacao_5_dias(self, preco_atual: float | None) -> None:
+        self._atualizar_resumo_alertas_lateral(preco_atual)
 
     def _formatar_carimbo_agora(self, moeda: str) -> str:
         """Data/hora no estilo da cotacao ao vivo (ex.: 17 de jun., 13:00:17 UTC-3 · BRL)."""
@@ -1006,13 +1200,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if not self._label_variacao_compra.winfo_ismapped():
             self._label_variacao_compra.pack(anchor="w", pady=(4, 0))
 
-    def _verificar_alerta_venda(self, valorizacao_reais: float | None) -> None:
-        limite = self._alerta_valorizacao_limite
+    def _verificar_alerta_venda(self, preco_atual: float | None) -> None:
+        limite = self._alerta_preco_venda_limite
         if (
             limite is None
             or limite <= 0
-            or valorizacao_reais is None
-            or valorizacao_reais < limite
+            or preco_atual is None
+            or preco_atual < limite
         ):
             self._alerta_venda_ativo = False
             self._label_alerta_venda.pack_forget()
@@ -1022,7 +1216,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         moeda = self._resumo_carteira.moeda if self._resumo_carteira else "BRL"
         self._label_alerta_venda.configure(
             text=(
-                f"VENDER — a valorizacao atingiu {formatar_moeda(valorizacao_reais, moeda)} "
+                f"VENDER — o preco da acao atingiu {formatar_moeda(preco_atual, moeda)} "
                 f"(alerta: {formatar_moeda(limite, moeda)} ou mais). "
                 "Considere realizar a venda."
             ),
@@ -1030,7 +1224,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             text_color=CORES.get("textoInverso", "#FFFFFF"),
         )
         if not self._label_alerta_venda.winfo_ismapped():
-            self._label_alerta_venda.pack(fill="x", padx=14, pady=(0, 10))
+            self._label_alerta_venda.pack(fill="x", padx=16, pady=(8, 10))
 
     def _verificar_alerta_compra(self, preco_atual: float | None, moeda: str | None) -> None:
         if self._resumo_carteira is not None:
@@ -1057,13 +1251,18 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 text_color=CORES.get("textoInverso", "#FFFFFF"),
             )
             if not self._label_alerta_compra.winfo_ismapped():
-                self._label_alerta_compra.pack(fill="x", padx=14, pady=(0, 10))
+                self._label_alerta_compra.pack(fill="x", padx=16, pady=(8, 10))
             return
 
         self._alerta_compra_ativo = False
         self._label_alerta_compra.pack_forget()
 
-    def _atualizar_painel_preco(self, cotacao_dados: tuple) -> None:
+    def _atualizar_painel_preco(
+        self,
+        cotacao_dados: tuple,
+        *,
+        atualizar_variacao_5d: bool = True,
+    ) -> None:
         cotacao, taxa, aviso = cotacao_dados
         if cotacao is None:
             self._preco_atual_cotacao = None
@@ -1075,6 +1274,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._label_variacao_compra.pack_forget()
             self._label_detalhes.configure(text="")
             self._atualizar_campos_carteira(None)
+            if atualizar_variacao_5d:
+                self._atualizar_variacao_5_dias(None)
             self._verificar_alerta_compra(None, None)
             return
 
@@ -1102,6 +1303,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._label_detalhes.configure(text="  ·  ".join(detalhes))
         self._atualizar_indicador_compra(cotacao.preco)
         self._atualizar_campos_carteira(cotacao.preco)
+        if atualizar_variacao_5d:
+            self._atualizar_variacao_5_dias(cotacao.preco)
         self._verificar_alerta_compra(cotacao.preco, moeda)
 
     def _desenhar_grafico(

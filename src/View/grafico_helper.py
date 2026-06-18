@@ -36,6 +36,18 @@ COR_LINHA_CDI = "#D97706"
 DESLOC_TOOLTIP_PONTOS = 18
 MARGEM_TOOLTIP_FRACAO = 0.22
 
+# Layout e tipografia alinhados à tela Agora (padrao global de graficos).
+FONTE_TITULO_GRAFICO = 11
+PAD_TITULO_GRAFICO = 12
+GRID_ALPHA_GRAFICO = 0.22
+MARGEM_GRAFICO_BOTTOM = 0.14
+MARGEM_GRAFICO_BOTTOM_ROTULOS = 0.22
+MARGEM_GRAFICO_LEFT = 0.06
+MARGEM_GRAFICO_RIGHT = 0.90
+MARGEM_GRAFICO_TOP = 0.86
+LARGURA_LINHA_GRAFICO = 1.9
+ALPHA_AREA_GRAFICO = 0.28
+
 
 def aplicar_tema_matplotlib(eixo, figura=None) -> None:
     """Aplica cores de texto, eixos e legenda conforme modo claro/escuro (CORES)."""
@@ -78,6 +90,57 @@ def aplicar_tema_matplotlib(eixo, figura=None) -> None:
         moldura.set_edgecolor(cor_borda)
         for texto in legenda.get_texts():
             texto.set_color(cor_texto)
+
+
+def aplicar_titulo_padrao_grafico(eixo, titulo: str) -> None:
+    """Titulo com o mesmo tamanho e espacamento da tela Agora."""
+    eixo.set_title(
+        titulo,
+        fontsize=FONTE_TITULO_GRAFICO,
+        fontweight="bold",
+        pad=PAD_TITULO_GRAFICO,
+    )
+
+
+def aplicar_grade_padrao_grafico(eixo, *, apenas_horizontal: bool = True) -> None:
+    """Grade horizontal suave, como no grafico intraday Agora."""
+    if apenas_horizontal:
+        eixo.grid(True, axis="y", alpha=GRID_ALPHA_GRAFICO, color=CORES["borda"])
+        eixo.grid(False, axis="x")
+    else:
+        eixo.grid(True, alpha=GRID_ALPHA_GRAFICO, color=CORES["borda"])
+
+
+def aplicar_margens_padrao_grafico(
+    figura,
+    *,
+    bottom: float | None = None,
+    left: float | None = None,
+    right: float | None = None,
+    top: float | None = None,
+) -> None:
+    """Margens externas padronizadas (evita corte de titulo e tooltip)."""
+    figura.subplots_adjust(
+        bottom=bottom if bottom is not None else MARGEM_GRAFICO_BOTTOM,
+        left=left if left is not None else MARGEM_GRAFICO_LEFT,
+        right=right if right is not None else MARGEM_GRAFICO_RIGHT,
+        top=top if top is not None else MARGEM_GRAFICO_TOP,
+    )
+
+
+def finalizar_figura_grafico(
+    eixo,
+    figura,
+    titulo: str,
+    *,
+    bottom: float | None = None,
+    grade_apenas_y: bool = True,
+) -> None:
+    """Aplica titulo, grade, tema e margens no padrao da tela Agora."""
+    aplicar_titulo_padrao_grafico(eixo, titulo)
+    aplicar_grade_padrao_grafico(eixo, apenas_horizontal=grade_apenas_y)
+    aplicar_tema_matplotlib(eixo, figura)
+    aplicar_margens_padrao_grafico(figura, bottom=bottom)
 
 
 HORA_INICIO_PREGAO_AGORA = 10
@@ -222,7 +285,7 @@ def _criar_anotacao_tooltip(eixo):
         xytext=(DESLOC_TOOLTIP_PONTOS, DESLOC_TOOLTIP_PONTOS),
         textcoords="offset points",
         bbox=dict(
-            boxstyle="round,pad=0.5",
+            boxstyle="round,pad=0.75",
             fc=CORES.get("graficoTooltipFundo", CORES["infoFundo"]),
             ec=cor,
             linestyle="--",
@@ -231,6 +294,7 @@ def _criar_anotacao_tooltip(eixo):
         ),
         arrowprops=dict(arrowstyle="-", color=cor, linestyle="--", lw=1),
         fontsize=9,
+        linespacing=1.35,
         color=CORES["texto"],
         annotation_clip=False,
         clip_on=False,
@@ -363,30 +427,24 @@ def _posicionar_tooltip(anotacao, eixo, x: float, y: float) -> None:
     desloc = DESLOC_TOOLTIP_PONTOS
     margem = MARGEM_TOOLTIP_FRACAO
 
-    # Padrao: caixa acima e a direita do ponto.
-    dx, dy = desloc, desloc
-    ha, va = "left", "bottom"
-
     if frac_x >= 1.0 - margem:
-        dx = -desloc
-        ha = "right"
+        dx, ha = -desloc, "right"
     elif frac_x <= margem:
-        dx = desloc
-        ha = "left"
+        dx, ha = desloc, "left"
+    else:
+        dx, ha = desloc, "left"
 
-    if frac_y >= 1.0 - margem:
-        dy = -desloc
-        va = "top"
+    # Acima da metade do eixo, abre para baixo para nao cortar no topo do grafico.
+    if frac_y >= 0.50:
+        dy, va = -desloc, "top"
     elif frac_y <= margem:
-        dy = desloc
-        va = "bottom"
+        dy, va = desloc, "bottom"
+    else:
+        dy, va = desloc, "bottom"
 
-    # Canto superior direito (ultimos pregões): abre para esquerda e para baixo.
-    if frac_x >= 1.0 - margem and frac_y >= 0.45:
-        dx = -desloc
-        dy = -desloc
-        ha = "right"
-        va = "top"
+    # Canto superior direito: esquerda e abaixo do ponto.
+    if frac_x >= 1.0 - margem and frac_y >= 0.40:
+        dx, dy, ha, va = -desloc, -desloc, "right", "top"
 
     anotacao.xyann = (dx, dy)
     anotacao.set_ha(ha)

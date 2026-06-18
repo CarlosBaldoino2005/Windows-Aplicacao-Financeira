@@ -1,7 +1,7 @@
 """Metricas de mercado para o painel da tela Agora."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import yfinance as yf
 
@@ -24,6 +24,8 @@ class MetricasMercadoAgora:
     volume_dia: str = "—"
     alta_52_semanas: str = "—"
     baixa_52_semanas: str = "—"
+    media_5_dias: str = "—"
+    preco_referencia_5_dias: float | None = None
     circulacao: str = "—"
     rotulo_circulacao: str = "Acoes em circulacao"
     resumo: str = ""
@@ -44,19 +46,78 @@ class AgoraMetricasMercadoServico:
 
         metricas = self._tentar_yfinance(simbolo_ok)
         if metricas is not None and self._metricas_tem_dados(metricas):
-            return metricas
+            return self._com_media_5_dias(simbolo_ok, metricas)
 
         metricas_brapi = None
         if eh_acao_b3(simbolo_ok):
             metricas_brapi = self._tentar_brapi(simbolo_ok)
             if metricas_brapi is not None and self._metricas_tem_dados(metricas_brapi):
-                return metricas_brapi
+                return self._com_media_5_dias(simbolo_ok, metricas_brapi)
 
         metricas_chart = self._tentar_yahoo_chart(simbolo_ok)
         if metricas_chart is not None and self._metricas_tem_dados(metricas_chart):
-            return metricas_chart
+            return self._com_media_5_dias(simbolo_ok, metricas_chart)
 
-        return metricas or metricas_brapi or MetricasMercadoAgora()
+        resultado = metricas or metricas_brapi or metricas_chart or MetricasMercadoAgora()
+        return self._com_media_5_dias(simbolo_ok, resultado)
+
+    def _com_media_5_dias(self, simbolo: str, metricas: MetricasMercadoAgora) -> MetricasMercadoAgora:
+        moeda = self._moeda_padrao_simbolo(simbolo)
+        fechamentos = self._fechamentos_diarios_recentes(simbolo, limite=5)
+        if not fechamentos:
+            return replace(metricas, media_5_dias="—", preco_referencia_5_dias=None)
+
+        media = self._formatar_preco(sum(fechamentos) / len(fechamentos), moeda)
+        return replace(
+            metricas,
+            media_5_dias=media,
+            preco_referencia_5_dias=fechamentos[0],
+        )
+
+    @staticmethod
+    def calcular_variacao_percentual_5_dias(
+        preco_atual: float | None,
+        preco_referencia: float | None,
+    ) -> float | None:
+        """Variacao percentual do preco atual em relacao ao fechamento de 5 pregões atras."""
+        if preco_atual is None or preco_atual <= 0:
+            return None
+        if preco_referencia is None or preco_referencia <= 0:
+            return None
+        return round(((preco_atual / preco_referencia) - 1) * 100, 2)
+
+    def _fechamentos_diarios_recentes(self, simbolo: str, limite: int = 5) -> list[float]:
+        fechamentos = self._fechamentos_yfinance(simbolo, limite)
+        if fechamentos:
+            return fechamentos
+        return self._yahoo_chart.buscar_fechamentos_diarios(simbolo, limite=limite)
+
+    def _fechamentos_yfinance(self, simbolo: str, limite: int) -> list[float]:
+        try:
+            historico = yf.Ticker(simbolo).history(period="5d", interval="1d")
+        except Exception as exc:
+            self._log.aviso(f"Yahoo Finance (media 5d Agora) falhou para {simbolo}: {exc}")
+            return []
+
+        if historico is None or historico.empty:
+            return []
+
+        try:
+            valores = [
+                float(valor)
+                for valor in historico["Close"].dropna().tolist()
+                if valor is not None and float(valor) > 0
+            ]
+        except (TypeError, ValueError, KeyError):
+            return []
+
+        return valores[-limite:]
+
+    @staticmethod
+    def _moeda_padrao_simbolo(simbolo: str) -> str:
+        if simbolo.endswith(".SA"):
+            return "BRL"
+        return "USD"
 
     @staticmethod
     def _resolver_simbolo(simbolo: str) -> str:

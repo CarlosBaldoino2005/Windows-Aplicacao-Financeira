@@ -22,11 +22,12 @@ from src.View.grafico_modelo_helper import (
 )
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
+    MARGEM_GRAFICO_BOTTOM_ROTULOS,
     TEXTO_INSTRUCAO_GRAFICO_ACAO,
-    aplicar_tema_matplotlib,
     configurar_rotulos_eixo_x,
     configurar_selecao_periodo,
     configurar_tooltip_acao,
+    finalizar_figura_grafico,
 )
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
 from src.View.destaque_cotacao_helper import PainelDestaqueCotacao, iniciar_atualizacao_destaque
@@ -94,7 +95,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._dados_grafico_atual: dict | None = None
         self._controle_zoom = None
         self._carregando_grafico = False
-        self._modelo_grafico: ModeloGrafico = "linha"
+        self._modelo_grafico: ModeloGrafico = "area"
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Grafico — {codigo}")
@@ -754,15 +755,12 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
                 label="100% CDI (mesmo valor no 1º dia)",
             )
             eixo.legend(loc="best", fontsize=9)
-        eixo.set_title(titulo, fontsize=14, fontweight="bold")
         rotulo_eixo = "Preco de fechamento"
         if valores_cdi:
             rotulo_eixo = "Preco da acao e equivalente em 100% CDI"
         eixo.set_ylabel(rotulo_eixo, fontsize=11)
         configurar_rotulos_eixo_x(eixo, labels)
-        eixo.grid(True, alpha=0.3, color=CORES["borda"])
-        aplicar_tema_matplotlib(eixo, figura)
-        figura.subplots_adjust(bottom=0.22, left=0.08, right=0.96, top=0.9)
+        finalizar_figura_grafico(eixo, figura, titulo, bottom=MARGEM_GRAFICO_BOTTOM_ROTULOS)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
 

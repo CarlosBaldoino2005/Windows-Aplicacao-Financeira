@@ -9,6 +9,9 @@ import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
+from src.View.grafico_helper import ALPHA_AREA_GRAFICO, LARGURA_LINHA_GRAFICO
+from src.View.tema import CORES
+
 ModeloGrafico = Literal["linha", "area", "vela", "barra"]
 
 MODELOS_GRAFICO: tuple[tuple[ModeloGrafico, str], ...] = (
@@ -18,7 +21,7 @@ MODELOS_GRAFICO: tuple[tuple[ModeloGrafico, str], ...] = (
     ("barra", "Barra"),
 )
 
-_MODELO_PADRAO: ModeloGrafico = "linha"
+_MODELO_PADRAO: ModeloGrafico = "area"
 _COR_ALTA = "#16A34A"
 _COR_BAIXA = "#DC2626"
 
@@ -97,6 +100,26 @@ def CORES_TRANSPARENTE() -> str:
     return "#00000000"
 
 
+def _marcar_ultimo_ponto_serie(
+    eixo,
+    indices: np.ndarray,
+    valores: np.ndarray,
+    cor: str,
+) -> None:
+    """Circulo no ultimo ponto da serie (estilo Agora / Google Finance)."""
+    if len(indices) == 0:
+        return
+    eixo.scatter(
+        [float(indices[-1])],
+        [float(valores[-1])],
+        s=36,
+        color=cor,
+        edgecolors=CORES.get("graficoFundo", CORES["superficie"]),
+        linewidths=1.2,
+        zorder=6,
+    )
+
+
 def _montar_pontos_vela_comparacao(serie: list[dict]) -> list[dict]:
     """Monta abertura/fechamento a partir do indice relativo para candlesticks."""
     pontos: list[dict] = []
@@ -158,14 +181,12 @@ def desenhar_series_comparacao(
                 zorder=2,
             )
         elif modelo_ok == "area":
-            eixo.fill_between(indices, valores_np, alpha=0.18, color=cor, zorder=1)
+            eixo.fill_between(indices, valores_np, alpha=ALPHA_AREA_GRAFICO, color=cor, zorder=1)
             eixo.plot(
                 indices,
                 valores_np,
                 color=cor,
-                linewidth=2.2,
-                marker="o",
-                markersize=3,
+                linewidth=LARGURA_LINHA_GRAFICO,
                 label=rotulo,
                 zorder=3,
             )
@@ -185,11 +206,10 @@ def desenhar_series_comparacao(
                 valores_np,
                 label=rotulo,
                 color=cor,
-                linewidth=2.2,
-                marker="o",
-                markersize=3,
+                linewidth=LARGURA_LINHA_GRAFICO,
                 zorder=3,
             )
+            _marcar_ultimo_ponto_serie(eixo, indices, valores_np, cor)
 
         linhas_plot.append(
             _linha_guia_interacao(eixo, indices, valores, label=rotulo)
@@ -227,17 +247,24 @@ def desenhar_serie_preco_principal(
             zorder=2,
         )
     elif modelo_ok == "area":
-        eixo.fill_between(indices, valores_np, alpha=0.22, color=cor, zorder=1)
+        y_base = float(np.min(valores_np)) if len(valores_np) else 0.0
+        eixo.fill_between(
+            indices,
+            valores_np,
+            y2=y_base,
+            alpha=ALPHA_AREA_GRAFICO,
+            color=cor,
+            zorder=1,
+        )
         eixo.plot(
             indices,
             valores_np,
             color=cor,
-            linewidth=2,
-            marker="o",
-            markersize=3,
+            linewidth=LARGURA_LINHA_GRAFICO,
             label=label,
             zorder=3,
         )
+        _marcar_ultimo_ponto_serie(eixo, indices, valores_np, cor)
     elif modelo_ok == "vela":
         _desenhar_velas(eixo, indices, pontos_tooltip, largura_barra)
         return _linha_guia_interacao(eixo, indices, valores, label=label)
@@ -246,12 +273,11 @@ def desenhar_serie_preco_principal(
             indices,
             valores_np,
             color=cor,
-            linewidth=2,
-            marker="o",
-            markersize=3,
+            linewidth=LARGURA_LINHA_GRAFICO,
             label=label,
             zorder=3,
         )
+        _marcar_ultimo_ponto_serie(eixo, indices, valores_np, cor)
 
     return _linha_guia_interacao(eixo, indices, valores)
 

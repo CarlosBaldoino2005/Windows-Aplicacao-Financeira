@@ -7,12 +7,14 @@ from matplotlib.ticker import FixedFormatter, FixedLocator, NullFormatter, NullL
 
 from src.View.formatadores import formatar_moeda
 from src.View.grafico_helper import (
+    ALPHA_AREA_GRAFICO,
     HORA_FIM_PREGAO_AGORA,
     HORA_INICIO_PREGAO_AGORA,
     INTERVALO_TICKS_HORARIO_AGORA,
+    LARGURA_LINHA_GRAFICO,
     minutos_dia_para_horario,
 )
-from src.View.grafico_modelo_helper import ModeloGrafico, desenhar_serie_preco_principal
+from src.View.grafico_modelo_helper import ModeloGrafico, _marcar_ultimo_ponto_serie, desenhar_serie_preco_principal
 from src.View.tema import CORES
 
 _COR_ALTA_GOOGLE = "#34A853"
@@ -139,17 +141,7 @@ def marcar_ultimo_ponto_agora(
     cor: str,
 ) -> None:
     """Circulo no ultimo preco, como no Google Finance."""
-    if len(indices) == 0:
-        return
-    eixo.scatter(
-        [float(indices[-1])],
-        [float(valores[-1])],
-        s=36,
-        color=cor,
-        edgecolors=CORES.get("graficoFundo", CORES["superficie"]),
-        linewidths=1.2,
-        zorder=6,
-    )
+    _marcar_ultimo_ponto_serie(eixo, indices, valores, cor)
 
 
 def desenhar_serie_agora(
@@ -171,7 +163,7 @@ def desenhar_serie_agora(
             indices,
             valores_np,
             y2=y_base,
-            alpha=0.28,
+            alpha=ALPHA_AREA_GRAFICO,
             color=cor,
             zorder=1,
         )
@@ -179,7 +171,7 @@ def desenhar_serie_agora(
             indices,
             valores_np,
             color=cor,
-            linewidth=1.9,
+            linewidth=LARGURA_LINHA_GRAFICO,
             zorder=3,
         )
         marcar_ultimo_ponto_agora(eixo, indices, valores_np, cor)

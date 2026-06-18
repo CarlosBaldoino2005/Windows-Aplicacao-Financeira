@@ -102,6 +102,20 @@ class ProvedorYahooChart:
         except (KeyError, IndexError, TypeError):
             return None
 
+    def buscar_fechamentos_diarios(self, simbolo: str, *, limite: int = 5) -> list[float]:
+        """Fechamentos diarios recentes (range 5d) para media de curto prazo."""
+        url = f"{URL_CHART.format(simbolo=quote(simbolo))}?range=5d&interval=1d"
+        dados = requisicao_json(url, self._log)
+        serie = self._serie_de_chart(simbolo, "5d", dados)
+        if serie is None:
+            return []
+        fechamentos = [
+            ponto.preco_fechamento
+            for ponto in serie.pontos
+            if ponto.preco_fechamento is not None and ponto.preco_fechamento > 0
+        ]
+        return fechamentos[-limite:]
+
     def _resumo_por_chart(self, simbolo: str, range_param: str, interval: str) -> CotacaoResumo | None:
         url = f"{URL_CHART.format(simbolo=quote(simbolo))}?range={range_param}&interval={interval}"
         dados = requisicao_json(url, self._log)

@@ -649,6 +649,72 @@ class ConfigPainelIni:
             parser[SECAO_AGORA_ALERTAS][chave] = f"{round(valor, 2):.2f}"
         self._gravar(parser)
 
+    def carregar_alerta_variacao_5d_agora(self, simbolo: str) -> float | None:
+        """Percentual de variacao em 5 dias para alerta de venda na tela Agora."""
+        chave_base = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave_base:
+            return None
+        chave = f"VAR5D_{chave_base}"
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            return None
+        texto = parser[SECAO_AGORA_ALERTAS].get(chave, "").strip()
+        if not texto:
+            return None
+        try:
+            valor = float(texto.replace(",", "."))
+        except ValueError:
+            return None
+        return round(valor, 2) if valor > 0 else None
+
+    def salvar_alerta_variacao_5d_agora(self, simbolo: str, percentual: float | None) -> None:
+        """Persiste o limite de variacao em 5 dias (%) para alerta na tela Agora."""
+        chave_base = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave_base:
+            return
+        chave = f"VAR5D_{chave_base}"
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            parser[SECAO_AGORA_ALERTAS] = {}
+        if percentual is None or percentual <= 0:
+            parser[SECAO_AGORA_ALERTAS].pop(chave, None)
+        else:
+            parser[SECAO_AGORA_ALERTAS][chave] = f"{round(percentual, 2):.2f}"
+        self._gravar(parser)
+
+    def carregar_alerta_preco_venda_agora(self, simbolo: str) -> float | None:
+        """Preco alvo da acao para alerta de venda na tela Agora (cotacao >= alvo)."""
+        chave_base = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave_base:
+            return None
+        chave = f"VENDA_{chave_base}"
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            return None
+        texto = parser[SECAO_AGORA_ALERTAS].get(chave, "").strip()
+        if not texto:
+            return None
+        try:
+            valor = float(texto.replace(",", "."))
+        except ValueError:
+            return None
+        return round(valor, 2) if valor > 0 else None
+
+    def salvar_alerta_preco_venda_agora(self, simbolo: str, valor: float | None) -> None:
+        """Persiste o preco alvo da acao para alerta de venda na tela Agora."""
+        chave_base = self._chave_alerta_valorizacao_agora(simbolo)
+        if not chave_base:
+            return
+        chave = f"VENDA_{chave_base}"
+        parser = self._ler_parser()
+        if SECAO_AGORA_ALERTAS not in parser:
+            parser[SECAO_AGORA_ALERTAS] = {}
+        if valor is None or valor <= 0:
+            parser[SECAO_AGORA_ALERTAS].pop(chave, None)
+        else:
+            parser[SECAO_AGORA_ALERTAS][chave] = f"{round(valor, 2):.2f}"
+        self._gravar(parser)
+
     def carregar_alerta_compra_acao(self, simbolo: str) -> float | None:
         """Valor alvo para aviso de compra no grafico da acao."""
         chave_base = self._chave_alerta_valorizacao_agora(simbolo)

@@ -81,6 +81,7 @@ class PainelMetricasAgora:
         self._adicionar_linha(coluna_1, "abertura", "Abrir")
         self._adicionar_linha(coluna_1, "alta_dia", "Alta")
         self._adicionar_linha(coluna_1, "baixa_dia", "Baixa")
+        self._adicionar_linha(coluna_1, "media_5_dias", "Media — 5 dias")
 
         coluna_2 = self._montar_coluna(1)
         self._adicionar_linha(coluna_2, "volume_medio", "Volume medio")
@@ -156,6 +157,7 @@ class PainelMetricasAgora:
             "abertura": metricas.abertura,
             "alta_dia": metricas.alta_dia,
             "baixa_dia": metricas.baixa_dia,
+            "media_5_dias": metricas.media_5_dias,
             "volume_medio": metricas.volume_medio,
             "volume_dia": metricas.volume_dia,
             "alta_52_semanas": metricas.alta_52_semanas,

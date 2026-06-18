@@ -18,10 +18,11 @@ from src.View.grafico_modelo_helper import (
 )
 from src.View.grafico_helper import (
     COR_LINHA_CDI,
+    MARGEM_GRAFICO_BOTTOM_ROTULOS,
     TEXTO_INSTRUCAO_GRAFICO_COMPARACAO,
-    aplicar_tema_matplotlib,
     configurar_selecao_periodo_comparacao,
     configurar_tooltip_comparacao,
+    finalizar_figura_grafico,
 )
 from src.View.destaque_cotacao_helper import (
     PainelDestaqueCotacao,
@@ -312,12 +313,14 @@ class JanelaGraficoComparacao(ctk.CTkToplevel):
 
         eixo.set_xticks(indices)
         eixo.set_xticklabels(datas_grafico, rotation=30, ha="right", fontsize=9)
-        eixo.set_title("Desempenho relativo no periodo", fontsize=14, fontweight="bold")
         eixo.set_ylabel("Indice relativo (base 100)", fontsize=11)
         eixo.legend(loc="best", fontsize=10)
-        eixo.grid(True, alpha=0.3, color=CORES["borda"])
-        aplicar_tema_matplotlib(eixo, figura)
-        figura.subplots_adjust(bottom=0.2, left=0.08, right=0.96, top=0.92)
+        finalizar_figura_grafico(
+            eixo,
+            figura,
+            "Desempenho relativo no periodo",
+            bottom=MARGEM_GRAFICO_BOTTOM_ROTULOS,
+        )
 
         self._figura = figura
         self._canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)

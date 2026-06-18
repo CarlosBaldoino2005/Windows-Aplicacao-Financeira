@@ -70,6 +70,8 @@ def aplicar_mascara_moeda_ptbr(
         return "break"
 
     def ao_soltar_tecla(_evento=None) -> None:
+        if getattr(entry, "_mascara_pausada", False):
+            return
         digitos = _extrair_digitos(entry.get(), prefixo)
         _aplicar_texto_mascarado(entry, prefixo, digitos)
 
