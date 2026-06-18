@@ -11,8 +11,6 @@ from src.Service.email_relatorio_servico import EmailRelatorioServico
 from src.Service.relatorio_carteira_servico import RelatorioCarteiraServico
 from src.Model.carteira import (
     LinhaCarteira,
-    PosicaoCarteira,
-    TipoAtivoCarteira,
     tipo_carteira_para_monitoramento,
 )
 from src.Model.monitoramento import TipoAtivoMonitoramento
@@ -41,14 +39,12 @@ from src.Tool.janela_helper import (
     liberar_modal_janela_filha,
     centralizar_janela_sobre_referencia,
 )
-from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.View.formatadores import formatar_moeda
-from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
 from src.View.janela_carteira_posicoes_tela_cheia import JanelaCarteiraPosicoesTelaCheia
+from src.View.janela_manutencao_ativo_carteira import abrir_manutencao_ativo_carteira
 from src.View.janela_blacklist_ativos import abrir_blacklist_ativos
 from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.janela_grafico_tempo_real import JanelaGraficoTempoReal, abrir_grafico_tempo_real
-from src.View.janela_vendas_carteira import abrir_vendas_carteira
 from src.View.painel_grafico_carteira_helper import PainelGraficoCarteira
 from src.View.tabela_carteira_helper import (
     criar_grid_carteira,
@@ -73,12 +69,11 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._janela_pai = pai
         self._controlador = ControladorCarteira()
         self._config_painel = ConfigPainelIni()
-        self._janela_form = None
+        self._janela_manutencao = None
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._janela_grafico_agora: JanelaGraficoTempoReal | None = None
         self._janela_blacklist = None
         self._janela_posicoes_tela_cheia: JanelaCarteiraPosicoesTelaCheia | None = None
-        self._janela_vendas = None
         self._painel_grafico: PainelGraficoCarteira | None = None
         self._tabela: ttk.Treeview | None = None
         self._linhas_cache: dict[str, LinhaCarteira] = {}
@@ -128,6 +123,12 @@ class JanelaCarteira(ctk.CTkToplevel):
             try:
                 if self._janela_posicoes_tela_cheia.winfo_exists():
                     self._janela_posicoes_tela_cheia._ao_fechar()
+            except Exception:
+                pass
+        if self._janela_manutencao is not None:
+            try:
+                if self._janela_manutencao.winfo_exists():
+                    self._janela_manutencao._ao_fechar()
             except Exception:
                 pass
         if self._janela_grafico is not None:
@@ -256,62 +257,12 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         ctk.CTkButton(
             grupo_esquerda,
-            text="Registrar compra",
-            command=self._abrir_formulario,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=150,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            grupo_esquerda,
-            text="Editar selecionado",
-            command=self._editar_selecionado,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=140,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            grupo_esquerda,
-            text="Nova compra do ativo",
-            command=self._nova_compra_mesmo_ativo,
+            text="Manutencao de ativo",
+            command=self._abrir_manutencao_ativo,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=170,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            grupo_esquerda,
-            text="Registrar venda",
-            command=self._vender_selecionado,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=130,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            grupo_esquerda,
-            text="Vendas realizadas",
-            command=self._abrir_vendas_realizadas,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=150,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            grupo_esquerda,
-            text="Remover selecionados",
-            command=self._remover_selecionados,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=160,
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
@@ -428,99 +379,31 @@ class JanelaCarteira(ctk.CTkToplevel):
         except Exception:
             pass
 
-    def _abrir_formulario(
-        self,
-        posicao: PosicaoCarteira | None = None,
-        *,
-        preencher_ativo: tuple[str, TipoAtivoCarteira] | None = None,
-    ) -> None:
-        if self._janela_form is not None:
+    def _abrir_manutencao_ativo(self) -> None:
+        if self._janela_manutencao is not None:
             try:
-                if self._janela_form.winfo_exists():
-                    self._janela_form.focus_force()
-                    self._janela_form.lift()
+                if self._janela_manutencao.winfo_exists():
+                    self._janela_manutencao.focus_force()
+                    self._janela_manutencao.lift()
                     return
             except Exception:
                 pass
 
-        self._janela_form = abrir_adicionar_carteira(
-            self,
-            self._controlador,
-            ao_salvar=lambda: self._atualizar_lista(forcar=True),
-            posicao=posicao,
-            preencher_ativo=preencher_ativo,
-        )
+        self._janela_manutencao = abrir_manutencao_ativo_carteira(self)
 
-    def _nova_compra_mesmo_ativo(self) -> None:
-        selecionados = self._obter_ids_selecionados()
-        if len(selecionados) != 1:
-            messagebox.showwarning(
-                "Nova compra",
-                "Selecione exatamente uma posicao na grid para registrar outra compra do mesmo ativo.",
-                parent=self,
-            )
+    def _sincronizar_manutencao_ativo(self) -> None:
+        if self._janela_manutencao is None:
             return
-
-        posicao = self._controlador.obter_posicao(selecionados[0])
-        if posicao is None:
-            messagebox.showwarning("Nova compra", "Posicao nao encontrada.", parent=self)
-            return
-
-        self._abrir_formulario(preencher_ativo=(posicao.simbolo, posicao.tipo_ativo))
+        try:
+            if self._janela_manutencao.winfo_exists():
+                self._janela_manutencao._atualizar_lista(forcar=True)
+        except Exception:
+            pass
 
     def _obter_ids_selecionados(self) -> list[str]:
         if self._tabela is None:
             return []
         return list(self._tabela.selection())
-
-    def _editar_selecionado(self) -> None:
-        selecionados = self._obter_ids_selecionados()
-        if len(selecionados) != 1:
-            messagebox.showwarning(
-                "Editar",
-                "Selecione exatamente uma posicao na grid.",
-                parent=self,
-            )
-            return
-
-        posicao = self._controlador.obter_posicao(selecionados[0])
-        if posicao is None:
-            messagebox.showwarning("Editar", "Posicao nao encontrada.", parent=self)
-            return
-
-        self._abrir_formulario(posicao)
-
-    def _vender_selecionado(self) -> None:
-        selecionados = self._obter_ids_selecionados()
-        if len(selecionados) != 1:
-            messagebox.showwarning(
-                "Venda",
-                "Selecione exatamente uma posicao para registrar venda.",
-                parent=self,
-            )
-            return
-
-        posicao = self._controlador.obter_posicao(selecionados[0])
-        if posicao is None:
-            messagebox.showwarning("Venda", "Posicao nao encontrada.", parent=self)
-            return
-
-        self._abrir_dialogo_venda(posicao)
-
-    def _abrir_vendas_realizadas(self) -> None:
-        if self._janela_vendas is not None and self._janela_vendas.winfo_exists():
-            self._janela_vendas.lift()
-            self._janela_vendas.focus_force()
-            return
-        try:
-            self._janela_vendas = abrir_vendas_carteira(self)
-        except Exception as exc:
-            messagebox.showerror(
-                "Vendas realizadas",
-                f"Nao foi possivel abrir a tela de vendas:\n{exc}",
-                parent=self,
-            )
-            self._janela_vendas = None
 
     def _centralizar_dialogo_sobre_pai(
         self,
@@ -534,127 +417,6 @@ class JanelaCarteira(ctk.CTkToplevel):
             centralizar_janela_sobre_referencia(dialogo, self, largura, altura)
         except Exception:
             pass
-
-    def _abrir_dialogo_venda(self, posicao: PosicaoCarteira) -> None:
-        from datetime import datetime
-
-        dialogo = ctk.CTkToplevel(self)
-        dialogo.title(f"Vender {codigo_exibicao(posicao.simbolo)}")
-        dialogo.configure(fg_color=CORES["fundo"])
-        dialogo.resizable(False, False)
-
-        painel = ctk.CTkFrame(dialogo, fg_color=CORES["superficie"], corner_radius=12)
-        painel.pack(fill="both", expand=True, padx=16, pady=16)
-
-        ctk.CTkLabel(
-            painel,
-            text=f"Quantidade a vender (max. {posicao.quantidade})",
-            font=ctk.CTkFont(size=13),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(16, 4))
-
-        entrada_qtd = ctk.CTkEntry(painel, width=220, placeholder_text="Ex.: 50")
-        entrada_qtd.pack(anchor="w", padx=16, pady=(0, 10))
-        entrada_qtd.focus_set()
-
-        ctk.CTkLabel(
-            painel,
-            text="Preco de venda (por cota)",
-            font=ctk.CTkFont(size=13),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(0, 4))
-
-        entrada_preco = ctk.CTkEntry(painel, width=220, placeholder_text="Ex.: 32,50")
-        entrada_preco.pack(anchor="w", padx=16, pady=(0, 10))
-        aplicar_mascara_moeda_ptbr(entrada_preco)
-
-        ctk.CTkLabel(
-            painel,
-            text="Data da venda (dd/mm/aaaa)",
-            font=ctk.CTkFont(size=13),
-            text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(0, 4))
-
-        entrada_data = ctk.CTkEntry(painel, width=220)
-        entrada_data.pack(anchor="w", padx=16, pady=(0, 10))
-        entrada_data.insert(0, datetime.now().strftime("%d/%m/%Y"))
-
-        ctk.CTkLabel(
-            painel,
-            text=f"Preco medio de compra: {formatar_moeda(posicao.preco_compra)}",
-            font=ctk.CTkFont(size=12),
-            text_color=CORES["textoSecundario"],
-        ).pack(anchor="w", padx=16, pady=(0, 8))
-
-        def fechar_dialogo() -> None:
-            liberar_modal_janela_filha(dialogo)
-            dialogo.destroy()
-
-        def confirmar() -> None:
-            ok, erro = self._controlador.registrar_venda(
-                posicao.id,
-                entrada_qtd.get(),
-                entrada_preco.get(),
-                entrada_data.get(),
-            )
-            if erro:
-                messagebox.showwarning("Venda", erro, parent=dialogo)
-                return
-            fechar_dialogo()
-            self._atualizar_lista(forcar=True)
-
-        barra = ctk.CTkFrame(painel, fg_color="transparent")
-        barra.pack(fill="x", padx=16, pady=(0, 16))
-        ctk.CTkButton(
-            barra,
-            text="Cancelar",
-            command=fechar_dialogo,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=100,
-        ).pack(side="right")
-        ctk.CTkButton(
-            barra,
-            text="Confirmar",
-            command=confirmar,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=100,
-        ).pack(side="right", padx=(0, 8))
-
-        entrada_qtd.bind("<Return>", lambda _e: confirmar())
-        entrada_preco.bind("<Return>", lambda _e: confirmar())
-        entrada_data.bind("<Return>", lambda _e: confirmar())
-
-        largura, altura = 380, 360
-        self._centralizar_dialogo_sobre_pai(dialogo, largura, altura)
-        configurar_janela_filha_modal(dialogo, self)
-        dialogo.protocol("WM_DELETE_WINDOW", fechar_dialogo)
-        dialogo.focus_force()
-
-    def _remover_selecionados(self) -> None:
-        selecionados = self._obter_ids_selecionados()
-        if not selecionados:
-            messagebox.showwarning(
-                "Remover",
-                "Selecione uma ou mais posicoes na grid.",
-                parent=self,
-            )
-            return
-
-        if not messagebox.askyesno(
-            "Remover posicao",
-            f"Remover {len(selecionados)} posicao(oes) da carteira e do monitoramento?",
-            parent=self,
-        ):
-            return
-
-        for posicao_id in selecionados:
-            self._controlador.remover_posicao(posicao_id)
-
-        self._atualizar_lista(forcar=True)
 
     def _atualizar_indicador_automatico(self) -> None:
         opcoes = self._atualizador_auto.obter_opcoes()
@@ -973,6 +735,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             notificar_mudanca_configuracao_relatorio_automatico_carteira()
             self._atualizar_indicador_automatico()
             self._sincronizar_tela_cheia_posicoes()
+            self._sincronizar_manutencao_ativo()
             fechar_dialogo()
             self._atualizar_lista(forcar=True)
 
@@ -1244,6 +1007,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             self._atualizar_resumo(linhas)
             if self._painel_grafico is not None:
                 self._painel_grafico.atualizar_linhas(linhas)
+            self._sincronizar_manutencao_ativo()
 
             from datetime import datetime
 
