@@ -400,6 +400,7 @@ class JanelaHubRendaFixaBancaria(ctk.CTkToplevel):
             linhas,
             self._ordenacao_ofertas,
             self._preencher_tabela_ofertas,
+            nome_arquivo_exportacao="renda_fixa_bancaria",
         )
 
     def _aplicar_oferta_na_simulacao(self, oferta: OfertaRendaFixaBancaria) -> None:

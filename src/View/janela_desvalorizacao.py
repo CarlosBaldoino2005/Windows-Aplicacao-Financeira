@@ -346,4 +346,5 @@ class JanelaDesvalorizacao(ctk.CTkToplevel):
             linhas,
             self._ordenacao_eventos,
             self._redesenhar_tabela_eventos,
+            nome_arquivo_exportacao="desvalorizacao",
         )

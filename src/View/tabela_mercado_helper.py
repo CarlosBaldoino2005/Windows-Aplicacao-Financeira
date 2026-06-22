@@ -21,6 +21,10 @@ from src.View.grid_interacao_treeview_helper import (
     sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
 )
+from src.View.exportar_xlsx_grid_helper import (
+    criar_frame_botoes_titulo_grid,
+    vincular_botao_exportar_treeview,
+)
 from src.View.tema import CORES
 
 _COLUNAS_PADRAO = ("simbolo", "nome", "preco", "variacao")
@@ -146,7 +150,11 @@ def criar_card_tabela(
         font=ctk.CTkFont(size=opcoes.fonte_titulo_card, weight="bold"),
         text_color=CORES["texto"],
     )
-    label_titulo.pack(anchor="w", padx=12, pady=(12, 4))
+
+    linha_titulo = ctk.CTkFrame(card, fg_color="transparent")
+    linha_titulo.pack(fill="x", padx=12, pady=(12, 4))
+    label_titulo.pack(in_=linha_titulo, side="left", anchor="w")
+    frame_botoes = criar_frame_botoes_titulo_grid(linha_titulo)
 
     frame_tabela = tk.Frame(card, bg=CORES["superficie"])
     frame_tabela.pack(fill="both", expand=expandir, padx=12, pady=(0, 12))
@@ -171,6 +179,7 @@ def criar_card_tabela(
     tabela._card_pai = card  # type: ignore[attr-defined]
     tabela._label_vazio = label_vazio  # type: ignore[attr-defined]
     tabela._label_titulo_card = label_titulo  # type: ignore[attr-defined]
+    vincular_botao_exportar_treeview(frame_botoes, tabela, titulo, janela_pai=card)
 
     return tabela
 

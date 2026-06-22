@@ -307,6 +307,7 @@ class JanelaHubTesouro(ctk.CTkToplevel):
             linhas,
             self._ordenacao_tabela,
             self._preencher_tabela,
+            nome_arquivo_exportacao="tesouro_direto",
         )
 
     @staticmethod

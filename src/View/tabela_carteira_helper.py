@@ -22,6 +22,10 @@ from src.View.grid_interacao_treeview_helper import (
     sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
 )
+from src.View.exportar_xlsx_grid_helper import (
+    criar_frame_botoes_titulo_grid,
+    vincular_botao_exportar_treeview,
+)
 from src.View.tema import CORES
 
 _COLUNAS = (
@@ -215,18 +219,7 @@ def criar_grid_carteira(
         text_color=CORES["texto"],
     ).pack(side="left", anchor="w")
 
-    if ao_abrir_tela_cheia is not None:
-        ctk.CTkButton(
-            linha_titulo,
-            text=texto_botao_tela_cheia,
-            command=ao_abrir_tela_cheia,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=130,
-            height=28,
-            font=ctk.CTkFont(size=12),
-        ).pack(side="right")
+    frame_botoes = criar_frame_botoes_titulo_grid(linha_titulo)
 
     ctk.CTkLabel(
         card,
@@ -296,6 +289,19 @@ def criar_grid_carteira(
     tabela._scroll_y = scroll_y  # type: ignore[attr-defined]
     tabela._scroll_x = scroll_x  # type: ignore[attr-defined]
     tabela._modo_tela_cheia = modo_tela_cheia  # type: ignore[attr-defined]
+    if ao_abrir_tela_cheia is not None:
+        ctk.CTkButton(
+            frame_botoes,
+            text=texto_botao_tela_cheia,
+            command=ao_abrir_tela_cheia,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=130,
+            height=28,
+            font=ctk.CTkFont(size=12),
+        ).pack(side="right", padx=(8, 0))
+    vincular_botao_exportar_treeview(frame_botoes, tabela, titulo, janela_pai=card)
     if not rolagem_pagina:
         vincular_ajuste_altura_grid_carteira(tabela)
     return tabela

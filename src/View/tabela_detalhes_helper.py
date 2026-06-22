@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
+from src.View.exportar_xlsx_grid_helper import montar_barra_exportacao_zebrada
 from src.View.grid_ordenacao_helper import (
     EstadoOrdenacaoColuna,
     LinhaTabelaOrdenavel,
@@ -65,12 +66,23 @@ def renderizar_tabela_zebrada(
     ao_mudar_ordenacao: Callable[[], None],
     opcoes_fonte: OpcoesFonteGrid | None = None,
     largura_wrap: int | None = None,
+    nome_arquivo_exportacao: str | None = None,
 ) -> None:
     """Desenha cabecalho ordenavel e linhas zebradas ja ordenadas."""
 
     def _clicar_coluna(indice: int) -> None:
         estado_ordenacao.alternar(indice)
         ao_mudar_ordenacao()
+
+    linhas_ordenadas = ordenar_linhas_tabela(linhas, estado_ordenacao)
+    if nome_arquivo_exportacao:
+        montar_barra_exportacao_zebrada(
+            pai,
+            colunas,
+            [linha.valores for linha in linhas_ordenadas],
+            nome_arquivo_exportacao,
+            janela_pai=pai,
+        )
 
     adicionar_cabecalho_tabela(
         pai,
@@ -79,7 +91,6 @@ def renderizar_tabela_zebrada(
         estado_ordenacao,
         _clicar_coluna,
     )
-    linhas_ordenadas = ordenar_linhas_tabela(linhas, estado_ordenacao)
     for indice, linha in enumerate(linhas_ordenadas):
         adicionar_linha_zebrada(
             pai,

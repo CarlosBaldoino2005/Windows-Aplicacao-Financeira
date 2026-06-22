@@ -18,6 +18,10 @@ from src.View.grid_interacao_treeview_helper import (
     sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
 )
+from src.View.exportar_xlsx_grid_helper import (
+    criar_frame_botoes_titulo_grid,
+    vincular_botao_exportar_treeview,
+)
 from src.View.tema import CORES
 
 _COLUNAS = (
@@ -174,12 +178,17 @@ def criar_grid_negocios_agora(
     card = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=12)
     card.pack(fill="both", expand=True)
 
+    linha_titulo = ctk.CTkFrame(card, fg_color="transparent")
+    linha_titulo.pack(fill="x", padx=12, pady=(12, 4))
+
     ctk.CTkLabel(
-        card,
+        linha_titulo,
         text=titulo,
         font=ctk.CTkFont(size=16, weight="bold"),
         text_color=CORES["texto"],
-    ).pack(anchor="w", padx=12, pady=(12, 4))
+    ).pack(side="left", anchor="w")
+
+    frame_botoes = criar_frame_botoes_titulo_grid(linha_titulo)
 
     ctk.CTkLabel(
         card,
@@ -237,6 +246,7 @@ def criar_grid_negocios_agora(
     tabela._card_pai = card  # type: ignore[attr-defined]
     tabela._label_vazio = label_vazio  # type: ignore[attr-defined]
     _atualizar_cabecalhos_ordenacao(tabela)
+    vincular_botao_exportar_treeview(frame_botoes, tabela, titulo, janela_pai=card)
     return tabela
 
 

@@ -6,3 +6,4 @@ deep-translator>=1.11.4
 pywin32>=306
 plyer>=2.1.0
 reportlab>=4.2.0
+openpyxl>=3.1.2
