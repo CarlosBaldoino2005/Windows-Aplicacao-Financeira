@@ -1,6 +1,7 @@
 """Coordena carteira de investimentos entre interface e servicos."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
@@ -31,6 +32,7 @@ from src.Tool.carteira_dividendos_helper import (
     estimar_dividendo_proximo_mes,
     estimar_proximo_dividendo,
 )
+from src.Tool.dividendos_helper import extrair_pagamentos_dividendos
 from src.Tool.carteira_ativo_helper import (
     buscar_indices_por_termo,
     inferir_tipo_ativo_carteira,
@@ -131,11 +133,11 @@ class ControladorCarteira:
             return False, "Posicao nao encontrada."
 
         dividendos = 0.0
-        if posicao.tipo_ativo != "indices":
-            detalhes, _ = self._detalhes.obter_detalhes(posicao.simbolo)
-            if detalhes is not None:
+        if self._tipo_ativo_pode_ter_dividendos(posicao.tipo_ativo):
+            pagamentos = extrair_pagamentos_dividendos(posicao.simbolo)
+            if pagamentos:
                 dividendos = calcular_dividendos_recebidos(
-                    detalhes.pagamentos_dividendos,
+                    pagamentos,
                     posicao.data_compra,
                     quantidade or 0,
                     data_fim_texto=data_venda,
@@ -298,6 +300,8 @@ class ControladorCarteira:
         for resumo in self._mercado_etfs.buscar_resumos(por_tipo["etfs"]):
             cotacoes[("etfs", resumo.simbolo)] = resumo
 
+        pagamentos_por_simbolo = self._carregar_pagamentos_dividendos(posicoes)
+
         linhas: list[LinhaCarteira] = []
         for posicao in posicoes:
             cotacao = cotacoes.get((posicao.tipo_ativo, posicao.simbolo))
@@ -307,22 +311,21 @@ class ControladorCarteira:
             prox_valor_cota = None
             prox_total = None
 
-            if posicao.tipo_ativo != "indices":
-                detalhes, _ = self._detalhes.obter_detalhes(posicao.simbolo)
-                if detalhes is not None:
-                    dividendos = calcular_dividendos_recebidos(
-                        detalhes.pagamentos_dividendos,
-                        posicao.data_compra,
-                        posicao.quantidade,
-                    )
-                    dividendo_prev_mes = estimar_dividendo_proximo_mes(
-                        detalhes.pagamentos_dividendos,
-                        posicao.quantidade,
-                    )
-                    prox_data, prox_valor_cota, prox_total = estimar_proximo_dividendo(
-                        detalhes.pagamentos_dividendos,
-                        posicao.quantidade,
-                    )
+            pagamentos = pagamentos_por_simbolo.get(posicao.simbolo)
+            if pagamentos:
+                dividendos = calcular_dividendos_recebidos(
+                    pagamentos,
+                    posicao.data_compra,
+                    posicao.quantidade,
+                )
+                dividendo_prev_mes = estimar_dividendo_proximo_mes(
+                    pagamentos,
+                    posicao.quantidade,
+                )
+                prox_data, prox_valor_cota, prox_total = estimar_proximo_dividendo(
+                    pagamentos,
+                    posicao.quantidade,
+                )
 
             linhas.append(
                 LinhaCarteira(
@@ -354,6 +357,39 @@ class ControladorCarteira:
         except Exception as exc:
             return None, f"Nao foi possivel gerar o PDF: {exc}", None
         return Path(caminho), None, assunto
+
+    @staticmethod
+    def _tipo_ativo_pode_ter_dividendos(tipo: TipoAtivoCarteira) -> bool:
+        return tipo not in ("indices", "cripto")
+
+    def _carregar_pagamentos_dividendos(
+        self, posicoes: list[PosicaoCarteira]
+    ) -> dict[str, list]:
+        """Busca historico de dividendos em paralelo (apenas o necessario para a grid)."""
+        simbolos = list(
+            dict.fromkeys(
+                posicao.simbolo
+                for posicao in posicoes
+                if self._tipo_ativo_pode_ter_dividendos(posicao.tipo_ativo)
+            )
+        )
+        if not simbolos:
+            return {}
+
+        saida: dict[str, list] = {}
+        workers = min(8, len(simbolos))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futuros = {
+                executor.submit(extrair_pagamentos_dividendos, simbolo): simbolo
+                for simbolo in simbolos
+            }
+            for futuro in as_completed(futuros):
+                simbolo = futuros[futuro]
+                try:
+                    saida[simbolo] = futuro.result()
+                except Exception:
+                    saida[simbolo] = []
+        return saida
 
     def _mercado_por_tipo(self, tipo: TipoAtivoCarteira):
         if tipo == "cripto":
