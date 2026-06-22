@@ -31,6 +31,7 @@ from src.Service.agora_metricas_mercado_servico import AgoraMetricasMercadoServi
 from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
 from src.View.campo_data_calendario_helper import montar_campo_data_calendario
 from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
+from src.View.janela_negocios_agora import JanelaNegociosAgora, abrir_janela_negocios_agora
 from src.View import mensagem_helper as messagebox
 from src.View.agora_painel_metricas_helper import PainelMetricasAgora
 from src.View.destaque_cotacao_helper import buscar_cotacao_com_cambio
@@ -110,6 +111,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._editando_alerta = False
         self._bloqueio_foco_alerta = False
         self._job_redimensionar_grafico: str | None = None
+        self._janela_negocios: JanelaNegociosAgora | None = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo}")
@@ -203,6 +205,17 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=88,
+            height=28,
+        ).pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(
+            barra_dia,
+            text="Negocios",
+            command=self._abrir_negocios,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=96,
             height=28,
         ).pack(side="left", padx=(8, 0))
 
@@ -473,6 +486,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._simbolo,
             data_ref,
             linha_carteira=self._linha_carteira,
+        )
+
+    def _abrir_negocios(self) -> None:
+        self._janela_negocios = abrir_janela_negocios_agora(
+            self,
+            self._simbolo,
+            janela_atual=self._janela_negocios,
         )
 
     def _alternar_pausa(self) -> None:

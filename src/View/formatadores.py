@@ -30,6 +30,23 @@ def formatar_percentual(valor: float | None, casas: int = 2) -> str:
     return f"{valor * 100:.{casas}f}%"
 
 
+def formatar_preco_negocio(valor: float | None, casas: int = 2) -> str:
+    """Preco numerico pt-BR sem simbolo de moeda (ex.: 56,85)."""
+    if valor is None:
+        return "—"
+    texto = f"{valor:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return texto
+
+
+def formatar_inteiro_ptbr(valor: int | float | None) -> str:
+    """Inteiro com separador de milhar pt-BR (ex.: 1.872)."""
+    if valor is None:
+        return "—"
+    inteiro = int(valor)
+    texto = f"{inteiro:,}".replace(",", ".")
+    return texto
+
+
 def formatar_numero_grande(valor: float | None, moeda: str = "BRL") -> str:
     """Formata valores muito grandes (bilhoes/milhoes) para leitura em pt-BR."""
     if valor is None:
