@@ -15,10 +15,12 @@ from src.View.grafico_helper import (
     minutos_dia_para_horario,
 )
 from src.View.grafico_modelo_helper import ModeloGrafico, _marcar_ultimo_ponto_serie, desenhar_serie_preco_principal
+from src.Tool.projecao_intraday_agora_helper import ProjecaoFimDiaAgora
 from src.View.tema import CORES
 
 _COR_ALTA_GOOGLE = "#34A853"
 _COR_BAIXA_GOOGLE = "#EA4335"
+_LARGURA_LINHA_PROJECAO = 1.8
 
 
 def calcular_preco_fechamento_anterior(preco: float | None, variacao_valor: float | None) -> float | None:
@@ -46,6 +48,7 @@ def calcular_limites_eixo_agora(
     valores: list[float] | np.ndarray,
     *,
     preco_fechamento_anterior: float | None = None,
+    projecao: ProjecaoFimDiaAgora | None = None,
     margem_y_pct: float = 0.12,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     """Limites de X e Y com zoom no preco (sem iniciar em zero)."""
@@ -55,6 +58,8 @@ def calcular_limites_eixo_agora(
     referencias_y = list(ys.astype(float))
     if preco_fechamento_anterior is not None:
         referencias_y.append(float(preco_fechamento_anterior))
+    if projecao is not None and projecao.valores:
+        referencias_y.extend(float(valor) for valor in projecao.valores)
 
     y_min = float(min(referencias_y))
     y_max = float(max(referencias_y))
@@ -64,6 +69,8 @@ def calcular_limites_eixo_agora(
 
     x_min_dados = float(xs.min())
     x_max_dados = float(xs.max())
+    if projecao is not None and projecao.posicoes_x:
+        x_max_dados = max(x_max_dados, float(max(projecao.posicoes_x)))
     inicio_pregao = HORA_INICIO_PREGAO_AGORA * 60
     fim_pregao = HORA_FIM_PREGAO_AGORA * 60
 
@@ -142,6 +149,60 @@ def marcar_ultimo_ponto_agora(
 ) -> None:
     """Circulo no ultimo preco, como no Google Finance."""
     _marcar_ultimo_ponto_serie(eixo, indices, valores, cor)
+
+
+def obter_cor_projecao_agora() -> str:
+    """Cor distinta da serie real (verde/vermelho) para a projecao."""
+    return CORES.get("aviso", "#D97706")
+
+
+def desenhar_projecao_fim_dia_agora(
+    eixo,
+    projecao: ProjecaoFimDiaAgora,
+    moeda: str,
+    xlim: tuple[float, float],
+) -> None:
+    """Linha tracejada do preco atual ate o fechamento projetado."""
+    if not projecao.posicoes_x or len(projecao.posicoes_x) < 2:
+        return
+
+    cor = obter_cor_projecao_agora()
+    posicoes = np.asarray(projecao.posicoes_x, dtype=float)
+    valores = np.asarray(projecao.valores, dtype=float)
+
+    eixo.plot(
+        posicoes,
+        valores,
+        color=cor,
+        linewidth=_LARGURA_LINHA_PROJECAO,
+        linestyle=(0, (6, 4)),
+        alpha=0.92,
+        zorder=2,
+        label="Projecao fechamento",
+    )
+
+    preco_fim = projecao.preco_fechamento_projetado
+    eixo.scatter(
+        [posicoes[-1]],
+        [valores[-1]],
+        s=36,
+        color=cor,
+        edgecolors=CORES.get("superficie", "#FFFFFF"),
+        linewidths=1.2,
+        zorder=4,
+    )
+    texto = f"Proj. {formatar_moeda(preco_fim, moeda)}"
+    eixo.text(
+        xlim[1],
+        preco_fim,
+        f"  {texto}",
+        va="center",
+        ha="left",
+        fontsize=8,
+        color=cor,
+        clip_on=False,
+        zorder=5,
+    )
 
 
 def desenhar_serie_agora(

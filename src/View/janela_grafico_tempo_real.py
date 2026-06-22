@@ -27,6 +27,7 @@ from src.Tool.janela_helper import (
     janela_ui_ainda_ativa,
 )
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
+from src.Tool.projecao_intraday_agora_helper import calcular_projecao_fim_dia
 from src.Service.agora_metricas_mercado_servico import AgoraMetricasMercadoServico, MetricasMercadoAgora
 from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
 from src.View.campo_data_calendario_helper import montar_campo_data_calendario
@@ -41,6 +42,7 @@ from src.View.grafico_agora_helper import (
     calcular_preco_fechamento_anterior,
     configurar_eixo_intraday_agora,
     desenhar_linha_fechamento_anterior,
+    desenhar_projecao_fim_dia_agora,
     desenhar_serie_agora,
     obter_cor_tendencia_agora,
 )
@@ -615,6 +617,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                         cotacao_viva.preco,
                         cotacao_viva.variacao_valor,
                     )
+                projecao = calcular_projecao_fim_dia(posicoes_x, valores)
                 intervalo = "1 min" if periodo == "agora" else "5 min"
                 titulo = f"Intraday — {codigo_exibicao(self._simbolo)} ({intervalo})"
                 self._dados_grafico_atual = {
@@ -625,11 +628,16 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                     "moeda": moeda,
                     "pontos_tooltip": pontos_tooltip,
                     "preco_fechamento_anterior": preco_fechamento_anterior,
+                    "projecao": projecao,
                 }
                 self._aplicar_dados_grafico(self._dados_grafico_atual)
 
                 agora = datetime.now().strftime("%H:%M:%S")
                 status = f"Ultima atualizacao as {agora} · intervalo {intervalo} · {len(pontos)} pontos"
+                if projecao is not None:
+                    status += (
+                        f" · projecao fechamento {formatar_moeda(projecao.preco_fechamento_projetado, moeda)}"
+                    )
                 if periodo == "agora" and atraso_candles and atraso_candles >= 2:
                     status += (
                         f" · candles Yahoo ~{atraso_candles} min atrasados"
@@ -739,6 +747,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         titulo: str,
         moeda: str,
         preco_fechamento_anterior: float | None,
+        projecao=None,
         xlim_fixo: tuple[float, float] | None = None,
         ylim_fixo: tuple[float, float] | None = None,
     ):
@@ -748,6 +757,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 posicoes,
                 valores,
                 preco_fechamento_anterior=preco_fechamento_anterior,
+                projecao=projecao,
             )
         else:
             xlim, ylim = xlim_fixo, ylim_fixo
@@ -765,11 +775,23 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             cor=cor,
             y_base=ylim[0],
         )
+        if projecao is not None:
+            desenhar_projecao_fim_dia_agora(eixo, projecao, moeda, xlim)
         desenhar_linha_fechamento_anterior(eixo, preco_fechamento_anterior, moeda, xlim)
         configurar_eixo_intraday_agora(eixo, xlim, ylim)
         eixo.set_ylabel("")
         eixo.set_xlabel("")
         finalizar_figura_grafico(eixo, figura, titulo)
+        if projecao is not None:
+            legenda = eixo.legend(
+                loc="upper left",
+                fontsize=8,
+                framealpha=0.85,
+                facecolor=CORES.get("superficie", "#FFFFFF"),
+                edgecolor=CORES.get("borda", "#E2E8F0"),
+            )
+            for texto in legenda.get_texts():
+                texto.set_color(CORES.get("texto", "#0F172A"))
         return linha, xlim, ylim
 
     def _atualizar_serie_grafico_preservando_zoom(
@@ -802,6 +824,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             titulo=titulo,
             moeda=moeda,
             preco_fechamento_anterior=dados.get("preco_fechamento_anterior"),
+            projecao=dados.get("projecao"),
             xlim_fixo=tuple(xlim) if preservar_zoom else None,
             ylim_fixo=tuple(ylim) if preservar_zoom else None,
         )
@@ -1456,6 +1479,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             titulo=titulo,
             moeda=moeda,
             preco_fechamento_anterior=dados.get("preco_fechamento_anterior"),
+            projecao=dados.get("projecao"),
         )
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
