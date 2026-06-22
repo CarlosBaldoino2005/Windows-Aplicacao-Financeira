@@ -39,11 +39,12 @@ from src.View.tabela_mercado_helper import (
 )
 from src.View.tema import CORES
 
-TipoPainelFavoritos = Literal["acoes", "cripto", "fiis", "dividendos"]
+TipoPainelFavoritos = Literal["acoes", "cripto", "etfs", "fiis", "dividendos"]
 
 _TITULOS_PAINEL: dict[TipoPainelFavoritos, str] = {
     "acoes": "Acoes favoritas",
     "cripto": "Criptos favoritas",
+    "etfs": "ETFs favoritos",
     "fiis": "FIIs favoritos",
     "dividendos": "Empresas favoritas (dividendos)",
 }
@@ -51,6 +52,10 @@ _TITULOS_PAINEL: dict[TipoPainelFavoritos, str] = {
 _DESCRICOES_PAINEL: dict[TipoPainelFavoritos, str] = {
     "acoes": "Adicione acoes que deseja acompanhar. A lista fica salva neste computador.",
     "cripto": "Adicione criptomoedas que deseja acompanhar. A lista fica salva neste computador.",
+    "etfs": (
+        "Adicione ETFs que deseja acompanhar. "
+        "A lista fica salva em dados/favoritos_etfs.json neste computador."
+    ),
     "fiis": (
         "Adicione fundos imobiliarios (FIIs) que deseja acompanhar. "
         "A lista fica salva em dados/favoritos_fiis.json neste computador."
@@ -64,6 +69,7 @@ _DESCRICOES_PAINEL: dict[TipoPainelFavoritos, str] = {
 _TITULOS_GRID: dict[TipoPainelFavoritos, str] = {
     "acoes": "Suas acoes favoritas (duplo clique abre o grafico)",
     "cripto": "Suas criptos favoritas (duplo clique abre o grafico)",
+    "etfs": "Seus ETFs favoritos (duplo clique abre o grafico)",
     "fiis": "Seus FIIs favoritos (duplo clique abre o grafico)",
     "dividendos": "Suas empresas favoritas (duplo clique abre o grafico)",
 }
@@ -238,6 +244,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
         )
         if self._tipo_painel == "fiis":
             definir_rotulo_coluna_simbolo(self._tabela, "FII")
+        if self._tipo_painel == "etfs":
+            definir_rotulo_coluna_simbolo(self._tabela, "ETF")
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
         rodape.pack(fill="x", padx=16, pady=(0, 12))
@@ -436,6 +444,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             return "Nenhuma cripto favorita. Use Buscar ou Adicionar acima."
         if self._tipo_painel == "fiis":
             return "Nenhum FII favorito. Use Buscar ou Adicionar acima."
+        if self._tipo_painel == "etfs":
+            return "Nenhum ETF favorito. Use Buscar ou Adicionar acima."
         if self._tipo_painel == "dividendos":
             qtd_fiis = len(FavoritosFiisServico().listar())
             if qtd_fiis > 0:
@@ -494,6 +504,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             preencher_tabela(self._tabela, cotacoes)
             if self._tipo_painel == "fiis":
                 definir_rotulo_coluna_simbolo(self._tabela, "FII")
+            if self._tipo_painel == "etfs":
+                definir_rotulo_coluna_simbolo(self._tabela, "ETF")
             hora = datetime.now().strftime("%H:%M:%S")
             self._label_status.configure(
                 text=f"{len(cotacoes)} favorita(s) — atualizado as {hora}",

@@ -20,6 +20,7 @@ from src.Model.monitoramento import TipoAtivoMonitoramento
 from src.Service.carteira_servico import CarteiraServico
 from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
+from src.Service.mercado_etfs_servico import MercadoEtfsServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
 from src.Service.mercado_servico import MercadoServico, _alinhar_series_comparacao
 from src.Service.relatorio_carteira_servico import RelatorioCarteiraServico
@@ -46,6 +47,7 @@ class ControladorCarteira:
         self._mercado_acoes = MercadoServico()
         self._mercado_cripto = MercadoCriptoServico()
         self._mercado_fiis = MercadoFiisServico()
+        self._mercado_etfs = MercadoEtfsServico()
         self._detalhes = DetalhesAcaoServico()
         self._monitoramento = ControladorMonitoramento()
 
@@ -167,7 +169,7 @@ class ControladorCarteira:
     def _moeda_por_venda(venda) -> str:
         if venda.tipo_ativo == "cripto":
             return "USD"
-        if venda.tipo_ativo == "fiis" or venda.simbolo.endswith(".SA"):
+        if venda.tipo_ativo in ("fiis", "etfs") or venda.simbolo.endswith(".SA"):
             return "BRL"
         return "USD"
 
@@ -244,7 +246,7 @@ class ControladorCarteira:
         for item in buscar_indices_por_termo(texto, limite=limite):
             incluir(item, "indices")
 
-        for tipo_mon in ("acoes", "fiis", "cripto"):
+        for tipo_mon in ("acoes", "etfs", "fiis", "cripto"):
             itens, _erro = self._monitoramento.pesquisar_ativos(
                 tipo_mon,  # type: ignore[arg-type]
                 texto,
@@ -274,6 +276,7 @@ class ControladorCarteira:
         por_tipo: dict[TipoAtivoCarteira, list[str]] = {
             "acoes": [],
             "cripto": [],
+            "etfs": [],
             "fiis": [],
             "indices": [],
         }
@@ -292,6 +295,8 @@ class ControladorCarteira:
             cotacoes[("cripto", resumo.simbolo)] = resumo
         for resumo in self._mercado_fiis.buscar_resumos(por_tipo["fiis"]):
             cotacoes[("fiis", resumo.simbolo)] = resumo
+        for resumo in self._mercado_etfs.buscar_resumos(por_tipo["etfs"]):
+            cotacoes[("etfs", resumo.simbolo)] = resumo
 
         linhas: list[LinhaCarteira] = []
         for posicao in posicoes:
@@ -355,6 +360,8 @@ class ControladorCarteira:
             return self._mercado_cripto
         if tipo == "fiis":
             return self._mercado_fiis
+        if tipo == "etfs":
+            return self._mercado_etfs
         return self._mercado_acoes
 
     def comparar_ativos_carteira(

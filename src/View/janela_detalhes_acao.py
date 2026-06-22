@@ -23,7 +23,9 @@ from src.View.explicacao_indicador_helper import (
     GerenciadorExplicacaoIndicadores,
     adicionar_botao_explicacao_indicador,
 )
+from src.Tool.etfs_helper import eh_etf
 from src.View.janela_informacoes_empresa import JanelaInformacoesEmpresa
+from src.View.janela_composicao_etf import JanelaComposicaoEtf
 from src.View.janela_opinioes_analistas import (
     ROTULOS_INDICADORES_ANALISTAS,
     abrir_janela_opinioes_analistas,
@@ -55,6 +57,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._controlador = controlador
         self._simbolo = simbolo
         self._modo_cripto = simbolo.endswith("-USD")
+        self._modo_etf = eh_etf(simbolo)
         self._nomes_abas = NOMES_ABAS_CRIPTO if self._modo_cripto else NOMES_ABAS_ACAO
         self._frames_por_aba: dict[str, ctk.CTkFrame] = {}
         self._botoes_aba: dict[str, ctk.CTkButton] = {}
@@ -64,6 +67,7 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
         self._janela_info_empresa: JanelaInformacoesEmpresa | None = None
         self._janela_grafico: ctk.CTkToplevel | None = None
         self._janela_opinioes_analistas: ctk.CTkToplevel | None = None
+        self._janela_composicao_etf: JanelaComposicaoEtf | None = None
 
         codigo = simbolo.replace(".SA", "").replace("-USD", "")
         self.title(f"Mais detalhes — {codigo}")
@@ -135,6 +139,17 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="left")
+
+        if self._modo_etf:
+            ctk.CTkButton(
+                rodape,
+                text="Composicao da carteira",
+                command=self._abrir_composicao_etf,
+                fg_color=CORES["primaria"],
+                hover_color=CORES["primariaHover"],
+                text_color=CORES.get("textoInverso", "#FFFFFF"),
+                width=200,
+            ).pack(side="left", padx=(8, 0))
         ctk.CTkButton(
             rodape,
             text="Fechar",
@@ -171,7 +186,24 @@ class JanelaDetalhesAcao(ctk.CTkToplevel):
                     self._janela_opinioes_analistas.destroy()
             except Exception:
                 pass
+        if self._janela_composicao_etf is not None:
+            try:
+                if self._janela_composicao_etf.winfo_exists():
+                    self._janela_composicao_etf.destroy()
+            except Exception:
+                pass
         self.destroy()
+
+    def _abrir_composicao_etf(self) -> None:
+        if self._janela_composicao_etf is not None:
+            try:
+                if self._janela_composicao_etf.winfo_exists():
+                    self._janela_composicao_etf.focus_force()
+                    self._janela_composicao_etf.lift()
+                    return
+            except Exception:
+                pass
+        self._janela_composicao_etf = JanelaComposicaoEtf(self, self._simbolo)
 
     def _termo_busca_noticias(self) -> str:
         if self._detalhes and self._detalhes.codigo:

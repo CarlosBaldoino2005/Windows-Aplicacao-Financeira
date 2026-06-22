@@ -1,6 +1,7 @@
 """Conversao e rotulos para exibir cotacao em real e dolar."""
 from __future__ import annotations
 
+from src.Tool.etfs_helper import eh_etf
 from src.Tool.fiis_helper import eh_fii
 
 
@@ -15,6 +16,8 @@ def rotulo_tipo_ativo(simbolo: str) -> str:
         return "Criptomoeda"
     if eh_fii(simbolo):
         return "Fundo imobiliario"
+    if eh_etf(simbolo):
+        return "ETF"
     return "Acao"
 
 

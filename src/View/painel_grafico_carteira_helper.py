@@ -37,9 +37,12 @@ class PainelGraficoCarteira:
         self,
         janela_pai: ctk.CTkToplevel,
         controlador: ControladorCarteira,
+        *,
+        modo_janela: bool = False,
     ) -> None:
         self._janela = janela_pai
         self._controlador = controlador
+        self._modo_janela = modo_janela
         self._raiz: ctk.CTkFrame | None = None
         self._frame_grafico: ctk.CTkFrame | None = None
         self._label_status: ctk.CTkLabel | None = None
@@ -113,16 +116,17 @@ class PainelGraficoCarteira:
             height=32,
         ).pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(
-            barra,
-            text="Abrir em tela cheia",
-            command=self._abrir_tela_cheia,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=150,
-            height=32,
-        ).pack(side="left")
+        if not self._modo_janela:
+            ctk.CTkButton(
+                barra,
+                text="Abrir em tela cheia",
+                command=self._abrir_tela_cheia,
+                fg_color=CORES["primaria"],
+                hover_color=CORES["primariaHover"],
+                text_color=CORES.get("textoInverso", "#FFFFFF"),
+                width=150,
+                height=32,
+            ).pack(side="left")
 
         self._frame_datas = ctk.CTkFrame(card, fg_color="transparent")
         ctk.CTkLabel(self._frame_datas, text="Inicio (dd/mm/aaaa)").pack(side="left", padx=(12, 4))
@@ -148,10 +152,13 @@ class PainelGraficoCarteira:
             card,
             fg_color=CORES["fundo"],
             corner_radius=8,
-            height=ALTURA_GRAFICO_PX,
+            **({} if self._modo_janela else {"height": ALTURA_GRAFICO_PX}),
         )
-        self._frame_grafico.pack(fill="x", padx=12, pady=(0, 12))
-        self._frame_grafico.pack_propagate(False)
+        if self._modo_janela:
+            self._frame_grafico.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        else:
+            self._frame_grafico.pack(fill="x", padx=12, pady=(0, 12))
+            self._frame_grafico.pack_propagate(False)
 
         return card
 

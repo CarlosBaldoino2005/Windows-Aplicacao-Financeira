@@ -6,6 +6,7 @@ import re
 from src.Model.carteira import TipoAtivoCarteira
 from src.Model.indices_universo import INDICES_MERCADO
 from src.Model.resultado_busca import ResultadoBusca
+from src.Tool.etfs_helper import eh_etf
 from src.Tool.fiis_helper import eh_fii
 from src.Tool.texto_busca_helper import normalizar_texto_busca
 from src.Tool.validadores import (
@@ -37,6 +38,8 @@ def inferir_tipo_ativo_carteira(simbolo: str) -> TipoAtivoCarteira:
     codigo_b3 = limpo.replace(".SA", "")
     if re.match(r"^[A-Z]{4}\d{1,2}$", codigo_b3):
         ticker_b3 = limpo if ".SA" in limpo else f"{codigo_b3}.SA"
+        if eh_etf(ticker_b3):
+            return "etfs"
         if eh_fii(ticker_b3):
             return "fiis"
         return "acoes"
@@ -45,6 +48,8 @@ def inferir_tipo_ativo_carteira(simbolo: str) -> TipoAtivoCarteira:
         return "cripto"
 
     simbolo_acao, _ = normalizar_simbolo(simbolo)
+    if simbolo_acao and eh_etf(simbolo_acao):
+        return "etfs"
     if simbolo_acao and eh_fii(simbolo_acao):
         return "fiis"
 
@@ -101,14 +106,16 @@ def normalizar_simbolo_carteira(
             return None, None, "Codigo nao pertence a um indice cadastrado."
         return simbolo, "indices", None
 
-    if tipo in ("acoes", "fiis"):
+    if tipo in ("acoes", "fiis", "etfs"):
         simbolo, erro = normalizar_simbolo(texto)
         if erro or not simbolo:
             return None, None, erro
         tipo_inferido = inferir_tipo_ativo_carteira(simbolo)
         if tipo == "fiis" and tipo_inferido != "fiis":
             return None, None, "Codigo informado nao e um FII."
-        if tipo == "acoes" and tipo_inferido not in ("acoes", "fiis"):
+        if tipo == "etfs" and tipo_inferido != "etfs":
+            return None, None, "Codigo informado nao e um ETF."
+        if tipo == "acoes" and tipo_inferido not in ("acoes", "fiis", "etfs"):
             return None, None, "Codigo informado nao e uma acao."
         return simbolo, tipo_inferido if tipo is None else tipo, None
 

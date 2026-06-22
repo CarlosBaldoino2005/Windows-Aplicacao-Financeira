@@ -75,4 +75,6 @@ class DadosRelatorioCarteira:
     acoes_em_queda: list[LinhaRelatorioMercado] = field(default_factory=list)
     fiis_em_alta: list[LinhaRelatorioMercado] = field(default_factory=list)
     fiis_em_queda: list[LinhaRelatorioMercado] = field(default_factory=list)
+    cripto_em_alta: list[LinhaRelatorioMercado] = field(default_factory=list)
+    cripto_em_queda: list[LinhaRelatorioMercado] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)

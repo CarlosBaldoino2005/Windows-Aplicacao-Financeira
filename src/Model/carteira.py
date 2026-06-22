@@ -7,11 +7,12 @@ from typing import Literal
 from src.Model.cotacao import CotacaoResumo
 from src.Model.resultado_busca import ResultadoBusca
 
-TipoAtivoCarteira = Literal["acoes", "cripto", "fiis", "indices"]
+TipoAtivoCarteira = Literal["acoes", "cripto", "etfs", "fiis", "indices"]
 
 TIPOS_ATIVO_CARTEIRA: tuple[TipoAtivoCarteira, ...] = (
     "acoes",
     "cripto",
+    "etfs",
     "fiis",
     "indices",
 )
@@ -19,6 +20,7 @@ TIPOS_ATIVO_CARTEIRA: tuple[TipoAtivoCarteira, ...] = (
 ROTULOS_TIPO_CARTEIRA: dict[TipoAtivoCarteira, str] = {
     "acoes": "Acao",
     "cripto": "Criptomoeda",
+    "etfs": "ETF",
     "fiis": "FII",
     "indices": "Indice",
 }
@@ -155,4 +157,6 @@ def tipo_carteira_para_monitoramento(tipo: TipoAtivoCarteira) -> str:
         return "cripto"
     if tipo == "fiis":
         return "fiis"
+    if tipo == "etfs":
+        return "etfs"
     return "acoes"

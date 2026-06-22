@@ -1,7 +1,7 @@
 """Provedor de backup 2: API REST direta do Yahoo Chart (B3 e EUA)."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from urllib.parse import quote
 
 from src.Model.cotacao import CotacaoResumo, PontoHistorico, SerieHistorica
@@ -76,6 +76,57 @@ class ProvedorYahooChart:
             return self._serie_de_chart(simbolo, rotulo, dados)
         except Exception as exc:
             self._log.aviso(f"{self.nome}: historico {simbolo}: {exc}")
+            return None
+
+    def buscar_intraday_em_data(
+        self,
+        simbolo: str,
+        data_ref: date,
+        interval: str = "1m",
+    ) -> SerieHistorica | None:
+        """Candles intraday de um dia especifico (Yahoo Chart API)."""
+        try:
+            inicio = datetime.combine(data_ref, time(0, 0))
+            fim = datetime.combine(data_ref, time(23, 59, 59))
+            period1 = int(inicio.timestamp())
+            period2 = int((fim + timedelta(days=1)).timestamp())
+            url = (
+                f"{URL_CHART.format(simbolo=quote(simbolo))}"
+                f"?period1={period1}&period2={period2}&interval={interval}"
+            )
+            dados = requisicao_json(url, self._log)
+            serie = self._serie_de_chart(simbolo, f"dia_{data_ref.isoformat()}", dados)
+            if serie is None:
+                return None
+            pontos = _filtrar_pontos_na_data(serie.pontos, data_ref)
+            if not pontos:
+                return None
+            return SerieHistorica(simbolo=simbolo, periodo=serie.periodo, pontos=pontos)
+        except Exception as exc:
+            self._log.aviso(f"{self.nome}: intraday {simbolo} em {data_ref}: {exc}")
+            return None
+
+    def buscar_fechamento_diario_em_data(
+        self,
+        simbolo: str,
+        data_ref: date,
+    ) -> float | None:
+        """Fechamento diario de uma data (para calcular variacao do dia)."""
+        try:
+            inicio = datetime.combine(data_ref, time(0, 0))
+            fim = datetime.combine(data_ref, time(23, 59, 59))
+            period1 = int(inicio.timestamp())
+            period2 = int((fim + timedelta(days=1)).timestamp())
+            url = (
+                f"{URL_CHART.format(simbolo=quote(simbolo))}"
+                f"?period1={period1}&period2={period2}&interval=1d"
+            )
+            dados = requisicao_json(url, self._log)
+            serie = self._serie_de_chart(simbolo, "fechamento_dia", dados)
+            if not serie or not serie.pontos:
+                return None
+            return float(serie.pontos[-1].preco_fechamento)
+        except Exception:
             return None
 
     def buscar_meta(self, simbolo: str) -> dict | None:
@@ -195,3 +246,27 @@ class ProvedorYahooChart:
         if not pontos:
             return None
         return SerieHistorica(simbolo=simbolo, periodo=rotulo, pontos=pontos)
+
+
+def _filtrar_pontos_na_data(pontos: list[PontoHistorico], data_ref: date) -> list[PontoHistorico]:
+    filtrados: list[PontoHistorico] = []
+    for ponto in pontos:
+        if _data_do_ponto_historico(ponto) == data_ref:
+            filtrados.append(ponto)
+    return filtrados
+
+
+def _data_do_ponto_historico(ponto: PontoHistorico) -> date | None:
+    texto = (ponto.data_exibicao or "").strip()
+    if len(texto) >= 10 and texto[2] == "/" and texto[5] == "/":
+        try:
+            dia, mes, ano = map(int, texto[:10].split("/"))
+            return date(ano, mes, dia)
+        except ValueError:
+            pass
+    if ponto.data_iso:
+        try:
+            return datetime.fromisoformat(ponto.data_iso.replace("Z", "+00:00")).date()
+        except ValueError:
+            pass
+    return None

@@ -6,12 +6,13 @@ from typing import Literal
 
 from src.Model.cotacao import CotacaoResumo
 
-TipoAtivoMonitoramento = Literal["acoes", "cripto", "fiis", "dividendos"]
+TipoAtivoMonitoramento = Literal["acoes", "cripto", "etfs", "fiis", "dividendos"]
 StatusMonitoramento = Literal["normal", "abaixo", "acima", "indisponivel", "pausado"]
 
 TIPOS_ATIVO_MONITORAMENTO: tuple[TipoAtivoMonitoramento, ...] = (
     "acoes",
     "cripto",
+    "etfs",
     "fiis",
     "dividendos",
 )
@@ -19,6 +20,7 @@ TIPOS_ATIVO_MONITORAMENTO: tuple[TipoAtivoMonitoramento, ...] = (
 ROTULOS_TIPO_ATIVO: dict[TipoAtivoMonitoramento, str] = {
     "acoes": "Acao",
     "cripto": "Criptomoeda",
+    "etfs": "ETF",
     "fiis": "Fundo imobiliario",
     "dividendos": "Dividendos",
 }

@@ -30,11 +30,12 @@ from src.View.tema import (
 _LARGURA = 480
 _ALTURA = 580
 
-EscopoQuantidadePainel = Literal["acoes", "cripto", "fiis", "dividendos"]
+EscopoQuantidadePainel = Literal["acoes", "cripto", "etfs", "fiis", "dividendos"]
 
 _TITULOS_ESCOPO: dict[EscopoQuantidadePainel, str] = {
     "acoes": "Configuracoes do painel",
     "cripto": "Configuracoes — criptomoedas",
+    "etfs": "Configuracoes — ETFs",
     "fiis": "Configuracoes — fundos imobiliarios",
     "dividendos": "Configuracoes — empresa + dividendos",
 }
@@ -154,6 +155,10 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
                 "Tema, quantidade de FIIs, fonte das grids e atualizacao automatica "
                 "de cotacoes."
             ),
+            "etfs": (
+                "Tema, quantidade de ETFs, fonte das grids e atualizacao automatica "
+                "de cotacoes."
+            ),
             "dividendos": (
                 "Tema, quantidade de empresas, fonte das grids e atualizacao automatica "
                 "de cotacoes."
@@ -201,6 +206,10 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
             "fiis": (
                 "Quantidade de FIIs (Em alta / Em queda / Todas)",
                 "Limite de linhas em cada aba do painel de fundos imobiliarios (1 a 100).",
+            ),
+            "etfs": (
+                "Quantidade de ETFs (Em alta / Em queda / Todas)",
+                "Limite de linhas em cada aba do painel de ETFs (1 a 100).",
             ),
             "dividendos": (
                 "Quantidade de empresas (Em alta / Em queda / Todas)",

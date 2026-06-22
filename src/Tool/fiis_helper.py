@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 from src.Model.fiis_universo import UNIDADES_NAO_FII, simbolo_esta_no_universo_fiis
+from src.Tool.etfs_helper import eh_etf
 
 
 def eh_fii(simbolo: str) -> bool:
     """Indica se o ticker e um fundo imobiliario brasileiro (lista curada ou padrao 11)."""
     limpo = (simbolo or "").strip().upper()
     if not limpo.endswith(".SA"):
+        return False
+
+    if eh_etf(limpo):
         return False
 
     if simbolo_esta_no_universo_fiis(limpo):

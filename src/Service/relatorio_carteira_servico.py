@@ -20,6 +20,7 @@ from src.Model.relatorio_carteira import (
     OhlcDia,
     ResumoRelatorioCarteira,
 )
+from src.Service.mercado_cripto_servico import MercadoCriptoServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
 from src.Service.mercado_servico import MercadoServico
 from src.Tool.cotacao_dual_helper import codigo_exibicao
@@ -41,6 +42,7 @@ class RelatorioCarteiraServico:
         self._pasta_relatorios = self._raiz / self._PASTA_RELATORIOS
         self._mercado_acoes = MercadoServico()
         self._mercado_fiis = MercadoFiisServico()
+        self._mercado_cripto = MercadoCriptoServico()
         self._log = RegistradorLog(self._raiz)
 
     def montar_dados(self, linhas: list[LinhaCarteira]) -> DadosRelatorioCarteira:
@@ -120,6 +122,16 @@ class RelatorioCarteiraServico:
             self._QUANTIDADE_DESTAQUES,
             "fiis",
         )
+        cripto_alta = self._listar_mercado(
+            self._mercado_cripto.listar_em_alta,
+            self._QUANTIDADE_DESTAQUES,
+            "cripto",
+        )
+        cripto_queda = self._listar_mercado(
+            self._mercado_cripto.listar_em_queda,
+            self._QUANTIDADE_DESTAQUES,
+            "cripto",
+        )
 
         return DadosRelatorioCarteira(
             gerado_em=agora.strftime("%d/%m/%Y %H:%M:%S"),
@@ -129,6 +141,8 @@ class RelatorioCarteiraServico:
             acoes_em_queda=acoes_queda,
             fiis_em_alta=fiis_alta,
             fiis_em_queda=fiis_queda,
+            cripto_em_alta=cripto_alta,
+            cripto_em_queda=cripto_queda,
             avisos=avisos,
         )
 
@@ -166,11 +180,12 @@ class RelatorioCarteiraServico:
         simbolo: str,
         tipo_ativo: str,
     ) -> tuple[OhlcDia | None, str | None]:
-        mercado = self._mercado_fiis if tipo_ativo == "fiis" else self._mercado_acoes
-        if tipo_ativo == "cripto":
-            from src.Service.mercado_cripto_servico import MercadoCriptoServico
-
-            mercado = MercadoCriptoServico()
+        if tipo_ativo == "fiis":
+            mercado = self._mercado_fiis
+        elif tipo_ativo == "cripto":
+            mercado = self._mercado_cripto
+        else:
+            mercado = self._mercado_acoes
 
         try:
             serie = mercado.buscar_historico(simbolo, "dia")
@@ -307,6 +322,20 @@ class RelatorioCarteiraServico:
         )
         elementos.extend(
             self._secao_mercado_pdf(subtitulo, "FIIs em queda no mercado", dados.fiis_em_queda)
+        )
+        elementos.extend(
+            self._secao_mercado_pdf(
+                subtitulo,
+                "Criptomoedas em alta no mercado",
+                dados.cripto_em_alta,
+            )
+        )
+        elementos.extend(
+            self._secao_mercado_pdf(
+                subtitulo,
+                "Criptomoedas em queda no mercado",
+                dados.cripto_em_queda,
+            )
         )
 
         if dados.avisos:

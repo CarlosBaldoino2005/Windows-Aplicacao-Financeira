@@ -12,11 +12,15 @@ def inferir_tipo_ativo_monitoramento(simbolo: str, controlador: Any) -> TipoAtiv
     """Deduz o tipo do ativo a partir do controlador e do simbolo Yahoo."""
     from src.Controller.controlador_cripto import ControladorCripto
     from src.Controller.controlador_dividendos import ControladorDividendos
+    from src.Controller.controlador_etfs import ControladorEtfs
     from src.Controller.controlador_fiis import ControladorFiis
+    from src.Tool.etfs_helper import eh_etf
     from src.Tool.fiis_helper import eh_fii
 
     if isinstance(controlador, ControladorCripto) or str(simbolo).endswith("-USD"):
         return "cripto"
+    if isinstance(controlador, ControladorEtfs) or eh_etf(simbolo):
+        return "etfs"
     if isinstance(controlador, ControladorFiis) or eh_fii(simbolo):
         return "fiis"
     if isinstance(controlador, ControladorDividendos):
@@ -33,6 +37,10 @@ def obter_controlador_por_tipo(tipo_ativo: TipoAtivoMonitoramento) -> Any:
         from src.Controller.controlador_cripto import ControladorCripto
 
         controlador = ControladorCripto()
+    elif tipo_ativo == "etfs":
+        from src.Controller.controlador_etfs import ControladorEtfs
+
+        controlador = ControladorEtfs()
     elif tipo_ativo == "fiis":
         from src.Controller.controlador_fiis import ControladorFiis
 

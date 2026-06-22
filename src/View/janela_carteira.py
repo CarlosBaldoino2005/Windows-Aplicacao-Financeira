@@ -44,8 +44,8 @@ from src.View.janela_carteira_posicoes_tela_cheia import JanelaCarteiraPosicoesT
 from src.View.janela_manutencao_ativo_carteira import abrir_manutencao_ativo_carteira
 from src.View.janela_blacklist_ativos import abrir_blacklist_ativos
 from src.View.janela_grafico_acao import JanelaGraficoAcao
+from src.View.janela_grafico_carteira import JanelaGraficoCarteira, abrir_grafico_carteira
 from src.View.janela_grafico_tempo_real import JanelaGraficoTempoReal, abrir_grafico_tempo_real
-from src.View.painel_grafico_carteira_helper import PainelGraficoCarteira
 from src.View.tabela_carteira_helper import (
     criar_grid_carteira,
     liberar_grid_carteira,
@@ -74,7 +74,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._janela_grafico_agora: JanelaGraficoTempoReal | None = None
         self._janela_blacklist = None
         self._janela_posicoes_tela_cheia: JanelaCarteiraPosicoesTelaCheia | None = None
-        self._painel_grafico: PainelGraficoCarteira | None = None
+        self._janela_grafico_carteira: JanelaGraficoCarteira | None = None
         self._tabela: ttk.Treeview | None = None
         self._linhas_cache: dict[str, LinhaCarteira] = {}
         self._atualizando = False
@@ -107,17 +107,20 @@ class JanelaCarteira(ctk.CTkToplevel):
         self.after(700, self._ajustar_layout_carteira)
 
     def _ajustar_layout_carteira(self) -> None:
-        """Garante area util do monitor e reaplica o grafico apos o layout estabilizar."""
+        """Garante area util do monitor apos o layout estabilizar."""
         if not janela_ui_ainda_ativa(self):
             return
         ajustar_janela_area_trabalho(self, self._janela_pai)
-        self._reaplicar_grafico_carteira()
 
     def _ao_fechar(self) -> None:
         self._versao_atualizacao += 1
         self._atualizador_auto.parar()
-        if self._painel_grafico is not None:
-            self._painel_grafico.liberar()
+        if self._janela_grafico_carteira is not None:
+            try:
+                if self._janela_grafico_carteira.winfo_exists():
+                    self._janela_grafico_carteira._ao_fechar()
+            except Exception:
+                pass
         liberar_grid_carteira(self._tabela)
         if self._janela_posicoes_tela_cheia is not None:
             try:
@@ -287,6 +290,16 @@ class JanelaCarteira(ctk.CTkToplevel):
 
         ctk.CTkButton(
             grupo_esquerda,
+            text="Grafico da carteira",
+            command=self._abrir_grafico_carteira,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=160,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            grupo_esquerda,
             text="Agora",
             command=self._abrir_grafico_agora,
             fg_color=CORES["primaria"],
@@ -318,7 +331,7 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._area_rolagem = ctk.CTkScrollableFrame(
             self,
             fg_color=CORES["fundo"],
-            label_text="Posicoes e grafico — role para ver tudo",
+            label_text="Posicoes da carteira",
         )
         self._area_rolagem.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
 
@@ -328,16 +341,12 @@ class JanelaCarteira(ctk.CTkToplevel):
         self._tabela = criar_grid_carteira(
             frame_tabela,
             "Posicoes da carteira",
-            altura=5,
+            altura=14,
             ao_duplo_clique=self._ao_duplo_clique,
             ao_abrir_tela_cheia=self._abrir_posicoes_tela_cheia,
             texto_botao_tela_cheia="Abrir em tela cheia",
             rolagem_pagina=True,
         )
-
-        self._painel_grafico = PainelGraficoCarteira(self, self._controlador)
-        card_grafico = self._painel_grafico.montar(self._area_rolagem)
-        card_grafico.pack(fill="x", padx=16, pady=(8, 12))
 
         rodape = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
         rodape.grid(row=2, column=0, sticky="ew", padx=0, pady=0)
@@ -354,9 +363,31 @@ class JanelaCarteira(ctk.CTkToplevel):
             height=36,
         ).pack(side="right")
 
-    def _reaplicar_grafico_carteira(self) -> None:
-        if self._painel_grafico is not None:
-            self._painel_grafico.reaplicar_layout()
+    def _abrir_grafico_carteira(self) -> None:
+        linhas = list(self._linhas_cache.values())
+        if not linhas:
+            messagebox.showwarning(
+                "Grafico da carteira",
+                "Cadastre posicoes na carteira para ver o grafico comparativo.",
+                parent=self,
+            )
+            return
+
+        if self._janela_grafico_carteira is not None:
+            try:
+                if self._janela_grafico_carteira.winfo_exists():
+                    self._janela_grafico_carteira.atualizar_linhas(linhas)
+                    self._janela_grafico_carteira.focus_force()
+                    self._janela_grafico_carteira.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_grafico_carteira = abrir_grafico_carteira(
+            self,
+            self._controlador,
+            linhas,
+        )
 
     def _abrir_posicoes_tela_cheia(self) -> None:
         if self._janela_posicoes_tela_cheia is not None:
@@ -369,6 +400,15 @@ class JanelaCarteira(ctk.CTkToplevel):
                 pass
 
         self._janela_posicoes_tela_cheia = JanelaCarteiraPosicoesTelaCheia(self)
+
+    def _sincronizar_grafico_carteira(self, linhas: list[LinhaCarteira]) -> None:
+        if self._janela_grafico_carteira is None:
+            return
+        try:
+            if self._janela_grafico_carteira.winfo_exists():
+                self._janela_grafico_carteira.atualizar_linhas(linhas)
+        except Exception:
+            pass
 
     def _sincronizar_tela_cheia_posicoes(self) -> None:
         if self._janela_posicoes_tela_cheia is None:
@@ -1005,8 +1045,7 @@ class JanelaCarteira(ctk.CTkToplevel):
             if self._tabela is not None:
                 preencher_grid_carteira(self._tabela, linhas)
             self._atualizar_resumo(linhas)
-            if self._painel_grafico is not None:
-                self._painel_grafico.atualizar_linhas(linhas)
+            self._sincronizar_grafico_carteira(linhas)
             self._sincronizar_manutencao_ativo()
 
             from datetime import datetime

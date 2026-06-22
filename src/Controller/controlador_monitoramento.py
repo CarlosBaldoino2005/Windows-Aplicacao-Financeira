@@ -11,9 +11,11 @@ from src.Model.monitoramento import (
 from src.Service.busca_acoes_servico import BuscaAcoesServico
 from src.Service.busca_cripto_servico import BuscaCriptoServico
 from src.Service.busca_dividendos_servico import BuscaDividendosServico
+from src.Service.busca_etfs_servico import BuscaEtfsServico
 from src.Service.busca_fiis_servico import BuscaFiisServico
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
 from src.Service.mercado_dividendos_servico import MercadoDividendosServico
+from src.Service.mercado_etfs_servico import MercadoEtfsServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
 from src.Service.mercado_servico import MercadoServico
 from src.Service.monitoramento_servico import MonitoramentoServico
@@ -27,10 +29,12 @@ class ControladorMonitoramento:
         self._mercado_acoes = MercadoServico()
         self._mercado_cripto = MercadoCriptoServico()
         self._mercado_fiis = MercadoFiisServico()
+        self._mercado_etfs = MercadoEtfsServico()
         self._mercado_dividendos = MercadoDividendosServico()
         self._busca_acoes = BuscaAcoesServico()
         self._busca_cripto = BuscaCriptoServico()
         self._busca_fiis = BuscaFiisServico()
+        self._busca_etfs = BuscaEtfsServico()
         self._busca_dividendos = BuscaDividendosServico()
 
     def listar_itens(self) -> list[MonitoramentoItem]:
@@ -138,6 +142,8 @@ class ControladorMonitoramento:
             return self._mercado_cripto.buscar_resumos(simbolos)
         if tipo_ativo == "fiis":
             return self._mercado_fiis.buscar_resumos(simbolos)
+        if tipo_ativo == "etfs":
+            return self._mercado_etfs.buscar_resumos(simbolos)
         if tipo_ativo == "dividendos":
             return self._mercado_dividendos.buscar_resumos(simbolos)
         return self._mercado_acoes.buscar_resumos(simbolos)
@@ -157,6 +163,8 @@ class ControladorMonitoramento:
             return self._busca_cripto.buscar(termo)
         if tipo_ativo == "fiis":
             return self._busca_fiis.buscar(termo)
+        if tipo_ativo == "etfs":
+            return self._busca_etfs.buscar(termo)
         if tipo_ativo == "dividendos":
             return self._busca_dividendos.buscar(termo)
         return self._busca_acoes.buscar(termo)
@@ -169,6 +177,7 @@ class ControladorMonitoramento:
         por_tipo: dict[TipoAtivoMonitoramento, list[str]] = {
             "acoes": [],
             "cripto": [],
+            "etfs": [],
             "fiis": [],
             "dividendos": [],
         }
@@ -185,6 +194,9 @@ class ControladorMonitoramento:
         if por_tipo["fiis"]:
             for resumo in self._mercado_fiis.buscar_resumos(por_tipo["fiis"]):
                 cotacoes[("fiis", resumo.simbolo)] = resumo
+        if por_tipo["etfs"]:
+            for resumo in self._mercado_etfs.buscar_resumos(por_tipo["etfs"]):
+                cotacoes[("etfs", resumo.simbolo)] = resumo
         if por_tipo["dividendos"]:
             for resumo in self._mercado_dividendos.buscar_resumos(por_tipo["dividendos"]):
                 cotacoes[("dividendos", resumo.simbolo)] = resumo

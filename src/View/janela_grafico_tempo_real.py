@@ -1,7 +1,7 @@
 """Janela de grafico intraday com atualizacao automatica (tempo quase real)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 import time
 
@@ -11,9 +11,11 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from src.Model.carteira import LinhaCarteira
-from src.Service.carteira_servico import CarteiraServico
+from src.Service.agora_historico_dia_servico import data_padrao_consulta_agora
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
+from src.Service.carteira_servico import CarteiraServico
+from src.Tool.dia_util_helper import eh_dia_util, formatar_data_ptbr
 from src.Tool.intraday_agora_helper import (
     calcular_atraso_candles_minutos,
     completar_serie_intraday_com_cotacao,
@@ -27,6 +29,9 @@ from src.Tool.janela_helper import (
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
 from src.Service.agora_metricas_mercado_servico import AgoraMetricasMercadoServico, MetricasMercadoAgora
 from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
+from src.View.campo_data_calendario_helper import montar_campo_data_calendario
+from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
+from src.View import mensagem_helper as messagebox
 from src.View.agora_painel_metricas_helper import PainelMetricasAgora
 from src.View.destaque_cotacao_helper import buscar_cotacao_com_cambio
 from src.View.formatadores import formatar_moeda, formatar_variacao_com_rotulo
@@ -173,6 +178,33 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             height=26,
         )
         self._badge_ao_vivo.pack(side="left", padx=(12, 0))
+
+        barra_dia = ctk.CTkFrame(barra_topo, fg_color="transparent")
+        barra_dia.pack(side="left", padx=(16, 0))
+
+        ctk.CTkLabel(
+            barra_dia,
+            text="Dia:",
+            font=ctk.CTkFont(size=13),
+            text_color=CORES["textoSecundario"],
+        ).pack(side="left", padx=(0, 6))
+
+        self._campo_data_dia = montar_campo_data_calendario(
+            barra_dia,
+            valor_inicial=data_padrao_consulta_agora(),
+            largura_entrada=108,
+        )
+
+        ctk.CTkButton(
+            barra_dia,
+            text="Ver dia",
+            command=self._abrir_tela_dia_historico,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=88,
+            height=28,
+        ).pack(side="left", padx=(8, 0))
 
         self._btn_pausar = ctk.CTkButton(
             barra_topo,
@@ -412,6 +444,36 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=120,
         ).pack(side="right")
+
+    def _abrir_tela_dia_historico(self) -> None:
+        data_ref, erro = self._campo_data_dia.obter_data()
+        if erro or data_ref is None:
+            messagebox.showerror("Data invalida", erro or "Informe a data no formato dd/mm/aaaa.", parent=self)
+            return
+
+        hoje = date.today()
+        if data_ref > hoje:
+            messagebox.showerror(
+                "Data invalida",
+                "A data nao pode ser futura.",
+                parent=self,
+            )
+            return
+
+        if not eh_dia_util(data_ref):
+            if not messagebox.askyesno(
+                "Dia nao util",
+                f"{formatar_data_ptbr(data_ref)} e fim de semana. Deseja consultar mesmo assim?",
+                parent=self,
+            ):
+                return
+
+        abrir_grafico_agora_dia(
+            self,
+            self._simbolo,
+            data_ref,
+            linha_carteira=self._linha_carteira,
+        )
 
     def _alternar_pausa(self) -> None:
         self._ao_vivo = not self._ao_vivo
