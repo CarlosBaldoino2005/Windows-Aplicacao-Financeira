@@ -422,52 +422,6 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._painel_metricas = PainelMetricasAgora(self._area_metricas)
         self._painel_metricas.montar(expandido_inicial=True).pack(fill="x", pady=(0, 12))
 
-        self._frame_painel_carteira = ctk.CTkFrame(
-            self._area_metricas,
-            fg_color=CORES.get("infoFundo", CORES["fundo"]),
-            corner_radius=10,
-            border_width=1,
-            border_color=CORES["borda"],
-        )
-
-        titulo_carteira = ctk.CTkLabel(
-            self._frame_painel_carteira,
-            text="Sua posicao na carteira",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=CORES["texto"],
-            anchor="w",
-        )
-        titulo_carteira.pack(anchor="w", padx=14, pady=(10, 6))
-
-        grade_carteira = ctk.CTkFrame(self._frame_painel_carteira, fg_color="transparent")
-        grade_carteira.pack(fill="x", padx=14, pady=(0, 8))
-        for coluna in range(3):
-            grade_carteira.grid_columnconfigure(coluna, weight=1)
-
-        def _criar_campo_resumo(coluna: int, rotulo: str) -> ctk.CTkLabel:
-            quadro = ctk.CTkFrame(grade_carteira, fg_color=CORES["superficie"], corner_radius=8)
-            quadro.grid(row=0, column=coluna, sticky="nsew", padx=(0 if coluna == 0 else 6, 0))
-            ctk.CTkLabel(
-                quadro,
-                text=rotulo,
-                font=ctk.CTkFont(size=11),
-                text_color=CORES["textoSecundario"],
-                anchor="w",
-            ).pack(anchor="w", padx=10, pady=(8, 2))
-            valor = ctk.CTkLabel(
-                quadro,
-                text="—",
-                font=ctk.CTkFont(size=15, weight="bold"),
-                text_color=CORES["texto"],
-                anchor="w",
-            )
-            valor.pack(anchor="w", padx=10, pady=(0, 8))
-            return valor
-
-        self._label_carteira_qtd = _criar_campo_resumo(0, "Quantidade")
-        self._label_carteira_compra = _criar_campo_resumo(1, "Preco de compra")
-        self._label_carteira_valorizacao = _criar_campo_resumo(2, "Resultado (R$)")
-
         self._sincronizar_painel_carteira_ou_compra()
         if self._resumo_carteira is not None:
             self._atualizar_campos_carteira(None)
@@ -918,20 +872,65 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if tinha_posicao != tem_posicao:
             self._sincronizar_painel_carteira_ou_compra()
 
+    def _montar_campos_posicao_carteira(self, pai: ctk.CTkFrame) -> None:
+        """Monta quantidade, preco de compra e resultado ao lado do alerta de venda."""
+        ctk.CTkLabel(
+            pai,
+            text="Sua posicao na carteira",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=CORES["texto"],
+            anchor="w",
+        ).pack(anchor="w", padx=10, pady=(8, 4))
+
+        grade = ctk.CTkFrame(pai, fg_color="transparent")
+        grade.pack(fill="x", padx=10, pady=(0, 8))
+        for coluna in range(3):
+            grade.grid_columnconfigure(coluna, weight=1)
+
+        def _criar_campo(coluna: int, rotulo: str) -> ctk.CTkLabel:
+            quadro = ctk.CTkFrame(grade, fg_color=CORES["superficie"], corner_radius=8)
+            quadro.grid(row=0, column=coluna, sticky="nsew", padx=(0 if coluna == 0 else 4, 0))
+            ctk.CTkLabel(
+                quadro,
+                text=rotulo,
+                font=ctk.CTkFont(size=10),
+                text_color=CORES["textoSecundario"],
+                anchor="w",
+            ).pack(anchor="w", padx=8, pady=(6, 0))
+            valor = ctk.CTkLabel(
+                quadro,
+                text="—",
+                font=ctk.CTkFont(size=13, weight="bold"),
+                text_color=CORES["texto"],
+                anchor="w",
+            )
+            valor.pack(anchor="w", padx=8, pady=(0, 6))
+            return valor
+
+        self._label_carteira_qtd = _criar_campo(0, "Quantidade")
+        self._label_carteira_compra = _criar_campo(1, "Preco de compra")
+        self._label_carteira_valorizacao = _criar_campo(2, "Resultado (R$)")
+
     def _montar_alerta_topo_venda(self, pai: ctk.CTkFrame) -> None:
         fonte_titulo = ctk.CTkFont(size=14, weight="bold")
         fonte_destaque = ctk.CTkFont(size=16, weight="bold")
         fonte_resumo = ctk.CTkFont(size=13, weight="bold")
 
+        linha_conteudo = ctk.CTkFrame(pai, fg_color="transparent")
+        linha_conteudo.pack(fill="both", expand=True)
+
+        frame_alerta = ctk.CTkFrame(linha_conteudo, fg_color="transparent")
+        frame_alerta.pack(side="left", fill="both", expand=True)
+
         ctk.CTkLabel(
-            pai,
+            frame_alerta,
             text="Alerta venda — preco alvo (R$)",
             font=fonte_titulo,
             text_color=CORES["texto"],
             anchor="w",
         ).pack(anchor="w", padx=12, pady=(10, 6))
 
-        linha_alerta = ctk.CTkFrame(pai, fg_color="transparent")
+        linha_alerta = ctk.CTkFrame(frame_alerta, fg_color="transparent")
         linha_alerta.pack(fill="x", padx=12)
 
         self._entrada_alerta_valorizacao = ctk.CTkEntry(
@@ -959,15 +958,24 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         ).pack(side="left")
 
         self._label_variacao_5_dias_carteira = ctk.CTkLabel(
-            pai,
+            frame_alerta,
             text="—",
             font=fonte_resumo,
             text_color=CORES["textoSecundario"],
             anchor="w",
-            wraplength=480,
+            wraplength=340,
             justify="left",
         )
         self._label_variacao_5_dias_carteira.pack(anchor="w", padx=12, pady=(8, 10))
+
+        self._frame_posicao_topo = ctk.CTkFrame(
+            linha_conteudo,
+            fg_color=CORES.get("infoFundo", CORES["fundo"]),
+            corner_radius=8,
+            border_width=1,
+            border_color=CORES["borda"],
+        )
+        self._montar_campos_posicao_carteira(self._frame_posicao_topo)
 
     def _montar_alerta_topo_compra(self, pai: ctk.CTkFrame) -> None:
         fonte_titulo = ctk.CTkFont(size=14, weight="bold")
@@ -1101,11 +1109,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._frame_alerta_topo_compra.pack_forget()
             if not self._frame_alerta_topo_venda.winfo_ismapped():
                 self._frame_alerta_topo_venda.pack(fill="both", expand=True)
-            if not self._frame_painel_carteira.winfo_ismapped():
-                self._frame_painel_carteira.pack(fill="x", pady=(0, 8))
+            if hasattr(self, "_frame_posicao_topo"):
+                if not self._frame_posicao_topo.winfo_ismapped():
+                    self._frame_posicao_topo.pack(side="right", fill="y", padx=(8, 10), pady=(6, 6))
             return
 
-        self._frame_painel_carteira.pack_forget()
+        if hasattr(self, "_frame_posicao_topo"):
+            self._frame_posicao_topo.pack_forget()
         self._alerta_venda_ativo = False
         self._label_alerta_venda.pack_forget()
         self._frame_alerta_topo_venda.pack_forget()

@@ -10,12 +10,14 @@ from typing import Literal
 from src.Model.carteira import (
     MAXIMO_POSICOES_CARTEIRA,
     TIPOS_ATIVO_CARTEIRA,
+    CompraCarteira,
     PosicaoCarteira,
     TipoAtivoCarteira,
     VendaCarteira,
     tipo_carteira_para_monitoramento,
 )
 from src.Model.monitoramento import TipoAtivoMonitoramento
+from src.Service.carteira_compras_servico import CarteiraComprasServico
 from src.Service.carteira_vendas_servico import CarteiraVendasServico
 from src.Service.monitoramento_servico import MonitoramentoServico
 from src.Tool.config_painel import ConfigPainelIni
@@ -46,6 +48,7 @@ class CarteiraServico:
         self._log = RegistradorLog(raiz)
         self._monitoramento = MonitoramentoServico(pasta_base)
         self._vendas = CarteiraVendasServico(pasta_base)
+        self._compras = CarteiraComprasServico(pasta_base)
         self._config = ConfigPainelIni(pasta_base)
 
     def listar(self) -> list[PosicaoCarteira]:
@@ -91,6 +94,7 @@ class CarteiraServico:
         )
         posicoes.insert(0, nova)
         self._salvar(posicoes)
+        self._compras.registrar(self._compras.criar_compra_de_posicao(nova))
         self._sincronizar_monitoramento_posicao(nova, posicoes)
         return nova, None
 
@@ -136,6 +140,7 @@ class CarteiraServico:
             return None, "Posicao nao encontrada na carteira."
 
         self._salvar(novas)
+        self._sincronizar_compra_da_posicao(atualizada)
         self._sincronizar_monitoramento_posicao(atualizada, novas)
         return atualizada, None
 
@@ -195,8 +200,15 @@ class CarteiraServico:
     def listar_vendas(self) -> list[VendaCarteira]:
         return self._vendas.listar()
 
+    def listar_compras(self) -> list[CompraCarteira]:
+        self._sincronizar_compras_com_posicoes()
+        return self._compras.listar()
+
     def obter_venda(self, venda_id: str) -> VendaCarteira | None:
         return self._vendas.obter(venda_id)
+
+    def obter_compra(self, compra_id: str) -> CompraCarteira | None:
+        return self._compras.obter(compra_id)
 
     def atualizar_venda(
         self,
@@ -243,6 +255,52 @@ class CarteiraServico:
         )
         return self._vendas.atualizar(atualizada)
 
+    def atualizar_compra(
+        self,
+        compra_id: str,
+        quantidade: float,
+        preco_compra: float,
+        data_compra: str,
+    ) -> tuple[bool, str | None]:
+        compra = self._compras.obter(compra_id)
+        if compra is None:
+            return False, "Compra nao encontrada."
+
+        _, erro_data = validar_data_ptbr(data_compra)
+        if erro_data:
+            return False, erro_data
+
+        if quantidade <= 0:
+            return False, "Quantidade de compra invalida."
+
+        if preco_compra <= 0:
+            return False, "Preco de compra deve ser maior que zero."
+
+        atualizada = replace(
+            compra,
+            quantidade=round(quantidade, 8),
+            preco_compra=round(preco_compra, 4),
+            data_compra=data_compra.strip(),
+        )
+        ok, erro = self._compras.atualizar(atualizada)
+        if not ok:
+            return ok, erro
+
+        posicao = self.obter(compra.posicao_id)
+        if posicao is not None:
+            _, erro_pos = self.atualizar(
+                compra.posicao_id,
+                compra.simbolo,
+                compra.tipo_ativo,
+                quantidade,
+                preco_compra,
+                data_compra,
+            )
+            if erro_pos:
+                return False, erro_pos
+
+        return True, None
+
     def remover_venda(self, venda_id: str) -> tuple[bool, str | None]:
         venda = self._vendas.obter(venda_id)
         if venda is None:
@@ -280,6 +338,21 @@ class CarteiraServico:
         self._atualizar_monitoramento_grupo(venda.tipo_ativo, venda.simbolo, posicoes)
         return True, None
 
+    def remover_compra(self, compra_id: str) -> tuple[bool, str | None]:
+        compra = self._compras.obter(compra_id)
+        if compra is None:
+            return False, "Compra nao encontrada."
+
+        ok, erro = self._compras.remover(compra_id)
+        if not ok:
+            return ok, erro
+
+        posicao = self.obter(compra.posicao_id)
+        if posicao is not None:
+            return self.remover(compra.posicao_id)
+
+        return True, None
+
     def remover(self, posicao_id: str) -> tuple[bool, str | None]:
         posicoes = self.listar()
         removida = next((p for p in posicoes if p.id == posicao_id), None)
@@ -287,6 +360,7 @@ class CarteiraServico:
         if removida is None:
             return False, "Posicao nao encontrada."
 
+        self._compras.remover_por_posicao(posicao_id)
         self._salvar(filtradas)
         self._atualizar_monitoramento_grupo(removida.tipo_ativo, removida.simbolo, filtradas)
         return True, None
@@ -341,6 +415,28 @@ class CarteiraServico:
     @staticmethod
     def parse_preco_opcional(texto: str) -> tuple[float | None, str | None]:
         return validar_valor_monetario_opcional(texto)
+
+    def _sincronizar_compras_com_posicoes(self) -> None:
+        """Cria registros de compra para posicoes antigas sem historico."""
+        posicoes = self.listar()
+        ids_com_historico = {compra.posicao_id for compra in self._compras.listar()}
+        for posicao in posicoes:
+            if posicao.id in ids_com_historico:
+                continue
+            self._compras.registrar(self._compras.criar_compra_de_posicao(posicao))
+
+    def _sincronizar_compra_da_posicao(self, posicao: PosicaoCarteira) -> None:
+        compra = self._compras.obter_por_posicao(posicao.id)
+        if compra is None:
+            return
+        self._compras.atualizar(
+            replace(
+                compra,
+                quantidade=posicao.quantidade,
+                preco_compra=posicao.preco_compra,
+                data_compra=posicao.data_compra,
+            )
+        )
 
     def _sincronizar_monitoramento_posicao(
         self,

@@ -105,6 +105,33 @@ class LinhaCarteira:
 
 
 @dataclass(frozen=True)
+class CompraCarteira:
+    """Compra registrada pelo usuario no historico da carteira."""
+
+    id: str
+    posicao_id: str
+    simbolo: str
+    tipo_ativo: TipoAtivoCarteira
+    quantidade: float
+    preco_compra: float
+    data_compra: str
+
+    @property
+    def valor_compra(self) -> float:
+        return round(self.quantidade * self.preco_compra, 4)
+
+
+@dataclass(frozen=True)
+class LinhaCompraCarteira:
+    """Compra com nome do ativo, moeda e situacao na carteira."""
+
+    compra: CompraCarteira
+    nome: str = ""
+    moeda: str = "BRL"
+    na_carteira: bool = False
+
+
+@dataclass(frozen=True)
 class VendaCarteira:
     """Venda registrada pelo usuario com dados da operacao."""
 

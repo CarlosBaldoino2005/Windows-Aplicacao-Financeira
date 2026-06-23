@@ -23,6 +23,7 @@ dados/blacklist_ativos.json
 dados/monitoramento.json
 dados/carteira.json
 dados/carteira_vendas.json
+dados/carteira_compras.json
 dados/painel.ini
 dados/email.ini
 dados/relatorio_automatico_estado.json

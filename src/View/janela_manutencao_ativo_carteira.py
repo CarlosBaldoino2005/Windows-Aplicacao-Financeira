@@ -31,6 +31,7 @@ from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.View.formatadores import formatar_moeda
 from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
 from src.View.janela_grafico_acao import JanelaGraficoAcao
+from src.View.janela_compras_carteira import abrir_compras_carteira
 from src.View.janela_vendas_carteira import abrir_vendas_carteira
 from src.View.tabela_carteira_helper import (
     aplicar_ajuste_altura_grid_carteira,
@@ -51,6 +52,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
         self._controlador = ControladorCarteira()
         self._config_painel = ConfigPainelIni()
         self._janela_form = None
+        self._janela_compras = None
         self._janela_vendas = None
         self._janela_grafico: JanelaGraficoAcao | None = None
         self._tabela: ttk.Treeview | None = None
@@ -97,7 +99,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             cabecalho,
             text=(
                 "Registre compras e vendas, edite posicoes ou remova ativos da carteira. "
-                "Em Vendas realizadas, edite ou remova o historico de vendas. "
+                "Em Compras realizadas e Vendas realizadas, edite ou remova o historico. "
                 "Duplo clique na grid abre o grafico do ativo."
             ),
             font=ctk.CTkFont(size=12),
@@ -136,6 +138,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             ("Nova compra do ativo", self._nova_compra_mesmo_ativo),
             ("Registrar venda", self._vender_selecionado),
             ("Remover selecionados", self._remover_selecionados),
+            ("Compras realizadas", self._abrir_compras_realizadas),
             ("Vendas realizadas", self._abrir_vendas_realizadas),
             ("Atualizar cotacoes", lambda: self._atualizar_lista(forcar=True)),
         )
@@ -278,6 +281,21 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             return
 
         self._abrir_dialogo_venda(posicao)
+
+    def _abrir_compras_realizadas(self) -> None:
+        if self._janela_compras is not None and self._janela_compras.winfo_exists():
+            self._janela_compras.lift()
+            self._janela_compras.focus_force()
+            return
+        try:
+            self._janela_compras = abrir_compras_carteira(self)
+        except Exception as exc:
+            messagebox.showerror(
+                "Compras realizadas",
+                f"Nao foi possivel abrir a tela de compras:\n{exc}",
+                parent=self,
+            )
+            self._janela_compras = None
 
     def _abrir_vendas_realizadas(self) -> None:
         if self._janela_vendas is not None and self._janela_vendas.winfo_exists():
@@ -563,6 +581,12 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             try:
                 if self._janela_grafico.winfo_exists():
                     self._janela_grafico._ao_fechar()
+            except Exception:
+                pass
+        if self._janela_compras is not None:
+            try:
+                if self._janela_compras.winfo_exists():
+                    self._janela_compras.destroy()
             except Exception:
                 pass
         if self._janela_vendas is not None:

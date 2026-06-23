@@ -6,7 +6,9 @@ from pathlib import Path
 
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
 from src.Model.carteira import (
+    CompraCarteira,
     LinhaCarteira,
+    LinhaCompraCarteira,
     LinhaVendaCarteira,
     PosicaoCarteira,
     ResultadoBuscaCarteira,
@@ -236,13 +238,83 @@ class ControladorCarteira:
     def remover_venda(self, venda_id: str) -> tuple[bool, str | None]:
         return self._persistencia.remover_venda(venda_id)
 
+    def obter_linhas_compras_carteira(self) -> tuple[list[LinhaCompraCarteira], str | None]:
+        compras = self._persistencia.listar_compras()
+        if not compras:
+            return [], None
+
+        posicoes_ids = {posicao.id for posicao in self._persistencia.listar()}
+        linhas: list[LinhaCompraCarteira] = []
+        for compra in compras:
+            nome = codigo_exibicao(compra.simbolo)
+            moeda = self._moeda_por_ativo_carteira(compra.tipo_ativo, compra.simbolo)
+            if compra.tipo_ativo != "indices":
+                detalhes, _ = self._detalhes.obter_detalhes(compra.simbolo)
+                if detalhes is not None and detalhes.nome_empresa:
+                    nome = detalhes.nome_empresa
+            linhas.append(
+                LinhaCompraCarteira(
+                    compra=compra,
+                    nome=nome,
+                    moeda=moeda,
+                    na_carteira=compra.posicao_id in posicoes_ids,
+                )
+            )
+        return linhas, None
+
+    def obter_compra(self, compra_id: str) -> CompraCarteira | None:
+        return self._persistencia.obter_compra(compra_id)
+
+    def atualizar_compra(
+        self,
+        compra_id: str,
+        quantidade_texto: str,
+        preco_compra_texto: str,
+        data_compra_texto: str,
+        *,
+        modo_valor_compra: str = "por_cota",
+    ) -> tuple[bool, str | None]:
+        compra = self._persistencia.obter_compra(compra_id)
+        if compra is None:
+            return False, "Compra nao encontrada."
+
+        quantidade, erro_qtd = self._persistencia.parse_quantidade(quantidade_texto)
+        if erro_qtd:
+            return False, erro_qtd
+        preco_compra, erro_preco = self._persistencia.resolver_preco_venda(
+            preco_compra_texto,
+            quantidade or 0,
+            "valor_total" if modo_valor_compra == "valor_total" else "por_cota",
+        )
+        if erro_preco:
+            return False, erro_preco
+
+        data_compra = (data_compra_texto or "").strip()
+        _, erro_data = validar_data_ptbr(data_compra)
+        if erro_data:
+            return False, erro_data
+
+        return self._persistencia.atualizar_compra(
+            compra_id,
+            quantidade or 0,
+            preco_compra or 0,
+            data_compra,
+        )
+
+    def remover_compra(self, compra_id: str) -> tuple[bool, str | None]:
+        return self._persistencia.remover_compra(compra_id)
+
+    @staticmethod
+    def _moeda_por_ativo_carteira(tipo_ativo: TipoAtivoCarteira, simbolo: str) -> str:
+        if tipo_ativo == "cripto":
+            return "USD"
+        if tipo_ativo in ("fiis", "etfs") or simbolo.endswith(".SA"):
+            return "BRL"
+        return "BRL"
+
     @staticmethod
     def _moeda_por_venda(venda) -> str:
-        if venda.tipo_ativo == "cripto":
-            return "USD"
-        if venda.tipo_ativo in ("fiis", "etfs") or venda.simbolo.endswith(".SA"):
-            return "BRL"
-        return "USD"
+        return ControladorCarteira._moeda_por_ativo_carteira(venda.tipo_ativo, venda.simbolo)
 
     def remover_posicao(self, posicao_id: str) -> tuple[bool, str | None]:
         return self._persistencia.remover(posicao_id)
