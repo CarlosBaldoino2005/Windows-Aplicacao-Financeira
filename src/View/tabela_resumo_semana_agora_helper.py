@@ -22,7 +22,13 @@ from src.View.grid_interacao_treeview_helper import (
     sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
 )
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE, chave_comparavel
+from src.View.grid_ordenacao_helper import chave_comparavel
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.tema import CORES
 
 _COLUNAS = (
@@ -82,23 +88,61 @@ def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
     return ConfigPainelIni().carregar_opcoes_fonte_grid()
 
 
+def _valor_celula_dia_resumo(dia: DiaResumoSemanaAgora, coluna: str, moeda: str = "BRL") -> str:
+    volume_texto = f"{dia.volume:,}".replace(",", ".") if dia.volume is not None else "—"
+    mapa = {
+        "data": formatar_data_ptbr(dia.data),
+        "abertura": formatar_moeda(dia.abertura, moeda),
+        "baixa": formatar_moeda(dia.minima, moeda),
+        "hora_baixa": dia.horario_baixa,
+        "alta": formatar_moeda(dia.maxima, moeda),
+        "hora_alta": dia.horario_alta,
+        "fechamento": formatar_moeda(dia.fechamento, moeda),
+        "variacao": formatar_variacao(dia.variacao_valor, dia.variacao_pct, moeda),
+        "amplitude": formatar_variacao(dia.amplitude_valor, dia.amplitude_pct, moeda),
+        "volume": volume_texto,
+    }
+    return mapa.get(coluna, "")
+
+
+def _valor_celula_dia_resumo_tabela(tabela: ttk.Treeview, dia: DiaResumoSemanaAgora, coluna: str) -> str:
+    moeda = getattr(tabela, "_moeda_resumo", "BRL")
+    return _valor_celula_dia_resumo(dia, coluna, moeda)
+
+
 def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS:
-        texto = _ROTULOS[coluna]
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: alternar_ordenacao_resumo_semana(tabela, c),
-        )
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_resumo_semana(tabela, coluna),
+    )
+
+
+def _abrir_filtro_coluna_resumo_semana(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_ROTULOS.get(coluna, coluna),
+        linhas=list(getattr(tabela, "_dias_originais", [])),
+        obter_valor=lambda dia, col: _valor_celula_dia_resumo_tabela(tabela, dia, col),
+        ao_atualizar=lambda: _renderizar_grid_resumo_semana_agora(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_resumo_semana(tabela, col, desc),
+    )
+
+
+def _definir_ordenacao_resumo_semana(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
 
 
 def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
+    if getattr(tabela, "_ordenacao_configurada", False):
+        return
+    tabela._ordenacao_configurada = True  # type: ignore[attr-defined]
     tabela._coluna_ordenacao = "data"  # type: ignore[attr-defined]
     tabela._ordenacao_desc = True  # type: ignore[attr-defined]
+    inicializar_filtros_coluna_treeview(tabela)
     _atualizar_cabecalhos_ordenacao(tabela)
 
 
@@ -112,10 +156,7 @@ def alternar_ordenacao_resumo_semana(tabela: ttk.Treeview, coluna: str) -> None:
         tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
         tabela._ordenacao_desc = coluna != "data"
 
-    _atualizar_cabecalhos_ordenacao(tabela)
-    resumo = getattr(tabela, "_resumo_semana", None)
-    if resumo is not None:
-        preencher_grid_resumo_semana_agora(tabela, resumo)
+    _renderizar_grid_resumo_semana_agora(tabela)
 
 
 def _ordenar_dias(tabela: ttk.Treeview, dias: list[DiaResumoSemanaAgora]) -> list[DiaResumoSemanaAgora]:
@@ -268,15 +309,30 @@ def preencher_grid_resumo_semana_agora(tabela: ttk.Treeview, resumo: ResumoSeman
 
     tabela._resumo_semana = resumo  # type: ignore[attr-defined]
     tabela._moeda_resumo = resumo.moeda  # type: ignore[attr-defined]
+    tabela._dias_originais = list(resumo.dias)  # type: ignore[attr-defined]
+    _configurar_ordenacao_colunas(tabela)
+    _renderizar_grid_resumo_semana_agora(tabela)
+
+
+def _renderizar_grid_resumo_semana_agora(tabela: ttk.Treeview) -> None:
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    moeda = getattr(tabela, "_moeda_resumo", "BRL")
+    dias_originais = list(getattr(tabela, "_dias_originais", []))
+    dias_filtrados = aplicar_filtros_coluna_treeview(
+        dias_originais,
+        tabela,
+        lambda dia, col: _valor_celula_dia_resumo_tabela(tabela, dia, col),
+    )
+    dias = _ordenar_dias(tabela, dias_filtrados)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
     liberar_interacao_treeview(tabela)
     tabela._tags_zebra = {}  # type: ignore[attr-defined]
 
     for item in tabela.get_children():
         tabela.delete(item)
-
-    moeda = resumo.moeda
-    dias = _ordenar_dias(tabela, list(resumo.dias))
 
     aplicar_estilo_grid_resumo_semana_agora(tabela)
 

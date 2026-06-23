@@ -12,7 +12,13 @@ from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.View.formatadores import formatar_moeda, formatar_texto_opcional
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE, chave_comparavel
+from src.View.grid_ordenacao_helper import chave_comparavel
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
@@ -85,18 +91,56 @@ def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
     return ConfigPainelIni().carregar_opcoes_fonte_grid()
 
 
-def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS:
-        texto = _ROTULOS[coluna]
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: _alternar_ordenacao_carteira(tabela, c),
+def _textos_linha_carteira(linha: LinhaCarteira) -> dict[str, str]:
+    posicao = linha.posicao
+    cotacao = linha.cotacao
+    moeda = cotacao.moeda if cotacao is not None else "BRL"
+    preco_atual_texto = (
+        formatar_moeda(linha.preco_atual, moeda)
+        if linha.preco_atual is not None
+        else "—"
+    )
+    valor_atual_texto = (
+        formatar_moeda(linha.valor_atual, moeda)
+        if linha.valor_atual is not None
+        else "—"
+    )
+    resultado_reais_texto = (
+        formatar_moeda(linha.resultado_reais, moeda)
+        if linha.resultado_reais is not None
+        else "—"
+    )
+    dividendo_prev_mes_texto = (
+        formatar_moeda(linha.dividendo_previsto_proximo_mes, moeda)
+        if linha.dividendo_previsto_proximo_mes is not None
+        else "—"
+    )
+    prox_texto = formatar_texto_opcional(linha.proximo_dividendo_data)
+    if linha.proximo_dividendo_previsto is not None and linha.proximo_dividendo_data:
+        prox_texto = (
+            f"{linha.proximo_dividendo_data} — "
+            f"{formatar_moeda(linha.proximo_dividendo_previsto, moeda)}"
         )
+    return {
+        "tipo": ROTULOS_TIPO_CARTEIRA.get(posicao.tipo_ativo, posicao.tipo_ativo),
+        "ativo": codigo_exibicao(posicao.simbolo),
+        "nome": cotacao.nome if cotacao is not None else "—",
+        "quantidade": _formatar_quantidade(posicao.quantidade),
+        "data_compra": posicao.data_compra,
+        "preco_compra": formatar_moeda(posicao.preco_compra, moeda),
+        "investido": formatar_moeda(posicao.valor_investido, moeda),
+        "preco_atual": preco_atual_texto,
+        "valor_atual": valor_atual_texto,
+        "resultado_pct": _formatar_resultado_pct(linha.resultado_percentual),
+        "resultado_reais": resultado_reais_texto,
+        "dividendos": formatar_moeda(linha.dividendos_recebidos, moeda),
+        "dividendo_prev_mes": dividendo_prev_mes_texto,
+        "prox_dividendo": prox_texto,
+    }
+
+
+def _valor_celula_carteira(linha: LinhaCarteira, coluna: str) -> str:
+    return _textos_linha_carteira(linha).get(coluna, "")
 
 
 def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
@@ -106,24 +150,31 @@ def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
     tabela._coluna_ordenacao = _COLUNA_ORDENACAO_PADRAO  # type: ignore[attr-defined]
     tabela._ordenacao_desc = _ORDENACAO_DESC_PADRAO  # type: ignore[attr-defined]
     tabela._linhas_originais: list[LinhaCarteira] = []  # type: ignore[attr-defined]
+    inicializar_filtros_coluna_treeview(tabela)
 
-    for coluna in _COLUNAS:
-        tabela.heading(
-            coluna,
-            text=_ROTULOS[coluna],
-            command=lambda c=coluna: _alternar_ordenacao_carteira(tabela, c),
-        )
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_carteira(tabela, coluna),
+    )
 
 
-def _alternar_ordenacao_carteira(tabela: ttk.Treeview, coluna: str) -> None:
-    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
-        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
-    else:
-        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
-        tabela._ordenacao_desc = False  # type: ignore[attr-defined]
+def _abrir_filtro_coluna_carteira(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_ROTULOS.get(coluna, coluna),
+        linhas=list(getattr(tabela, "_linhas_originais", [])),
+        obter_valor=_valor_celula_carteira,
+        ao_atualizar=lambda: _renderizar_grid_carteira(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_carteira(tabela, col, desc),
+    )
 
-    linhas = list(getattr(tabela, "_linhas_originais", []))
-    preencher_grid_carteira(tabela, linhas)
+
+def _definir_ordenacao_carteira(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
 
 
 def _chave_ordenacao_linha(linha: LinhaCarteira, coluna: str) -> tuple:
@@ -225,7 +276,7 @@ def criar_grid_carteira(
 
     ctk.CTkLabel(
         card,
-        text="Duplo clique abre o grafico. Verde = valorizacao; vermelho = desvalorizacao.",
+        text="Clique no titulo da coluna para filtrar e ordenar. Duplo clique abre o grafico.",
         font=ctk.CTkFont(size=11),
         text_color=CORES["textoSecundario"],
     ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -461,10 +512,24 @@ def preencher_grid_carteira(
 
     _configurar_ordenacao_colunas(tabela)
     tabela._linhas_originais = list(linhas)  # type: ignore[attr-defined]
+    _renderizar_grid_carteira(tabela)
 
+
+def _renderizar_grid_carteira(tabela: ttk.Treeview) -> None:
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    linhas_originais = list(getattr(tabela, "_linhas_originais", []))
+    linhas = aplicar_filtros_coluna_treeview(linhas_originais, tabela, _valor_celula_carteira)
     coluna_ord = getattr(tabela, "_coluna_ordenacao", None)
     descendente = getattr(tabela, "_ordenacao_desc", False)
     linhas_exibir = _ordenar_linhas_carteira(linhas, coluna_ord, descendente)
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_carteira(tabela, coluna),
+    )
 
     label_vazio = getattr(tabela, "_label_vazio", None)
     selecionados_antes = set(tabela.selection())
@@ -479,9 +544,12 @@ def preencher_grid_carteira(
 
     if not linhas_exibir:
         if label_vazio is not None:
+            if linhas_originais:
+                label_vazio.configure(text="Nenhuma posicao corresponde aos filtros atuais.")
+            else:
+                label_vazio.configure(text="Nenhuma posicao na carteira. Clique em Registrar compra.")
             label_vazio.pack(pady=(0, 12))
         tabela.selection_set()
-        _atualizar_cabecalhos_ordenacao(tabela)
         _ajustar_altura_grid_carteira(tabela, 0)
         return
 
@@ -492,59 +560,14 @@ def preencher_grid_carteira(
 
     for indice, linha in enumerate(linhas_exibir):
         posicao = linha.posicao
-        cotacao = linha.cotacao
-        moeda = cotacao.moeda if cotacao is not None else "BRL"
-        preco_atual_texto = (
-            formatar_moeda(linha.preco_atual, moeda)
-            if linha.preco_atual is not None
-            else "—"
-        )
-        valor_atual_texto = (
-            formatar_moeda(linha.valor_atual, moeda)
-            if linha.valor_atual is not None
-            else "—"
-        )
-        resultado_reais_texto = (
-            formatar_moeda(linha.resultado_reais, moeda)
-            if linha.resultado_reais is not None
-            else "—"
-        )
-
-        dividendo_prev_mes_texto = (
-            formatar_moeda(linha.dividendo_previsto_proximo_mes, moeda)
-            if linha.dividendo_previsto_proximo_mes is not None
-            else "—"
-        )
-
-        prox_texto = formatar_texto_opcional(linha.proximo_dividendo_data)
-        if linha.proximo_dividendo_previsto is not None and linha.proximo_dividendo_data:
-            prox_texto = (
-                f"{linha.proximo_dividendo_data} — "
-                f"{formatar_moeda(linha.proximo_dividendo_previsto, moeda)}"
-            )
-
+        textos = _textos_linha_carteira(linha)
         tag = _tag_resultado(linha, indice)
         tabela._tags_zebra[posicao.id] = tag  # type: ignore[attr-defined]
         tabela.insert(
             "",
             "end",
             iid=posicao.id,
-            values=(
-                ROTULOS_TIPO_CARTEIRA.get(posicao.tipo_ativo, posicao.tipo_ativo),
-                codigo_exibicao(posicao.simbolo),
-                cotacao.nome if cotacao is not None else "—",
-                _formatar_quantidade(posicao.quantidade),
-                posicao.data_compra,
-                formatar_moeda(posicao.preco_compra, moeda),
-                formatar_moeda(posicao.valor_investido, moeda),
-                preco_atual_texto,
-                valor_atual_texto,
-                _formatar_resultado_pct(linha.resultado_percentual),
-                resultado_reais_texto,
-                formatar_moeda(linha.dividendos_recebidos, moeda),
-                dividendo_prev_mes_texto,
-                prox_texto,
-            ),
+            values=tuple(textos[col] for col in _COLUNAS),
             tags=(tag,),
         )
 
@@ -555,7 +578,6 @@ def preencher_grid_carteira(
     else:
         tabela.selection_set()
     sincronizar_tags_selecao_treeview(tabela)
-    _atualizar_cabecalhos_ordenacao(tabela)
     _ajustar_altura_grid_carteira(tabela, len(linhas_exibir))
     if not getattr(tabela, "_rolagem_pagina", False) and treeview_ainda_ativa(tabela):
         tabela._altura_visivel_atual = None  # type: ignore[attr-defined]

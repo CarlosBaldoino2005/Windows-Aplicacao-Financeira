@@ -9,7 +9,13 @@ from src.Model.negocio_agora import NegocioAgora
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.View.formatadores import formatar_inteiro_ptbr, formatar_preco_negocio
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE, chave_comparavel
+from src.View.grid_ordenacao_helper import chave_comparavel
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
@@ -83,18 +89,49 @@ def _rotulo_lado(lado: str) -> str:
     return "Neutro"
 
 
+def _valores_negocio_agora(item: NegocioAgora) -> dict[str, str]:
+    return {
+        "hora": item.hora,
+        "preco": formatar_preco_negocio(item.preco),
+        "tamanho": formatar_inteiro_ptbr(item.tamanho),
+        "tipo": item.tipo or "",
+        "bs": _rotulo_lado(item.lado),
+        "compra": formatar_preco_negocio(item.preco_compra),
+        "venda": formatar_preco_negocio(item.preco_venda),
+        "total_volume": formatar_inteiro_ptbr(item.total_volume),
+        "num": formatar_inteiro_ptbr(item.numero),
+        "bolsa": item.bolsa,
+    }
+
+
+def _valor_celula_negocio_agora(item: NegocioAgora, coluna: str) -> str:
+    return _valores_negocio_agora(item).get(coluna, "")
+
+
 def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS:
-        texto = _ROTULOS[coluna]
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: alternar_ordenacao_negocios_agora(tabela, c),
-        )
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_negocios_agora(tabela, coluna),
+    )
+
+
+def _abrir_filtro_coluna_negocios_agora(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_ROTULOS.get(coluna, coluna),
+        linhas=list(getattr(tabela, "_itens_originais", [])),
+        obter_valor=_valor_celula_negocio_agora,
+        ao_atualizar=lambda: _renderizar_grid_negocios_agora(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_negocios_agora(tabela, col, desc),
+    )
+
+
+def _definir_ordenacao_negocios_agora(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
 
 
 def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
@@ -104,24 +141,8 @@ def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
     tabela._coluna_ordenacao = "hora"  # type: ignore[attr-defined]
     tabela._ordenacao_desc = True  # type: ignore[attr-defined]
     tabela._itens_originais: list[NegocioAgora] = []  # type: ignore[attr-defined]
-
-    for coluna in _COLUNAS:
-        tabela.heading(
-            coluna,
-            text=_ROTULOS[coluna],
-            command=lambda c=coluna: alternar_ordenacao_negocios_agora(tabela, c),
-        )
-
-
-def alternar_ordenacao_negocios_agora(tabela: ttk.Treeview, coluna: str) -> None:
-    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
-        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
-    else:
-        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
-        tabela._ordenacao_desc = coluna in ("hora", "num")  # type: ignore[attr-defined]
-
-    itens = list(getattr(tabela, "_itens_originais", []))
-    preencher_grid_negocios_agora(tabela, itens)
+    inicializar_filtros_coluna_treeview(tabela)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def _chave_ordenacao(item: NegocioAgora, coluna: str) -> tuple:
@@ -194,7 +215,7 @@ def criar_grid_negocios_agora(
         card,
         text=(
             "Negocios do dia (mais recentes no topo). "
-            "Colunas no padrao ADVFN; dados intraday agregados por minuto."
+            "Clique no titulo da coluna para filtrar e ordenar."
         ),
         font=ctk.CTkFont(size=11),
         text_color=CORES["textoSecundario"],
@@ -295,35 +316,44 @@ def preencher_grid_negocios_agora(
     if not treeview_ainda_ativa(tabela):
         return
 
+    _configurar_ordenacao_colunas(tabela)
     tabela._itens_originais = list(negocios)  # type: ignore[attr-defined]
+    _renderizar_grid_negocios_agora(tabela)
+
+
+def _renderizar_grid_negocios_agora(tabela: ttk.Treeview) -> None:
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    negocios_originais = list(getattr(tabela, "_itens_originais", []))
+    negocios = aplicar_filtros_coluna_treeview(
+        negocios_originais,
+        tabela,
+        _valor_celula_negocio_agora,
+    )
     coluna = getattr(tabela, "_coluna_ordenacao", "hora")
     descendente = getattr(tabela, "_ordenacao_desc", True)
     ordenados = _ordenar_negocios(negocios, coluna, descendente)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
     selecionados = set(tabela.selection())
+    liberar_interacao_treeview(tabela)
+    tabela._tags_zebra = {}  # type: ignore[attr-defined]
+
     filhos = tabela.get_children()
     if filhos:
         tabela.delete(*filhos)
 
     for indice, item in enumerate(ordenados):
-        valores = (
-            item.hora,
-            formatar_preco_negocio(item.preco),
-            formatar_inteiro_ptbr(item.tamanho),
-            item.tipo or "",
-            _rotulo_lado(item.lado),
-            formatar_preco_negocio(item.preco_compra),
-            formatar_preco_negocio(item.preco_venda),
-            formatar_inteiro_ptbr(item.total_volume),
-            formatar_inteiro_ptbr(item.numero),
-            item.bolsa,
-        )
+        valores = tuple(_valores_negocio_agora(item)[col] for col in _COLUNAS)
+        tag = _tag_linha(item, indice)
+        tabela._tags_zebra[item.id] = tag  # type: ignore[attr-defined]
         tabela.insert(
             "",
             "end",
             iid=item.id,
             values=valores,
-            tags=(_tag_linha(item, indice),),
+            tags=(tag,),
         )
 
     label_vazio = getattr(tabela, "_label_vazio", None)
@@ -331,6 +361,10 @@ def preencher_grid_negocios_agora(
         if ordenados:
             label_vazio.pack_forget()
         else:
+            if negocios_originais:
+                label_vazio.configure(text="Nenhum negocio corresponde aos filtros atuais.")
+            else:
+                label_vazio.configure(text="Nenhum negocio registrado para o dia.")
             label_vazio.pack(pady=(0, 12))
 
     if selecionados:
@@ -339,7 +373,6 @@ def preencher_grid_negocios_agora(
             tabela.selection_set(existentes)
 
     sincronizar_tags_selecao_treeview(tabela)
-    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def liberar_grid_negocios_agora(tabela: ttk.Treeview | None) -> None:

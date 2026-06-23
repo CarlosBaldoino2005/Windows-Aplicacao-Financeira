@@ -11,7 +11,12 @@ from src.Model.cotacao import CotacaoResumo
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.View.formatadores import formatar_moeda, formatar_variacao
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
@@ -64,17 +69,41 @@ def _rotulo_base_coluna(tabela: ttk.Treeview, coluna: str) -> str:
 
 
 def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS_PADRAO:
-        texto = _rotulo_base_coluna(tabela, coluna)
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: _alternar_ordenacao_tabela(tabela, c),
-        )
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS_PADRAO,
+        lambda coluna: _rotulo_base_coluna(tabela, coluna),
+        lambda coluna: _abrir_filtro_coluna_mercado(tabela, coluna),
+    )
+
+
+def _valor_celula_cotacao(item: CotacaoResumo, coluna: str) -> str:
+    if coluna == "simbolo":
+        return item.simbolo.replace(".SA", "")
+    if coluna == "nome":
+        return item.nome
+    if coluna == "preco":
+        return formatar_moeda(item.preco, item.moeda)
+    if coluna == "variacao":
+        return formatar_variacao(item.variacao_valor, item.variacao_percentual, item.moeda)
+    return ""
+
+
+def _abrir_filtro_coluna_mercado(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_rotulo_base_coluna(tabela, coluna),
+        linhas=list(getattr(tabela, "_itens_originais", [])),
+        obter_valor=_valor_celula_cotacao,
+        ao_atualizar=lambda: _renderizar_tabela_mercado(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_mercado(tabela, col, desc),
+    )
+
+
+def _definir_ordenacao_mercado(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
 
 
 def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
@@ -85,25 +114,8 @@ def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
     tabela._ordenacao_desc = False  # type: ignore[attr-defined]
     tabela._rotulo_variacao = _ROTULOS_COLUNA_BASE["variacao"]  # type: ignore[attr-defined]
     tabela._itens_originais: list[CotacaoResumo] = []  # type: ignore[attr-defined]
-
-    for coluna in _COLUNAS_PADRAO:
-        tabela.heading(
-            coluna,
-            text=_ROTULOS_COLUNA_BASE[coluna],
-            command=lambda c=coluna: _alternar_ordenacao_tabela(tabela, c),
-        )
-
-
-def _alternar_ordenacao_tabela(tabela: ttk.Treeview, coluna: str) -> None:
-    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
-        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
-    else:
-        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
-        tabela._ordenacao_desc = False  # type: ignore[attr-defined]
-
-    itens = list(getattr(tabela, "_itens_originais", []))
-    mensagem_vazio = getattr(tabela, "_mensagem_vazio_atual", None)
-    preencher_tabela(tabela, itens, mensagem_vazio)
+    inicializar_filtros_coluna_treeview(tabela)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def _ordenar_cotacoes(
@@ -254,14 +266,22 @@ def _preencher_tabela_interno(
     mensagem_vazio: str | None = None,
 ) -> None:
     _configurar_ordenacao_colunas(tabela)
-    label_vazio = getattr(tabela, "_label_vazio", None)
-    card_pai = getattr(tabela, "_card_pai", None)
     tabela._itens_originais = list(itens)  # type: ignore[attr-defined]
     tabela._mensagem_vazio_atual = mensagem_vazio  # type: ignore[attr-defined]
+    _renderizar_tabela_mercado(tabela)
+
+
+def _renderizar_tabela_mercado(tabela: ttk.Treeview) -> None:
+    label_vazio = getattr(tabela, "_label_vazio", None)
+    card_pai = getattr(tabela, "_card_pai", None)
+    mensagem_vazio = getattr(tabela, "_mensagem_vazio_atual", None)
+    itens_originais = list(getattr(tabela, "_itens_originais", []))
+    itens = aplicar_filtros_coluna_treeview(itens_originais, tabela, _valor_celula_cotacao)
 
     coluna_ord = getattr(tabela, "_coluna_ordenacao", None)
     descendente = getattr(tabela, "_ordenacao_desc", False)
     itens_exibir = _ordenar_cotacoes(itens, coluna_ord, descendente)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
     selecionados_antes = set(tabela.selection())
     liberar_interacao_treeview(tabela)
@@ -272,13 +292,14 @@ def _preencher_tabela_interno(
 
     if not itens_exibir:
         if label_vazio is not None:
-            texto = mensagem_vazio or "Nenhum registro no momento."
-            label_vazio.configure(text=texto)
+            if itens_originais:
+                label_vazio.configure(text="Nenhum registro corresponde aos filtros atuais.")
+            else:
+                label_vazio.configure(text=mensagem_vazio or "Nenhum registro no momento.")
             label_vazio.pack(fill="x", padx=12, pady=(0, 12))
         if card_pai is not None:
             card_pai.configure(fg_color=CORES["superficie"])
         tabela.selection_set()
-        _atualizar_cabecalhos_ordenacao(tabela)
         return
 
     if label_vazio is not None:
@@ -310,4 +331,3 @@ def _preencher_tabela_interno(
         tabela.selection_set()
 
     sincronizar_tags_selecao_treeview(tabela)
-    _atualizar_cabecalhos_ordenacao(tabela)

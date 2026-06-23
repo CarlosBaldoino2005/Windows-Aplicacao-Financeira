@@ -7,7 +7,13 @@ from tkinter import ttk
 from src.Model.carteira import ROTULOS_TIPO_CARTEIRA, LinhaVendaCarteira
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.View.formatadores import formatar_moeda
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE, chave_comparavel
+from src.View.grid_ordenacao_helper import chave_comparavel
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.grid_interacao_treeview_helper import (
     configurar_interacao_treeview,
     liberar_interacao_treeview,
@@ -96,7 +102,7 @@ def criar_grid_vendas_carteira(
 
     ctk.CTkLabel(
         card,
-        text="Clique no titulo da coluna para ordenar. Duplo clique abre a edicao da venda.",
+        text="Clique no titulo da coluna para filtrar e ordenar. Duplo clique abre a edicao da venda.",
         font=ctk.CTkFont(size=11),
         text_color=CORES["textoSecundario"],
     ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -117,6 +123,7 @@ def criar_grid_vendas_carteira(
     tabela._coluna_ordenacao = "data_venda"  # type: ignore[attr-defined]
     tabela._ordenacao_desc = True  # type: ignore[attr-defined]
     tabela._linhas_originais: list[LinhaVendaCarteira] = []  # type: ignore[attr-defined]
+    inicializar_filtros_coluna_treeview(tabela)
 
     scroll_y = ttk.Scrollbar(frame_tabela, orient="vertical", command=tabela.yview)
     scroll_x = ttk.Scrollbar(frame_tabela, orient="horizontal", command=tabela.xview)
@@ -139,8 +146,15 @@ def criar_grid_vendas_carteira(
         tabela.heading(
             coluna,
             text=_ROTULOS[coluna],
-            command=lambda c=coluna: _alternar_ordenacao_vendas(tabela, c),
+            command=lambda c=coluna: _abrir_filtro_coluna_vendas(tabela, c),
         )
+
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_vendas(tabela, coluna),
+    )
 
     aplicar_estilo_grid_carteira(tabela)
     configurar_interacao_treeview(tabela, ao_duplo_clique=ao_duplo_clique)
@@ -181,10 +195,24 @@ def preencher_grid_vendas_carteira(
         return
 
     tabela._linhas_originais = list(linhas)  # type: ignore[attr-defined]
+    _renderizar_grid_vendas_carteira(tabela)
+
+
+def _renderizar_grid_vendas_carteira(tabela: ttk.Treeview) -> None:
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    linhas_originais = list(getattr(tabela, "_linhas_originais", []))
+    linhas = aplicar_filtros_coluna_treeview(linhas_originais, tabela, _valor_celula_venda)
     coluna = getattr(tabela, "_coluna_ordenacao", "data_venda")
     descendente = getattr(tabela, "_ordenacao_desc", True)
     ordenadas = _ordenar_linhas_vendas(linhas, coluna, descendente)
-    _atualizar_cabecalhos_ordenacao(tabela)
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda col: _abrir_filtro_coluna_vendas(tabela, col),
+    )
 
     liberar_interacao_treeview(tabela)
     tabela._tags_zebra = {}  # type: ignore[attr-defined]
@@ -195,6 +223,14 @@ def preencher_grid_vendas_carteira(
     label_vazio = getattr(tabela, "_label_vazio", None)
     if not ordenadas:
         if label_vazio is not None:
+            if linhas_originais:
+                label_vazio.configure(
+                    text="Nenhuma venda corresponde aos filtros atuais.",
+                )
+            else:
+                label_vazio.configure(
+                    text="Nenhuma venda registrada. Use Registrar venda na carteira.",
+                )
             label_vazio.pack(pady=(0, 12))
     elif label_vazio is not None:
         label_vazio.pack_forget()
@@ -230,6 +266,55 @@ def preencher_grid_vendas_carteira(
     sincronizar_tags_selecao_treeview(tabela)
 
 
+def _valor_celula_venda(linha: LinhaVendaCarteira, coluna: str) -> str:
+    venda = linha.venda
+    moeda = linha.moeda
+    if coluna == "tipo":
+        return ROTULOS_TIPO_CARTEIRA.get(venda.tipo_ativo, venda.tipo_ativo)
+    if coluna == "ativo":
+        return codigo_exibicao(venda.simbolo)
+    if coluna == "nome":
+        return linha.nome
+    if coluna == "quantidade":
+        return _formatar_quantidade(venda.quantidade)
+    if coluna == "data_compra":
+        return venda.data_compra
+    if coluna == "preco_compra":
+        return formatar_moeda(venda.preco_compra, moeda)
+    if coluna == "valor_compra":
+        return formatar_moeda(venda.valor_compra, moeda)
+    if coluna == "data_venda":
+        return venda.data_venda
+    if coluna == "preco_venda":
+        return formatar_moeda(venda.preco_venda, moeda)
+    if coluna == "valor_venda":
+        return formatar_moeda(venda.valor_venda, moeda)
+    if coluna == "dividendos":
+        return formatar_moeda(venda.dividendos_recebidos, moeda)
+    if coluna == "lucro_reais":
+        return formatar_moeda(venda.lucro_total, moeda)
+    if coluna == "lucro_pct":
+        return _formatar_lucro_pct(venda.lucro_percentual)
+    return ""
+
+
+def _abrir_filtro_coluna_vendas(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_ROTULOS.get(coluna, coluna),
+        linhas=list(getattr(tabela, "_linhas_originais", [])),
+        obter_valor=_valor_celula_venda,
+        ao_atualizar=lambda: _renderizar_grid_vendas_carteira(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_vendas(tabela, col, desc),
+    )
+
+
+def _definir_ordenacao_vendas(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
+
+
 def liberar_grid_vendas_carteira(tabela: ttk.Treeview | None) -> None:
     if tabela is None:
         return
@@ -253,30 +338,6 @@ def obter_linha_venda_por_id(
         if linha.venda.id == venda_id:
             return linha
     return None
-
-
-def _alternar_ordenacao_vendas(tabela: ttk.Treeview, coluna: str) -> None:
-    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
-        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
-    else:
-        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
-        tabela._ordenacao_desc = False  # type: ignore[attr-defined]
-    linhas = list(getattr(tabela, "_linhas_originais", []))
-    preencher_grid_vendas_carteira(tabela, linhas)
-
-
-def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS:
-        texto = _ROTULOS[coluna]
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: _alternar_ordenacao_vendas(tabela, c),
-        )
 
 
 def _chave_ordenacao_linha(linha: LinhaVendaCarteira, coluna: str) -> tuple:

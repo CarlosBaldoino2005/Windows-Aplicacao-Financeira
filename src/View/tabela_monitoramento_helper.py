@@ -17,7 +17,13 @@ from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.View.formatadores import formatar_moeda
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE, chave_comparavel
+from src.View.grid_ordenacao_helper import chave_comparavel
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
@@ -78,18 +84,58 @@ def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
     return ConfigPainelIni().carregar_opcoes_fonte_grid()
 
 
+def _textos_linha_monitoramento(linha: MonitoramentoLinha) -> dict[str, str]:
+    cotacao = linha.cotacao
+    moeda = cotacao.moeda if cotacao is not None else "BRL"
+    preco_texto = (
+        formatar_moeda(cotacao.preco, moeda)
+        if cotacao is not None and cotacao.preco > 0
+        else "—"
+    )
+    nome = cotacao.nome if cotacao is not None else "—"
+    return {
+        "tipo": ROTULOS_TIPO_ATIVO.get(linha.item.tipo_ativo, linha.item.tipo_ativo),
+        "ativo": codigo_exibicao(linha.item.simbolo),
+        "nome": nome,
+        "preco_atual": preco_texto,
+        "valor_baixo": formatar_moeda(linha.item.valor_baixo, moeda)
+        if linha.item.valor_baixo is not None
+        else "—",
+        "valor_alto": formatar_moeda(linha.item.valor_alto, moeda)
+        if linha.item.valor_alto is not None
+        else "—",
+        "status": ROTULOS_STATUS.get(linha.status, linha.status),
+    }
+
+
+def _valor_celula_monitoramento(linha: MonitoramentoLinha, coluna: str) -> str:
+    return _textos_linha_monitoramento(linha).get(coluna, "")
+
+
 def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS:
-        texto = _ROTULOS[coluna]
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: _alternar_ordenacao_monitoramento(tabela, c),
-        )
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_monitoramento(tabela, coluna),
+    )
+
+
+def _abrir_filtro_coluna_monitoramento(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_ROTULOS.get(coluna, coluna),
+        linhas=list(getattr(tabela, "_linhas_originais", [])),
+        obter_valor=_valor_celula_monitoramento,
+        ao_atualizar=lambda: _renderizar_grid_monitoramento(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_monitoramento(tabela, col, desc),
+    )
+
+
+def _definir_ordenacao_monitoramento(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
 
 
 def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
@@ -99,24 +145,8 @@ def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
     tabela._coluna_ordenacao = None  # type: ignore[attr-defined]
     tabela._ordenacao_desc = False  # type: ignore[attr-defined]
     tabela._linhas_originais: list[MonitoramentoLinha] = []  # type: ignore[attr-defined]
-
-    for coluna in _COLUNAS:
-        tabela.heading(
-            coluna,
-            text=_ROTULOS[coluna],
-            command=lambda c=coluna: _alternar_ordenacao_monitoramento(tabela, c),
-        )
-
-
-def _alternar_ordenacao_monitoramento(tabela: ttk.Treeview, coluna: str) -> None:
-    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
-        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
-    else:
-        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
-        tabela._ordenacao_desc = False  # type: ignore[attr-defined]
-
-    linhas = list(getattr(tabela, "_linhas_originais", []))
-    preencher_grid_monitoramento(tabela, linhas)
+    inicializar_filtros_coluna_treeview(tabela)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def _chave_ordenacao_linha(linha: MonitoramentoLinha, coluna: str) -> tuple:
@@ -185,7 +215,7 @@ def criar_grid_monitoramento(
 
     ctk.CTkLabel(
         card,
-        text="Duplo clique abre grafico. Vermelho = abaixo; verde = acima; claro/apagado = pausado.",
+        text="Clique no titulo da coluna para filtrar e ordenar. Duplo clique abre grafico.",
         font=ctk.CTkFont(size=11),
         text_color=CORES["textoSecundario"],
     ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -291,10 +321,19 @@ def preencher_grid_monitoramento(
 
     _configurar_ordenacao_colunas(tabela)
     tabela._linhas_originais = list(linhas)  # type: ignore[attr-defined]
+    _renderizar_grid_monitoramento(tabela)
 
+
+def _renderizar_grid_monitoramento(tabela: ttk.Treeview) -> None:
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    linhas_originais = list(getattr(tabela, "_linhas_originais", []))
+    linhas = aplicar_filtros_coluna_treeview(linhas_originais, tabela, _valor_celula_monitoramento)
     coluna_ord = getattr(tabela, "_coluna_ordenacao", None)
     descendente = getattr(tabela, "_ordenacao_desc", False)
     linhas_exibir = _ordenar_linhas_monitoramento(linhas, coluna_ord, descendente)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
     label_vazio = getattr(tabela, "_label_vazio", None)
     selecionados_antes = set(tabela.selection())
@@ -309,9 +348,14 @@ def preencher_grid_monitoramento(
 
     if not linhas_exibir:
         if label_vazio is not None:
+            if linhas_originais:
+                label_vazio.configure(text="Nenhum ativo corresponde aos filtros atuais.")
+            else:
+                label_vazio.configure(
+                    text="Nenhum ativo em monitoramento. Clique em Adicionar monitoramento.",
+                )
             label_vazio.pack(pady=(0, 12))
         tabela.selection_set()
-        _atualizar_cabecalhos_ordenacao(tabela)
         return
 
     if label_vazio is not None:
@@ -320,14 +364,7 @@ def preencher_grid_monitoramento(
     aplicar_estilo_grid_monitoramento(tabela)
 
     for indice, linha in enumerate(linhas_exibir):
-        cotacao = linha.cotacao
-        moeda = cotacao.moeda if cotacao is not None else "BRL"
-        preco_texto = (
-            formatar_moeda(cotacao.preco, moeda)
-            if cotacao is not None and cotacao.preco > 0
-            else "—"
-        )
-        nome = cotacao.nome if cotacao is not None else "—"
+        textos = _textos_linha_monitoramento(linha)
         tag_base = _TAG_POR_STATUS[linha.status]
         if linha.status == "normal":
             tag = "normal_par" if indice % 2 == 0 else "normal_impar"
@@ -341,19 +378,7 @@ def preencher_grid_monitoramento(
             "",
             "end",
             iid=linha.item.id,
-            values=(
-                ROTULOS_TIPO_ATIVO.get(linha.item.tipo_ativo, linha.item.tipo_ativo),
-                codigo_exibicao(linha.item.simbolo),
-                nome,
-                preco_texto,
-                formatar_moeda(linha.item.valor_baixo, moeda)
-                    if linha.item.valor_baixo is not None
-                    else "—",
-                formatar_moeda(linha.item.valor_alto, moeda)
-                    if linha.item.valor_alto is not None
-                    else "—",
-                ROTULOS_STATUS.get(linha.status, linha.status),
-            ),
+            values=tuple(textos[col] for col in _COLUNAS),
             tags=(tag,),
         )
 
@@ -364,7 +389,6 @@ def preencher_grid_monitoramento(
     else:
         tabela.selection_set()
     sincronizar_tags_selecao_treeview(tabela)
-    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def liberar_grid_monitoramento(tabela: ttk.Treeview | None) -> None:

@@ -11,7 +11,13 @@ from src.Model.composicao_etf import AtivoComposicaoEtf
 from src.Model.opcoes_fonte_grid import OpcoesFonteGrid
 from src.Tool.config_painel import ConfigPainelIni
 from src.View.formatadores import formatar_percentual
-from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE, chave_comparavel
+from src.View.grid_ordenacao_helper import chave_comparavel
+from src.View.grid_filtro_coluna_treeview_helper import (
+    abrir_popup_filtro_coluna_treeview,
+    aplicar_filtros_coluna_treeview,
+    atualizar_cabecalhos_com_filtro_treeview,
+    inicializar_filtros_coluna_treeview,
+)
 from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
@@ -47,18 +53,40 @@ def _resolver_opcoes(opcoes: OpcoesFonteGrid | None) -> OpcoesFonteGrid:
     return ConfigPainelIni().carregar_opcoes_fonte_grid()
 
 
+def _valor_celula_composicao_etf(ativo: AtivoComposicaoEtf, coluna: str) -> str:
+    if coluna == "ativo":
+        return ativo.simbolo
+    if coluna == "nome":
+        return ativo.nome
+    if coluna == "percentual":
+        return formatar_percentual(ativo.percentual / 100.0)
+    return ""
+
+
 def _atualizar_cabecalhos_ordenacao(tabela: ttk.Treeview) -> None:
-    coluna_ativa = getattr(tabela, "_coluna_ordenacao", None)
-    descendente = getattr(tabela, "_ordenacao_desc", False)
-    for coluna in _COLUNAS:
-        texto = _ROTULOS[coluna]
-        if coluna_ativa == coluna:
-            texto += SUFIXO_DESCENDENTE if descendente else SUFIXO_ASCENDENTE
-        tabela.heading(
-            coluna,
-            text=texto,
-            command=lambda c=coluna: alternar_ordenacao_composicao_etf(tabela, c),
-        )
+    atualizar_cabecalhos_com_filtro_treeview(
+        tabela,
+        _COLUNAS,
+        _ROTULOS,
+        lambda coluna: _abrir_filtro_coluna_composicao_etf(tabela, coluna),
+    )
+
+
+def _abrir_filtro_coluna_composicao_etf(tabela: ttk.Treeview, coluna: str) -> None:
+    abrir_popup_filtro_coluna_treeview(
+        tabela=tabela,
+        coluna=coluna,
+        rotulo_coluna=_ROTULOS.get(coluna, coluna),
+        linhas=list(getattr(tabela, "_itens_originais", [])),
+        obter_valor=_valor_celula_composicao_etf,
+        ao_atualizar=lambda: _renderizar_grid_composicao_etf(tabela),
+        definir_ordenacao=lambda col, desc: _definir_ordenacao_composicao_etf(tabela, col, desc),
+    )
+
+
+def _definir_ordenacao_composicao_etf(tabela: ttk.Treeview, coluna: str, descendente: bool) -> None:
+    tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = descendente  # type: ignore[attr-defined]
 
 
 def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
@@ -68,24 +96,8 @@ def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
     tabela._coluna_ordenacao = "percentual"  # type: ignore[attr-defined]
     tabela._ordenacao_desc = True  # type: ignore[attr-defined]
     tabela._itens_originais: list[AtivoComposicaoEtf] = []  # type: ignore[attr-defined]
-
-    for coluna in _COLUNAS:
-        tabela.heading(
-            coluna,
-            text=_ROTULOS[coluna],
-            command=lambda c=coluna: alternar_ordenacao_composicao_etf(tabela, c),
-        )
-
-
-def alternar_ordenacao_composicao_etf(tabela: ttk.Treeview, coluna: str) -> None:
-    if getattr(tabela, "_coluna_ordenacao", None) == coluna:
-        tabela._ordenacao_desc = not getattr(tabela, "_ordenacao_desc", False)  # type: ignore[attr-defined]
-    else:
-        tabela._coluna_ordenacao = coluna  # type: ignore[attr-defined]
-        tabela._ordenacao_desc = False  # type: ignore[attr-defined]
-
-    itens = list(getattr(tabela, "_itens_originais", []))
-    preencher_grid_composicao_etf(tabela, itens)
+    inicializar_filtros_coluna_treeview(tabela)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def _chave_ordenacao(item: AtivoComposicaoEtf, coluna: str) -> tuple:
@@ -138,7 +150,7 @@ def criar_grid_composicao_etf(
     ctk.CTkLabel(
         card,
         text=(
-            "Clique no titulo da coluna para ordenar. "
+            "Clique no titulo da coluna para filtrar e ordenar. "
             "Passe o mouse para destacar a linha; clique para selecionar."
         ),
         font=ctk.CTkFont(size=11),
@@ -231,10 +243,19 @@ def preencher_grid_composicao_etf(
 
     _configurar_ordenacao_colunas(tabela)
     tabela._itens_originais = list(ativos)  # type: ignore[attr-defined]
+    _renderizar_grid_composicao_etf(tabela)
 
+
+def _renderizar_grid_composicao_etf(tabela: ttk.Treeview) -> None:
+    if not treeview_ainda_ativa(tabela):
+        return
+
+    ativos_originais = list(getattr(tabela, "_itens_originais", []))
+    ativos = aplicar_filtros_coluna_treeview(ativos_originais, tabela, _valor_celula_composicao_etf)
     coluna_ord = getattr(tabela, "_coluna_ordenacao", None)
     descendente = getattr(tabela, "_ordenacao_desc", False)
     ativos_exibir = _ordenar_ativos(ativos, coluna_ord, descendente)
+    _atualizar_cabecalhos_ordenacao(tabela)
 
     label_vazio = getattr(tabela, "_label_vazio", None)
     selecionados_antes = set(tabela.selection())
@@ -249,9 +270,12 @@ def preencher_grid_composicao_etf(
 
     if not ativos_exibir:
         if label_vazio is not None:
+            if ativos_originais:
+                label_vazio.configure(text="Nenhum ativo corresponde aos filtros atuais.")
+            else:
+                label_vazio.configure(text="Nenhum ativo retornado para este ETF.")
             label_vazio.pack(pady=(0, 12))
         tabela.selection_set()
-        _atualizar_cabecalhos_ordenacao(tabela)
         return
 
     if label_vazio is not None:
@@ -283,7 +307,6 @@ def preencher_grid_composicao_etf(
         tabela.selection_set()
 
     sincronizar_tags_selecao_treeview(tabela)
-    _atualizar_cabecalhos_ordenacao(tabela)
 
 
 def liberar_grid_composicao_etf(tabela: ttk.Treeview | None) -> None:
