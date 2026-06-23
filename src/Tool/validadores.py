@@ -378,6 +378,18 @@ def validar_valor_monetario_opcional(texto: str) -> tuple[float | None, str | No
     """Valida valor monetario pt-BR ou aceita vazio."""
     if not texto or not str(texto).strip():
         return None, None
+    limpo = (
+        str(texto)
+        .strip()
+        .upper()
+        .replace("R$", "")
+        .replace("US$", "")
+        .replace("USD", "")
+        .strip()
+        .replace(" ", "")
+    )
+    if not limpo:
+        return None, None
     return validar_valor_monetario_ptbr(texto)
 
 

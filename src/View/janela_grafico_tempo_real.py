@@ -65,9 +65,11 @@ from src.View.tema import CORES
 
 INTERVALO_ATUALIZACAO_MS = 5_000
 INTERVALO_METRICAS_MS = 60_000
-ALTURA_GRAFICO_MINIMA_PX = 280
-_ALTURA_INFO_ROLAGEM_PX = 220
+ALTURA_GRAFICO_MINIMA_PX = 380
+_ALTURA_DESENHO_GRAFICO_MIN_PX = 240
 _FONTE_BANNER_ALERTA = 39  # 3x do tamanho base — apenas mensagem VENDER/COMPRAR
+_ABA_GRAFICO = "Grafico"
+_ABA_METRICAS = "Metricas"
 
 
 class JanelaGraficoTempoReal(ctk.CTkToplevel):
@@ -158,7 +160,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self.destroy()
 
     def _montar_interface(self) -> None:
-        self.grid_rowconfigure(2, weight=1, minsize=ALTURA_GRAFICO_MINIMA_PX)
+        self.grid_rowconfigure(1, weight=1, minsize=ALTURA_GRAFICO_MINIMA_PX)
         self.grid_columnconfigure(0, weight=1)
 
         cabecalho = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=0)
@@ -360,26 +362,68 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         self._label_detalhes.pack(anchor="w", padx=16, pady=(0, 10))
 
-        self._container_info = ctk.CTkFrame(
+        self._abas = ctk.CTkTabview(
             self,
             fg_color=CORES["fundo"],
-            height=_ALTURA_INFO_ROLAGEM_PX,
+            segmented_button_fg_color=CORES["superficie"],
+            segmented_button_selected_color=CORES["primaria"],
+            segmented_button_selected_hover_color=CORES["primariaHover"],
+            segmented_button_unselected_color=CORES["zebraEscura"],
+            segmented_button_unselected_hover_color=CORES["borda"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            command=self._ao_mudar_aba_agora,
         )
-        self._container_info.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 4))
-        self._container_info.pack_propagate(False)
+        self._abas.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        self._abas.add(_ABA_GRAFICO)
+        self._abas.add(_ABA_METRICAS)
+        self._abas.set(_ABA_GRAFICO)
 
-        self._area_rolagem = ctk.CTkScrollableFrame(
-            self._container_info,
+        aba_grafico = self._abas.tab(_ABA_GRAFICO)
+        aba_grafico.grid_columnconfigure(0, weight=1)
+        aba_grafico.grid_rowconfigure(0, weight=1)
+
+        self._container_grafico = ctk.CTkFrame(aba_grafico, fg_color="transparent")
+        self._container_grafico.grid(row=0, column=0, sticky="nsew")
+        self._container_grafico.grid_rowconfigure(2, weight=1)
+        self._container_grafico.grid_columnconfigure(0, weight=1)
+
+        self._label_status = ctk.CTkLabel(
+            self._container_grafico,
+            text="",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+        )
+        self._label_status.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+
+        self._barra_zoom = ctk.CTkFrame(self._container_grafico, fg_color="transparent")
+        self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
+
+        self._frame_grafico = ctk.CTkFrame(
+            self._container_grafico,
+            fg_color=CORES["superficie"],
+            corner_radius=12,
+        )
+        self._frame_grafico.grid(row=2, column=0, sticky="nsew", pady=(0, 4))
+        self._frame_grafico.bind("<Configure>", self._ao_configurar_frame_grafico)
+
+        aba_metricas = self._abas.tab(_ABA_METRICAS)
+        aba_metricas.grid_columnconfigure(0, weight=1)
+        aba_metricas.grid_rowconfigure(0, weight=1)
+
+        self._area_metricas = ctk.CTkScrollableFrame(
+            aba_metricas,
             fg_color=CORES["fundo"],
             label_text="",
         )
-        self._area_rolagem.pack(fill="both", expand=True)
+        self._area_metricas.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
 
-        self._painel_metricas = PainelMetricasAgora(self._area_rolagem)
-        self._painel_metricas.montar().pack(fill="x", pady=(0, 8))
+        self._painel_metricas = PainelMetricasAgora(self._area_metricas)
+        self._painel_metricas.montar(expandido_inicial=True).pack(fill="x", pady=(0, 12))
 
         self._frame_painel_carteira = ctk.CTkFrame(
-            self._area_rolagem,
+            self._area_metricas,
             fg_color=CORES.get("infoFundo", CORES["fundo"]),
             corner_radius=10,
             border_width=1,
@@ -428,34 +472,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if self._resumo_carteira is not None:
             self._atualizar_campos_carteira(None)
 
-        self._container_grafico = ctk.CTkFrame(self, fg_color="transparent")
-        self._container_grafico.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 8))
-        self._container_grafico.grid_rowconfigure(2, weight=1)
-        self._container_grafico.grid_columnconfigure(0, weight=1)
-
-        self._label_status = ctk.CTkLabel(
-            self._container_grafico,
-            text="",
-            font=ctk.CTkFont(size=12),
-            text_color=CORES["textoSecundario"],
-            anchor="w",
-        )
-        self._label_status.grid(row=0, column=0, sticky="ew", pady=(0, 4))
-
-        self._barra_zoom = ctk.CTkFrame(self._container_grafico, fg_color="transparent")
-        self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
-        montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
-
-        self._frame_grafico = ctk.CTkFrame(
-            self._container_grafico,
-            fg_color=CORES["superficie"],
-            corner_radius=12,
-        )
-        self._frame_grafico.grid(row=2, column=0, sticky="nsew", pady=(0, 4))
-        self._frame_grafico.bind("<Configure>", self._ao_configurar_frame_grafico)
-
         rodape = ctk.CTkFrame(self, fg_color="transparent")
-        rodape.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+        rodape.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
 
         self._label_rodape = ctk.CTkLabel(
             rodape,
@@ -1094,6 +1112,15 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if not self._frame_alerta_topo_compra.winfo_ismapped():
             self._frame_alerta_topo_compra.pack(fill="both", expand=True)
 
+    def _ao_mudar_aba_agora(self) -> None:
+        """Reajusta o grafico ao voltar para a aba principal."""
+        if not janela_ui_ainda_ativa(self):
+            return
+        if getattr(self, "_abas", None) is None:
+            return
+        if self._abas.get() == _ABA_GRAFICO:
+            self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
+
     def _preencher_entrada_alerta_compra(self) -> None:
         if self._alerta_compra_limite is None or self._alerta_compra_limite <= 0:
             return
@@ -1484,7 +1511,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._controle_zoom = None
 
         largura_px = max(400, self._medir_largura_frame_grafico())
-        altura_px = max(120, self._medir_altura_frame_grafico())
+        altura_px = max(_ALTURA_DESENHO_GRAFICO_MIN_PX, self._medir_altura_frame_grafico())
         dpi = 100
         figura = Figure(
             figsize=(largura_px / dpi, altura_px / dpi),
@@ -1574,7 +1601,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                     self.after(100, lambda: self._ajustar_grafico_ao_redimensionar(tentativa + 1))
                 return
             largura_px = max(400, self._medir_largura_frame_grafico())
-            altura_px = max(120, self._medir_altura_frame_grafico())
+            altura_px = max(_ALTURA_DESENHO_GRAFICO_MIN_PX, self._medir_altura_frame_grafico())
             dpi = self._figura.get_dpi()
             self._figura.set_size_inches(largura_px / dpi, altura_px / dpi, forward=True)
             self._canvas.draw_idle()

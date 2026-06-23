@@ -75,6 +75,7 @@ def criar_grid_vendas_carteira(
     *,
     altura: int = 6,
     modo_tela_cheia: bool = False,
+    ao_duplo_clique=None,
 ) -> ttk.Treeview:
     """Monta a treeview de vendas no mesmo padrao da grid da carteira."""
     card = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=12)
@@ -94,7 +95,7 @@ def criar_grid_vendas_carteira(
 
     ctk.CTkLabel(
         card,
-        text="Clique no titulo da coluna para ordenar. Verde = lucro; vermelho = prejuizo.",
+        text="Clique no titulo da coluna para ordenar. Duplo clique abre a edicao da venda.",
         font=ctk.CTkFont(size=11),
         text_color=CORES["textoSecundario"],
     ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -141,7 +142,7 @@ def criar_grid_vendas_carteira(
         )
 
     aplicar_estilo_grid_carteira(tabela)
-    configurar_interacao_treeview(tabela)
+    configurar_interacao_treeview(tabela, ao_duplo_clique=ao_duplo_clique)
 
     label_vazio = ctk.CTkLabel(
         card,
@@ -227,6 +228,25 @@ def liberar_grid_vendas_carteira(tabela: ttk.Treeview | None) -> None:
     if tabela is None:
         return
     liberar_interacao_treeview(tabela)
+
+
+def obter_ids_selecionados_vendas(tabela: ttk.Treeview | None) -> list[str]:
+    """Retorna os IDs das vendas selecionadas na grid."""
+    if tabela is None or not treeview_ainda_ativa(tabela):
+        return []
+    return [str(item) for item in tabela.selection()]
+
+
+def obter_linha_venda_por_id(
+    tabela: ttk.Treeview | None,
+    venda_id: str,
+) -> LinhaVendaCarteira | None:
+    if tabela is None:
+        return None
+    for linha in getattr(tabela, "_linhas_originais", []):
+        if linha.venda.id == venda_id:
+            return linha
+    return None
 
 
 def _alternar_ordenacao_vendas(tabela: ttk.Treeview, coluna: str) -> None:

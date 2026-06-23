@@ -23,7 +23,8 @@ from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
 from src.View.tema import CORES
 
 _LARGURA = 520
-_ALTURA = 560
+_ALTURA = 640
+_MARGEM_ALTURA_EXTRA_PX = 24
 
 
 class JanelaAdicionarCarteira(ctk.CTkToplevel):
@@ -41,6 +42,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         super().__init__(pai)
         self._controlador = controlador
         self._ao_salvar = ao_salvar
+        self._janela_pai_ref = pai
         self._posicao = posicao
         self._editando = posicao is not None
         self._nova_compra_ativo = preencher_ativo is not None and not self._editando
@@ -79,23 +81,30 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         except Exception:
             pass
 
-    def _ajustar_tamanho_conteudo(self, pai: ctk.CTk | ctk.CTkToplevel) -> None:
+    def _ajustar_tamanho_conteudo(self, pai: ctk.CTk | ctk.CTkToplevel | None = None) -> None:
+        referencia = pai or self._janela_pai_ref
         try:
             self.update_idletasks()
-            altura_necessaria = int(self.winfo_reqheight())
+            altura_necessaria = int(self.winfo_reqheight()) + _MARGEM_ALTURA_EXTRA_PX
             altura = max(_ALTURA, altura_necessaria)
             self.minsize(_LARGURA, altura)
-            self._centralizar_sobre_pai(pai)
+            self.geometry(f"{_LARGURA}x{altura}")
+            if referencia is not None:
+                self._centralizar_sobre_pai(referencia)
         except Exception:
-            self._centralizar_sobre_pai(pai)
+            if referencia is not None:
+                self._centralizar_sobre_pai(referencia)
 
     def _ao_fechar(self) -> None:
         liberar_modal_janela_filha(self)
         self.destroy()
 
     def _montar_interface(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
         painel = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
-        painel.pack(fill="both", expand=True, padx=16, pady=16)
+        painel.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 8))
 
         if self._editando:
             titulo_form = "Editar posicao"
@@ -176,7 +185,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             self._label_ativo_fixo.pack(anchor="w", padx=16, pady=(0, 10))
 
         self._montar_campos_compra(painel)
-        self._montar_botoes(painel)
+        self._montar_botoes(self)
 
     def _montar_busca_ativo(self, painel: ctk.CTkFrame) -> None:
         bloco_busca = ctk.CTkFrame(painel, fg_color="transparent")
@@ -246,9 +255,9 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         self._entrada_data = ctk.CTkEntry(linha2, width=120, placeholder_text="dd/mm/aaaa")
         self._entrada_data.pack(side="left")
 
-    def _montar_botoes(self, painel: ctk.CTkFrame) -> None:
-        barra = ctk.CTkFrame(painel, fg_color="transparent")
-        barra.pack(fill="x", padx=16, pady=(12, 16))
+    def _montar_botoes(self, pai: ctk.CTkBaseClass) -> None:
+        barra = ctk.CTkFrame(pai, fg_color=CORES["fundo"])
+        barra.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 16))
         ctk.CTkButton(
             barra,
             text="Cancelar",
@@ -303,7 +312,13 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
 
     def _definir_tipo_automatico(self, tipo: TipoAtivoCarteira) -> None:
         self._tipo_selecionado = tipo
-        self._combo_tipo.set(ROTULOS_TIPO_CARTEIRA[tipo])
+        rotulo = ROTULOS_TIPO_CARTEIRA[tipo]
+        if self._editando:
+            self._combo_tipo.set(rotulo)
+            return
+        self._combo_tipo.configure(state="normal")
+        self._combo_tipo.set(rotulo)
+        self._combo_tipo.configure(state="disabled")
 
     def _termo_busca(self) -> str:
         termo = self._entrada_busca.get().strip()
@@ -413,6 +428,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                 text=f"{len(resultados)} resultado(s). Clique para selecionar.",
                 text_color=CORES["textoSecundario"],
             )
+        self._ajustar_tamanho_conteudo()
 
     def _selecionar_ativo(self, simbolo: str, tipo: TipoAtivoCarteira) -> None:
         self._simbolo_selecionado = simbolo

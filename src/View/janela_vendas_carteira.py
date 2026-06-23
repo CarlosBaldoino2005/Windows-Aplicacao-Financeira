@@ -4,22 +4,26 @@ from __future__ import annotations
 from tkinter import ttk
 
 import customtkinter as ctk
+from src.View import mensagem_helper as messagebox
 
 from src.Controller.controlador_carteira import ControladorCarteira
 from src.Model.carteira import LinhaVendaCarteira
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread, janela_ui_ainda_ativa
 from src.View.formatadores import formatar_moeda, formatar_variacao
+from src.View.janela_editar_venda_carteira import abrir_editar_venda_carteira
 from src.View.tabela_vendas_carteira_helper import (
     aplicar_ajuste_altura_grid_vendas,
     criar_grid_vendas_carteira,
     liberar_grid_vendas_carteira,
+    obter_ids_selecionados_vendas,
+    obter_linha_venda_por_id,
     preencher_grid_vendas_carteira,
 )
 from src.View.tema import CORES
 
 
 class JanelaVendasCarteira(ctk.CTkToplevel):
-    """Lista ativos ja vendidos com lucro, dividendos e valores da operacao."""
+    """Lista ativos ja vendidos com manutencao, lucro e valores da operacao."""
 
     def __init__(self, pai: ctk.CTk | ctk.CTkToplevel) -> None:
         super().__init__(pai)
@@ -57,6 +61,7 @@ class JanelaVendasCarteira(ctk.CTkToplevel):
             cabecalho,
             text=(
                 "Historico de vendas registradas na carteira. "
+                "Edite ou remova vendas; ao remover, a quantidade volta para a carteira. "
                 "O lucro total inclui ganho de capital e dividendos recebidos no periodo da posicao."
             ),
             font=ctk.CTkFont(size=12),
@@ -88,15 +93,22 @@ class JanelaVendasCarteira(ctk.CTkToplevel):
         barra.pack(fill="x", padx=16, pady=(0, 12))
         barra.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkButton(
-            barra,
-            text="Atualizar",
-            command=self._carregar_dados,
-            fg_color=CORES["primaria"],
-            hover_color=CORES["primariaHover"],
-            text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=110,
-        ).pack(side="left")
+        botoes = (
+            ("Editar selecionado", self._editar_selecionado),
+            ("Remover selecionados", self._remover_selecionados),
+            ("Atualizar", self._carregar_dados),
+        )
+        for texto, comando in botoes:
+            ctk.CTkButton(
+                barra,
+                text=texto,
+                command=comando,
+                fg_color=CORES["primaria"],
+                hover_color=CORES["primariaHover"],
+                text_color=CORES.get("textoInverso", "#FFFFFF"),
+                width=168,
+                height=36,
+            ).pack(side="left", padx=(0, 8))
 
         self._label_status = ctk.CTkLabel(
             barra,
@@ -118,6 +130,7 @@ class JanelaVendasCarteira(ctk.CTkToplevel):
             "Vendas registradas",
             altura=6,
             modo_tela_cheia=True,
+            ao_duplo_clique=self._editar_selecionado,
         )
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
@@ -170,6 +183,69 @@ class JanelaVendasCarteira(ctk.CTkToplevel):
                 )
 
         executar_em_thread(self, buscar, ao_concluir)
+
+    def _editar_selecionado(self) -> None:
+        selecionados = obter_ids_selecionados_vendas(self._tabela)
+        if len(selecionados) != 1:
+            messagebox.showwarning(
+                "Editar venda",
+                "Selecione exatamente uma venda na grid.",
+                parent=self,
+            )
+            return
+
+        venda_id = selecionados[0]
+        venda = self._controlador.obter_venda(venda_id)
+        if venda is None:
+            messagebox.showwarning("Editar venda", "Venda nao encontrada.", parent=self)
+            return
+
+        linha = obter_linha_venda_por_id(self._tabela, venda_id)
+        moeda = linha.moeda if linha is not None else "BRL"
+        abrir_editar_venda_carteira(
+            self,
+            self._controlador,
+            venda,
+            moeda=moeda,
+            ao_salvar=self._carregar_dados,
+        )
+
+    def _remover_selecionados(self) -> None:
+        selecionados = obter_ids_selecionados_vendas(self._tabela)
+        if not selecionados:
+            messagebox.showwarning(
+                "Remover venda",
+                "Selecione uma ou mais vendas na grid.",
+                parent=self,
+            )
+            return
+
+        quantidade = len(selecionados)
+        texto = (
+            "A venda sera removida e a quantidade voltara para a carteira."
+            if quantidade == 1
+            else (
+                f"As {quantidade} vendas serao removidas e as quantidades "
+                "voltarao para a carteira."
+            )
+        )
+        if not messagebox.askyesno("Remover venda", texto, parent=self):
+            return
+
+        erros: list[str] = []
+        for venda_id in selecionados:
+            _, erro = self._controlador.remover_venda(venda_id)
+            if erro:
+                erros.append(erro)
+
+        if erros:
+            messagebox.showwarning(
+                "Remover venda",
+                "\n".join(erros[:5]),
+                parent=self,
+            )
+
+        self._carregar_dados()
 
     def _atualizar_resumo(self, linhas: list[LinhaVendaCarteira]) -> None:
         if not linhas:

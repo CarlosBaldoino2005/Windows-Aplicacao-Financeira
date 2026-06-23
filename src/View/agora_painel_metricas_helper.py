@@ -29,7 +29,7 @@ class PainelMetricasAgora:
         self._btn_expandir: ctk.CTkButton | None = None
         self._valores: dict[str, ctk.CTkLabel] = {}
 
-    def montar(self) -> ctk.CTkFrame:
+    def montar(self, *, expandido_inicial: bool = False) -> ctk.CTkFrame:
         card = ctk.CTkFrame(
             self._pai,
             fg_color=CORES.get("infoFundo", CORES["fundo"]),
@@ -92,8 +92,12 @@ class PainelMetricasAgora:
         self._adicionar_linha(coluna_3, "baixa_52_semanas", "Baixo — 52 sem")
         self._adicionar_linha(coluna_3, "circulacao", "Acoes em circulacao", rotulo_dinamico=True)
 
-        self._frame_grade.pack_forget()
-        self._btn_expandir.configure(text="▶")
+        if expandido_inicial:
+            self._expandido = True
+            self._btn_expandir.configure(text="▼")
+        else:
+            self._frame_grade.pack_forget()
+            self._btn_expandir.configure(text="▶")
 
         return card
 

@@ -97,6 +97,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             cabecalho,
             text=(
                 "Registre compras e vendas, edite posicoes ou remova ativos da carteira. "
+                "Em Vendas realizadas, edite ou remova o historico de vendas. "
                 "Duplo clique na grid abre o grafico do ativo."
             ),
             font=ctk.CTkFont(size=12),
@@ -310,9 +311,11 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
         dialogo.title(f"Vender {codigo_exibicao(posicao.simbolo)}")
         dialogo.configure(fg_color=CORES["fundo"])
         dialogo.resizable(False, False)
+        dialogo.grid_columnconfigure(0, weight=1)
+        dialogo.grid_rowconfigure(0, weight=1)
 
         painel = ctk.CTkFrame(dialogo, fg_color=CORES["superficie"], corner_radius=12)
-        painel.pack(fill="both", expand=True, padx=16, pady=16)
+        painel.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 8))
 
         ctk.CTkLabel(
             painel,
@@ -352,7 +355,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             text=f"Preco medio de compra: {formatar_moeda(posicao.preco_compra)}",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
-        ).pack(anchor="w", padx=16, pady=(0, 8))
+        ).pack(anchor="w", padx=16, pady=(0, 12))
 
         def fechar_dialogo() -> None:
             liberar_modal_janela_filha(dialogo)
@@ -372,8 +375,8 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             self._atualizar_lista(forcar=True)
             self._notificar_carteira_pai()
 
-        barra = ctk.CTkFrame(painel, fg_color="transparent")
-        barra.pack(fill="x", padx=16, pady=(0, 16))
+        barra = ctk.CTkFrame(dialogo, fg_color=CORES["fundo"])
+        barra.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 16))
         ctk.CTkButton(
             barra,
             text="Cancelar",
@@ -397,7 +400,15 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
         entrada_preco.bind("<Return>", lambda _e: confirmar())
         entrada_data.bind("<Return>", lambda _e: confirmar())
 
-        largura, altura = 380, 360
+        largura = 380
+        altura_minima = 400
+        try:
+            dialogo.update_idletasks()
+            altura = max(altura_minima, int(dialogo.winfo_reqheight()) + 24)
+            dialogo.minsize(largura, altura)
+            dialogo.geometry(f"{largura}x{altura}")
+        except Exception:
+            altura = altura_minima
         self._centralizar_dialogo_sobre_pai(dialogo, largura, altura)
         configurar_janela_filha_modal(dialogo, self)
         dialogo.protocol("WM_DELETE_WINDOW", fechar_dialogo)

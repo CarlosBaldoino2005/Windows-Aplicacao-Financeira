@@ -24,6 +24,7 @@ from src.Tool.validadores import (
     normalizar_simbolo_cripto,
     validar_data_ptbr,
     validar_quantidade_posicao,
+    validar_valor_monetario_opcional,
     validar_valor_monetario_ptbr,
 )
 
@@ -190,6 +191,91 @@ class CarteiraServico:
     def listar_vendas(self) -> list[VendaCarteira]:
         return self._vendas.listar()
 
+    def obter_venda(self, venda_id: str) -> VendaCarteira | None:
+        return self._vendas.obter(venda_id)
+
+    def atualizar_venda(
+        self,
+        venda_id: str,
+        quantidade: float,
+        preco_compra: float,
+        data_compra: str,
+        preco_venda: float,
+        data_venda: str,
+        dividendos_recebidos: float = 0.0,
+    ) -> tuple[bool, str | None]:
+        venda = self._vendas.obter(venda_id)
+        if venda is None:
+            return False, "Venda nao encontrada."
+
+        _, erro_data_compra = validar_data_ptbr(data_compra)
+        if erro_data_compra:
+            return False, erro_data_compra
+
+        _, erro_data = validar_data_ptbr(data_venda)
+        if erro_data:
+            return False, erro_data
+
+        if quantidade <= 0:
+            return False, "Quantidade de venda invalida."
+
+        if preco_compra <= 0:
+            return False, "Preco de compra deve ser maior que zero."
+
+        if preco_venda <= 0:
+            return False, "Preco de venda deve ser maior que zero."
+
+        if dividendos_recebidos < 0:
+            return False, "Dividendos nao podem ser negativos."
+
+        atualizada = replace(
+            venda,
+            quantidade=round(quantidade, 8),
+            preco_compra=round(preco_compra, 4),
+            data_compra=data_compra.strip(),
+            preco_venda=round(preco_venda, 4),
+            data_venda=data_venda.strip(),
+            dividendos_recebidos=round(dividendos_recebidos, 4),
+        )
+        return self._vendas.atualizar(atualizada)
+
+    def remover_venda(self, venda_id: str) -> tuple[bool, str | None]:
+        venda = self._vendas.obter(venda_id)
+        if venda is None:
+            return False, "Venda nao encontrada."
+
+        ok, erro = self._vendas.remover(venda_id)
+        if not ok:
+            return ok, erro
+
+        posicoes = self.listar()
+        existente = next((posicao for posicao in posicoes if posicao.id == venda.posicao_id), None)
+        if existente is not None:
+            posicoes = [
+                replace(
+                    existente,
+                    quantidade=round(existente.quantidade + venda.quantidade, 8),
+                )
+                if posicao.id == venda.posicao_id
+                else posicao
+                for posicao in posicoes
+            ]
+        else:
+            posicoes.append(
+                PosicaoCarteira(
+                    id=venda.posicao_id,
+                    simbolo=venda.simbolo,
+                    tipo_ativo=venda.tipo_ativo,
+                    quantidade=venda.quantidade,
+                    preco_compra=venda.preco_compra,
+                    data_compra=venda.data_compra,
+                )
+            )
+
+        self._salvar(posicoes)
+        self._atualizar_monitoramento_grupo(venda.tipo_ativo, venda.simbolo, posicoes)
+        return True, None
+
     def remover(self, posicao_id: str) -> tuple[bool, str | None]:
         posicoes = self.listar()
         removida = next((p for p in posicoes if p.id == posicao_id), None)
@@ -218,6 +304,10 @@ class CarteiraServico:
     @staticmethod
     def parse_preco(texto: str) -> tuple[float | None, str | None]:
         return validar_valor_monetario_ptbr(texto)
+
+    @staticmethod
+    def parse_preco_opcional(texto: str) -> tuple[float | None, str | None]:
+        return validar_valor_monetario_opcional(texto)
 
     def _sincronizar_monitoramento_posicao(
         self,

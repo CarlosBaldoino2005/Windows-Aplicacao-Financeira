@@ -31,6 +31,32 @@ class CarteiraVendasServico:
         vendas.insert(0, venda)
         self._salvar(vendas)
 
+    def obter(self, venda_id: str) -> VendaCarteira | None:
+        venda_id = (venda_id or "").strip()
+        if not venda_id:
+            return None
+        return next((venda for venda in self.listar() if venda.id == venda_id), None)
+
+    def atualizar(self, venda: VendaCarteira) -> tuple[bool, str | None]:
+        vendas = self.listar()
+        indice = next((i for i, item in enumerate(vendas) if item.id == venda.id), -1)
+        if indice < 0:
+            return False, "Venda nao encontrada."
+        vendas[indice] = venda
+        self._salvar(vendas)
+        return True, None
+
+    def remover(self, venda_id: str) -> tuple[bool, str | None]:
+        venda_id = (venda_id or "").strip()
+        if not venda_id:
+            return False, "Venda invalida."
+        vendas = self.listar()
+        filtradas = [venda for venda in vendas if venda.id != venda_id]
+        if len(filtradas) == len(vendas):
+            return False, "Venda nao encontrada."
+        self._salvar(filtradas)
+        return True, None
+
     def criar_venda(
         self,
         *,

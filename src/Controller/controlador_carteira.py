@@ -11,6 +11,7 @@ from src.Model.carteira import (
     PosicaoCarteira,
     ResultadoBuscaCarteira,
     TipoAtivoCarteira,
+    VendaCarteira,
     tipo_carteira_para_monitoramento,
 )
 from src.Model.resultado_busca import ResultadoBusca
@@ -166,6 +167,52 @@ class ControladorCarteira:
                     nome = detalhes.nome_empresa
             linhas.append(LinhaVendaCarteira(venda=venda, nome=nome, moeda=moeda))
         return linhas, None
+
+    def obter_venda(self, venda_id: str) -> VendaCarteira | None:
+        return self._persistencia.obter_venda(venda_id)
+
+    def atualizar_venda(
+        self,
+        venda_id: str,
+        quantidade_texto: str,
+        preco_compra_texto: str,
+        data_compra_texto: str,
+        preco_venda_texto: str,
+        data_venda_texto: str,
+        dividendos_texto: str = "",
+    ) -> tuple[bool, str | None]:
+        quantidade, erro_qtd = self._persistencia.parse_quantidade(quantidade_texto)
+        if erro_qtd:
+            return False, erro_qtd
+        preco_compra, erro_compra = self._persistencia.parse_preco(preco_compra_texto)
+        if erro_compra:
+            return False, erro_compra
+        preco_venda, erro_preco = self._persistencia.parse_preco(preco_venda_texto)
+        if erro_preco:
+            return False, erro_preco
+        dividendos, erro_div = self._persistencia.parse_preco_opcional(dividendos_texto)
+        if erro_div:
+            return False, erro_div
+        data_compra = (data_compra_texto or "").strip()
+        _, erro_data_compra = validar_data_ptbr(data_compra)
+        if erro_data_compra:
+            return False, erro_data_compra
+        data_venda = (data_venda_texto or "").strip()
+        _, erro_data = validar_data_ptbr(data_venda)
+        if erro_data:
+            return False, erro_data
+        return self._persistencia.atualizar_venda(
+            venda_id,
+            quantidade or 0,
+            preco_compra or 0,
+            data_compra,
+            preco_venda or 0,
+            data_venda,
+            dividendos if dividendos is not None else 0.0,
+        )
+
+    def remover_venda(self, venda_id: str) -> tuple[bool, str | None]:
+        return self._persistencia.remover_venda(venda_id)
 
     @staticmethod
     def _moeda_por_venda(venda) -> str:
