@@ -36,6 +36,14 @@ class CarteiraComprasServico:
         compras.insert(0, compra)
         self._salvar(compras)
 
+    def registrar_varias(self, novas: list[CompraCarteira]) -> None:
+        """Insere varias compras com uma unica gravacao em disco."""
+        if not novas:
+            return
+        compras = self.listar()
+        compras[0:0] = novas
+        self._salvar(compras)
+
     def obter(self, compra_id: str) -> CompraCarteira | None:
         compra_id = (compra_id or "").strip()
         if not compra_id:

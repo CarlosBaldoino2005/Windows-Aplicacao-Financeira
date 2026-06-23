@@ -201,8 +201,8 @@ class CarteiraServico:
         return self._vendas.listar()
 
     def listar_compras(self) -> list[CompraCarteira]:
-        self._sincronizar_compras_com_posicoes()
-        return self._compras.listar()
+        compras = self._compras.listar()
+        return self._sincronizar_compras_com_posicoes(compras)
 
     def obter_venda(self, venda_id: str) -> VendaCarteira | None:
         return self._vendas.obter(venda_id)
@@ -416,14 +416,22 @@ class CarteiraServico:
     def parse_preco_opcional(texto: str) -> tuple[float | None, str | None]:
         return validar_valor_monetario_opcional(texto)
 
-    def _sincronizar_compras_com_posicoes(self) -> None:
+    def _sincronizar_compras_com_posicoes(
+        self,
+        compras: list[CompraCarteira],
+    ) -> list[CompraCarteira]:
         """Cria registros de compra para posicoes antigas sem historico."""
         posicoes = self.listar()
-        ids_com_historico = {compra.posicao_id for compra in self._compras.listar()}
-        for posicao in posicoes:
-            if posicao.id in ids_com_historico:
-                continue
-            self._compras.registrar(self._compras.criar_compra_de_posicao(posicao))
+        ids_com_historico = {compra.posicao_id for compra in compras}
+        novas = [
+            self._compras.criar_compra_de_posicao(posicao)
+            for posicao in posicoes
+            if posicao.id not in ids_com_historico
+        ]
+        if novas:
+            self._compras.registrar_varias(novas)
+            return novas + compras
+        return compras
 
     def _sincronizar_compra_da_posicao(self, posicao: PosicaoCarteira) -> None:
         compra = self._compras.obter_por_posicao(posicao.id)

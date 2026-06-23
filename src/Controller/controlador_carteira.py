@@ -1,6 +1,7 @@
 """Coordena carteira de investimentos entre interface e servicos."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -22,7 +23,6 @@ from src.Model.opcoes_relatorio_automatico_carteira import OpcoesRelatorioAutoma
 from src.Model.cotacao import CotacaoResumo
 from src.Model.monitoramento import TipoAtivoMonitoramento
 from src.Service.carteira_servico import CarteiraServico
-from src.Service.detalhes_acao_servico import DetalhesAcaoServico
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
 from src.Service.mercado_etfs_servico import MercadoEtfsServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
@@ -53,7 +53,6 @@ class ControladorCarteira:
         self._mercado_cripto = MercadoCriptoServico()
         self._mercado_fiis = MercadoFiisServico()
         self._mercado_etfs = MercadoEtfsServico()
-        self._detalhes = DetalhesAcaoServico()
         self._monitoramento = ControladorMonitoramento()
 
     def listar_posicoes(self) -> list[PosicaoCarteira]:
@@ -168,15 +167,16 @@ class ControladorCarteira:
         if not vendas:
             return [], None
 
+        nomes = self._montar_mapa_nomes_ativos((venda.tipo_ativo, venda.simbolo) for venda in vendas)
         linhas: list[LinhaVendaCarteira] = []
         for venda in vendas:
-            nome = codigo_exibicao(venda.simbolo)
-            moeda = self._moeda_por_venda(venda)
-            if venda.tipo_ativo != "indices":
-                detalhes, _ = self._detalhes.obter_detalhes(venda.simbolo)
-                if detalhes is not None and detalhes.nome_empresa:
-                    nome = detalhes.nome_empresa
-            linhas.append(LinhaVendaCarteira(venda=venda, nome=nome, moeda=moeda))
+            linhas.append(
+                LinhaVendaCarteira(
+                    venda=venda,
+                    nome=self._nome_exibicao_operacao(venda.tipo_ativo, venda.simbolo, nomes),
+                    moeda=self._moeda_por_venda(venda),
+                )
+            )
         return linhas, None
 
     def obter_venda(self, venda_id: str) -> VendaCarteira | None:
@@ -244,19 +244,14 @@ class ControladorCarteira:
             return [], None
 
         posicoes_ids = {posicao.id for posicao in self._persistencia.listar()}
+        nomes = self._montar_mapa_nomes_ativos((compra.tipo_ativo, compra.simbolo) for compra in compras)
         linhas: list[LinhaCompraCarteira] = []
         for compra in compras:
-            nome = codigo_exibicao(compra.simbolo)
-            moeda = self._moeda_por_ativo_carteira(compra.tipo_ativo, compra.simbolo)
-            if compra.tipo_ativo != "indices":
-                detalhes, _ = self._detalhes.obter_detalhes(compra.simbolo)
-                if detalhes is not None and detalhes.nome_empresa:
-                    nome = detalhes.nome_empresa
             linhas.append(
                 LinhaCompraCarteira(
                     compra=compra,
-                    nome=nome,
-                    moeda=moeda,
+                    nome=self._nome_exibicao_operacao(compra.tipo_ativo, compra.simbolo, nomes),
+                    moeda=self._moeda_por_ativo_carteira(compra.tipo_ativo, compra.simbolo),
                     na_carteira=compra.posicao_id in posicoes_ids,
                 )
             )
@@ -315,6 +310,74 @@ class ControladorCarteira:
     @staticmethod
     def _moeda_por_venda(venda) -> str:
         return ControladorCarteira._moeda_por_ativo_carteira(venda.tipo_ativo, venda.simbolo)
+
+    def _montar_mapa_nomes_ativos(
+        self,
+        itens: Iterable[tuple[TipoAtivoCarteira, str]],
+    ) -> dict[tuple[TipoAtivoCarteira, str], str]:
+        """Busca nomes em lote via cotacoes (rapido), sem carregar detalhes completos."""
+        por_tipo: dict[TipoAtivoCarteira, list[str]] = {
+            "acoes": [],
+            "cripto": [],
+            "etfs": [],
+            "fiis": [],
+            "indices": [],
+        }
+        vistos: set[tuple[TipoAtivoCarteira, str]] = set()
+        for tipo, simbolo in itens:
+            chave = (tipo, simbolo)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            por_tipo[tipo].append(simbolo)
+
+        nomes: dict[tuple[TipoAtivoCarteira, str], str] = {}
+
+        def _registrar_resumos(resumos: list[CotacaoResumo], tipo: TipoAtivoCarteira) -> None:
+            for resumo in resumos:
+                nome = (resumo.nome or "").strip()
+                if not nome:
+                    continue
+                nomes[(tipo, resumo.simbolo)] = nome
+                if tipo == "acoes":
+                    nomes[("indices", resumo.simbolo)] = nome
+
+        consultas: list[tuple[object, list[str], TipoAtivoCarteira]] = []
+        if por_tipo["acoes"] or por_tipo["indices"]:
+            consultas.append(
+                (self._mercado_acoes, por_tipo["acoes"] + por_tipo["indices"], "acoes")
+            )
+        if por_tipo["cripto"]:
+            consultas.append((self._mercado_cripto, por_tipo["cripto"], "cripto"))
+        if por_tipo["fiis"]:
+            consultas.append((self._mercado_fiis, por_tipo["fiis"], "fiis"))
+        if por_tipo["etfs"]:
+            consultas.append((self._mercado_etfs, por_tipo["etfs"], "etfs"))
+
+        def _buscar_nomes(
+            entrada: tuple[object, list[str], TipoAtivoCarteira],
+        ) -> tuple[list[CotacaoResumo], TipoAtivoCarteira]:
+            mercado, simbolos, tipo = entrada
+            return mercado.buscar_resumos(simbolos), tipo  # type: ignore[attr-defined]
+
+        if len(consultas) <= 1:
+            for entrada in consultas:
+                resumos, tipo = _buscar_nomes(entrada)
+                _registrar_resumos(resumos, tipo)
+        else:
+            with ThreadPoolExecutor(max_workers=len(consultas)) as executor:
+                for resumos, tipo in executor.map(_buscar_nomes, consultas):
+                    _registrar_resumos(resumos, tipo)
+
+        return nomes
+
+    @staticmethod
+    def _nome_exibicao_operacao(
+        tipo: TipoAtivoCarteira,
+        simbolo: str,
+        nomes: dict[tuple[TipoAtivoCarteira, str], str],
+    ) -> str:
+        return nomes.get((tipo, simbolo)) or codigo_exibicao(simbolo)
 
     def remover_posicao(self, posicao_id: str) -> tuple[bool, str | None]:
         return self._persistencia.remover(posicao_id)

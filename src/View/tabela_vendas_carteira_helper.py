@@ -11,6 +11,7 @@ from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE
 from src.View.grid_interacao_treeview_helper import (
     configurar_interacao_treeview,
     liberar_interacao_treeview,
+    sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
 )
 from src.View.exportar_xlsx_grid_helper import (
@@ -185,6 +186,9 @@ def preencher_grid_vendas_carteira(
     ordenadas = _ordenar_linhas_vendas(linhas, coluna, descendente)
     _atualizar_cabecalhos_ordenacao(tabela)
 
+    liberar_interacao_treeview(tabela)
+    tabela._tags_zebra = {}  # type: ignore[attr-defined]
+
     for item in tabela.get_children():
         tabela.delete(item)
 
@@ -199,6 +203,7 @@ def preencher_grid_vendas_carteira(
         venda = linha.venda
         moeda = linha.moeda
         tag = _tag_lucro(venda.lucro_total, indice)
+        tabela._tags_zebra[venda.id] = tag  # type: ignore[attr-defined]
         tabela.insert(
             "",
             "end",
@@ -222,6 +227,7 @@ def preencher_grid_vendas_carteira(
         )
 
     aplicar_ajuste_altura_grid_vendas(tabela)
+    sincronizar_tags_selecao_treeview(tabela)
 
 
 def liberar_grid_vendas_carteira(tabela: ttk.Treeview | None) -> None:
