@@ -5,6 +5,7 @@ import json
 import uuid
 from dataclasses import replace
 from pathlib import Path
+from typing import Literal
 
 from src.Model.carteira import (
     MAXIMO_POSICOES_CARTEIRA,
@@ -24,9 +25,12 @@ from src.Tool.validadores import (
     normalizar_simbolo_cripto,
     validar_data_ptbr,
     validar_quantidade_posicao,
+    validar_quantidade_venda_por_tipo,
     validar_valor_monetario_opcional,
     validar_valor_monetario_ptbr,
 )
+
+ModoValorVenda = Literal["por_cota", "valor_total"]
 
 _ARQUIVO_NOME = "carteira.json"
 
@@ -302,8 +306,37 @@ class CarteiraServico:
         return validar_quantidade_posicao(texto)
 
     @staticmethod
+    def parse_quantidade_venda(
+        texto: str,
+        tipo_ativo: TipoAtivoCarteira,
+    ) -> tuple[float | None, str | None]:
+        return validar_quantidade_venda_por_tipo(texto, tipo_ativo)
+
+    @staticmethod
     def parse_preco(texto: str) -> tuple[float | None, str | None]:
         return validar_valor_monetario_ptbr(texto)
+
+    @staticmethod
+    def resolver_preco_venda(
+        texto: str,
+        quantidade: float,
+        modo: ModoValorVenda = "por_cota",
+    ) -> tuple[float | None, str | None]:
+        valor, erro = validar_valor_monetario_ptbr(texto)
+        if erro:
+            return None, erro
+        if valor is None or valor <= 0:
+            return None, "Informe um valor de venda maior que zero."
+
+        if modo == "valor_total":
+            if quantidade <= 0:
+                return None, "Informe a quantidade antes do valor total."
+            preco = round(valor / quantidade, 4)
+            if preco <= 0:
+                return None, "Valor total invalido para a quantidade informada."
+            return preco, None
+
+        return valor, None
 
     @staticmethod
     def parse_preco_opcional(texto: str) -> tuple[float | None, str | None]:

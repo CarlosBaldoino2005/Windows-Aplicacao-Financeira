@@ -112,11 +112,24 @@ class ControladorCarteira:
         quantidade_texto: str,
         preco_venda_texto: str,
         data_venda_texto: str | None = None,
+        *,
+        modo_valor_venda: str = "por_cota",
     ) -> tuple[bool, str | None]:
-        quantidade, erro = self._persistencia.parse_quantidade(quantidade_texto)
+        posicao = self._persistencia.obter(posicao_id)
+        if posicao is None:
+            return False, "Posicao nao encontrada."
+
+        quantidade, erro = self._persistencia.parse_quantidade_venda(
+            quantidade_texto,
+            posicao.tipo_ativo,
+        )
         if erro:
             return False, erro
-        preco_venda, erro_preco = self._persistencia.parse_preco(preco_venda_texto)
+        preco_venda, erro_preco = self._persistencia.resolver_preco_venda(
+            preco_venda_texto,
+            quantidade or 0,
+            "valor_total" if modo_valor_venda == "valor_total" else "por_cota",
+        )
         if erro_preco:
             return False, erro_preco
 
@@ -128,10 +141,6 @@ class ControladorCarteira:
         _, erro_data = validar_data_ptbr(data_venda)
         if erro_data:
             return False, erro_data
-
-        posicao = self._persistencia.obter(posicao_id)
-        if posicao is None:
-            return False, "Posicao nao encontrada."
 
         dividendos = 0.0
         if self._tipo_ativo_pode_ter_dividendos(posicao.tipo_ativo):
@@ -180,14 +189,27 @@ class ControladorCarteira:
         preco_venda_texto: str,
         data_venda_texto: str,
         dividendos_texto: str = "",
+        *,
+        modo_valor_venda: str = "por_cota",
     ) -> tuple[bool, str | None]:
-        quantidade, erro_qtd = self._persistencia.parse_quantidade(quantidade_texto)
+        venda = self._persistencia.obter_venda(venda_id)
+        if venda is None:
+            return False, "Venda nao encontrada."
+
+        quantidade, erro_qtd = self._persistencia.parse_quantidade_venda(
+            quantidade_texto,
+            venda.tipo_ativo,
+        )
         if erro_qtd:
             return False, erro_qtd
         preco_compra, erro_compra = self._persistencia.parse_preco(preco_compra_texto)
         if erro_compra:
             return False, erro_compra
-        preco_venda, erro_preco = self._persistencia.parse_preco(preco_venda_texto)
+        preco_venda, erro_preco = self._persistencia.resolver_preco_venda(
+            preco_venda_texto,
+            quantidade or 0,
+            "valor_total" if modo_valor_venda == "valor_total" else "por_cota",
+        )
         if erro_preco:
             return False, erro_preco
         dividendos, erro_div = self._persistencia.parse_preco_opcional(dividendos_texto)

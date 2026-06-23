@@ -295,6 +295,35 @@ def validar_quantidade_posicao(texto: str) -> tuple[float | None, str | None]:
     return round(quantidade, 8), None
 
 
+def validar_quantidade_venda_inteira(texto: str) -> tuple[float | None, str | None]:
+    """Valida quantidade de venda em ativos com cotas inteiras (acoes, FIIs, ETFs, indices)."""
+    if not texto or not str(texto).strip():
+        return None, "Informe a quantidade."
+
+    limpo = str(texto).strip().replace(" ", "")
+    if "," in limpo or "." in limpo:
+        return None, "Informe apenas numeros inteiros na quantidade."
+
+    if not limpo.isdigit():
+        return None, "Quantidade invalida."
+
+    valor = int(limpo)
+    if valor <= 0:
+        return None, "A quantidade deve ser maior que zero."
+
+    return float(valor), None
+
+
+def validar_quantidade_venda_por_tipo(
+    texto: str,
+    tipo_ativo: str,
+) -> tuple[float | None, str | None]:
+    """Valida quantidade na venda conforme o tipo de ativo."""
+    if tipo_ativo == "cripto":
+        return validar_quantidade_posicao(texto)
+    return validar_quantidade_venda_inteira(texto)
+
+
 def validar_percentual_carteira(texto: str, padrao: float = 10.0) -> tuple[float | None, str | None]:
     """Valida percentual de variacao para monitoramento da carteira (1 a 50)."""
     if not texto or not str(texto).strip():

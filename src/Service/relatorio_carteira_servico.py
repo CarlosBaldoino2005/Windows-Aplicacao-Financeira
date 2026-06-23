@@ -21,6 +21,7 @@ from src.Model.relatorio_carteira import (
     ResumoRelatorioCarteira,
 )
 from src.Service.mercado_cripto_servico import MercadoCriptoServico
+from src.Service.mercado_etfs_servico import MercadoEtfsServico
 from src.Service.mercado_fiis_servico import MercadoFiisServico
 from src.Service.mercado_servico import MercadoServico
 from src.Tool.cotacao_dual_helper import codigo_exibicao
@@ -42,6 +43,7 @@ class RelatorioCarteiraServico:
         self._pasta_relatorios = self._raiz / self._PASTA_RELATORIOS
         self._mercado_acoes = MercadoServico()
         self._mercado_fiis = MercadoFiisServico()
+        self._mercado_etfs = MercadoEtfsServico()
         self._mercado_cripto = MercadoCriptoServico()
         self._log = RegistradorLog(self._raiz)
 
@@ -122,6 +124,16 @@ class RelatorioCarteiraServico:
             self._QUANTIDADE_DESTAQUES,
             "fiis",
         )
+        etfs_alta = self._listar_mercado(
+            self._mercado_etfs.listar_em_alta,
+            self._QUANTIDADE_DESTAQUES,
+            "etfs",
+        )
+        etfs_queda = self._listar_mercado(
+            self._mercado_etfs.listar_em_queda,
+            self._QUANTIDADE_DESTAQUES,
+            "etfs",
+        )
         cripto_alta = self._listar_mercado(
             self._mercado_cripto.listar_em_alta,
             self._QUANTIDADE_DESTAQUES,
@@ -141,6 +153,8 @@ class RelatorioCarteiraServico:
             acoes_em_queda=acoes_queda,
             fiis_em_alta=fiis_alta,
             fiis_em_queda=fiis_queda,
+            etfs_em_alta=etfs_alta,
+            etfs_em_queda=etfs_queda,
             cripto_em_alta=cripto_alta,
             cripto_em_queda=cripto_queda,
             avisos=avisos,
@@ -184,6 +198,8 @@ class RelatorioCarteiraServico:
             mercado = self._mercado_fiis
         elif tipo_ativo == "cripto":
             mercado = self._mercado_cripto
+        elif tipo_ativo == "etfs":
+            mercado = self._mercado_etfs
         else:
             mercado = self._mercado_acoes
 
@@ -322,6 +338,12 @@ class RelatorioCarteiraServico:
         )
         elementos.extend(
             self._secao_mercado_pdf(subtitulo, "FIIs em queda no mercado", dados.fiis_em_queda)
+        )
+        elementos.extend(
+            self._secao_mercado_pdf(subtitulo, "ETFs em alta no mercado", dados.etfs_em_alta)
+        )
+        elementos.extend(
+            self._secao_mercado_pdf(subtitulo, "ETFs em queda no mercado", dados.etfs_em_queda)
         )
         elementos.extend(
             self._secao_mercado_pdf(

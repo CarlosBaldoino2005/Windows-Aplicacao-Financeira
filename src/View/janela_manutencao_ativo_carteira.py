@@ -317,27 +317,70 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
         painel = ctk.CTkFrame(dialogo, fg_color=CORES["superficie"], corner_radius=12)
         painel.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 8))
 
+        qtd_inteira = posicao.tipo_ativo != "cripto"
+        texto_qtd_max = (
+            f"{int(posicao.quantidade)}"
+            if qtd_inteira and posicao.quantidade == int(posicao.quantidade)
+            else str(posicao.quantidade)
+        )
+        dica_qtd = " (apenas inteiros)" if qtd_inteira else ""
+
         ctk.CTkLabel(
             painel,
-            text=f"Quantidade a vender (max. {posicao.quantidade})",
+            text=f"Quantidade a vender (max. {texto_qtd_max}){dica_qtd}",
             font=ctk.CTkFont(size=13),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(16, 4))
 
-        entrada_qtd = ctk.CTkEntry(painel, width=220, placeholder_text="Ex.: 50")
+        entrada_qtd = ctk.CTkEntry(
+            painel,
+            width=220,
+            placeholder_text="Ex.: 0,5" if not qtd_inteira else "Ex.: 50",
+        )
         entrada_qtd.pack(anchor="w", padx=16, pady=(0, 10))
         entrada_qtd.focus_set()
 
         ctk.CTkLabel(
             painel,
-            text="Preco de venda (por cota)",
+            text="Valor da venda",
             font=ctk.CTkFont(size=13),
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(0, 4))
 
+        modo_valor_venda = {"valor": "por_cota"}
+
+        seletor_modo = ctk.CTkSegmentedButton(
+            painel,
+            values=["Por cota", "Valor total"],
+            command=lambda valor: _atualizar_modo_valor(valor),
+            selected_color=CORES["primaria"],
+            unselected_color=CORES["superficie"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+        )
+        seletor_modo.set("Por cota")
+        seletor_modo.pack(anchor="w", padx=16, pady=(0, 8))
+
+        rotulo_preco = ctk.CTkLabel(
+            painel,
+            text="Preco de venda (por cota)",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+        )
+        rotulo_preco.pack(anchor="w", padx=16, pady=(0, 4))
+
         entrada_preco = ctk.CTkEntry(painel, width=220, placeholder_text="Ex.: 32,50")
         entrada_preco.pack(anchor="w", padx=16, pady=(0, 10))
         aplicar_mascara_moeda_ptbr(entrada_preco)
+
+        def _atualizar_modo_valor(valor: str) -> None:
+            if valor == "Valor total":
+                modo_valor_venda["valor"] = "valor_total"
+                rotulo_preco.configure(text="Valor total recebido na negociacao")
+                entrada_preco.configure(placeholder_text="Ex.: 1.625,00")
+            else:
+                modo_valor_venda["valor"] = "por_cota"
+                rotulo_preco.configure(text="Preco de venda (por cota)")
+                entrada_preco.configure(placeholder_text="Ex.: 32,50")
 
         ctk.CTkLabel(
             painel,
@@ -367,6 +410,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
                 entrada_qtd.get(),
                 entrada_preco.get(),
                 entrada_data.get(),
+                modo_valor_venda=modo_valor_venda["valor"],
             )
             if erro:
                 messagebox.showwarning("Venda", erro, parent=dialogo)
@@ -401,7 +445,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
         entrada_data.bind("<Return>", lambda _e: confirmar())
 
         largura = 380
-        altura_minima = 400
+        altura_minima = 460
         try:
             dialogo.update_idletasks()
             altura = max(altura_minima, int(dialogo.winfo_reqheight()) + 24)

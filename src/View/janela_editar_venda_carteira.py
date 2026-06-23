@@ -19,7 +19,7 @@ from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
 _LARGURA = 440
-_ALTURA_MINIMA = 640
+_ALTURA_MINIMA = 700
 _MARGEM_ALTURA_EXTRA_PX = 28
 
 
@@ -106,8 +106,15 @@ def abrir_editar_venda_carteira(
         ).pack(anchor="w", pady=(12, 6))
 
     _secao("Operacao")
-    _rotulo_campo("Quantidade vendida")
-    entrada_qtd = ctk.CTkEntry(area_campos, width=240, placeholder_text="Ex.: 50")
+    qtd_inteira = venda.tipo_ativo != "cripto"
+    _rotulo_campo(
+        "Quantidade vendida" + (" (apenas inteiros)" if qtd_inteira else "")
+    )
+    entrada_qtd = ctk.CTkEntry(
+        area_campos,
+        width=240,
+        placeholder_text="Ex.: 0,5" if not qtd_inteira else "Ex.: 50",
+    )
     entrada_qtd.pack(anchor="w", pady=(0, 8))
     entrada_qtd.insert(0, _formatar_quantidade(venda.quantidade))
 
@@ -129,11 +136,51 @@ def abrir_editar_venda_carteira(
     entrada_data_venda.pack(anchor="w", pady=(0, 8))
     entrada_data_venda.insert(0, venda.data_venda)
 
-    _rotulo_campo("Preco de venda (por cota)")
+    modo_valor_venda = {"valor": "por_cota"}
+
+    ctk.CTkLabel(
+        area_campos,
+        text="Valor da venda",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        text_color=CORES["texto"],
+    ).pack(anchor="w", pady=(0, 4))
+
+    seletor_modo = ctk.CTkSegmentedButton(
+        area_campos,
+        values=["Por cota", "Valor total"],
+        command=lambda valor: _atualizar_modo_valor(valor),
+        selected_color=CORES["primaria"],
+        unselected_color=CORES["superficie"],
+        text_color=CORES.get("textoInverso", "#FFFFFF"),
+    )
+    seletor_modo.set("Por cota")
+    seletor_modo.pack(anchor="w", pady=(0, 8))
+
+    rotulo_preco_venda = ctk.CTkLabel(
+        area_campos,
+        text="Preco de venda (por cota)",
+        font=ctk.CTkFont(size=12),
+        text_color=CORES["textoSecundario"],
+    )
+    rotulo_preco_venda.pack(anchor="w", pady=(0, 4))
+
     entrada_preco_venda = ctk.CTkEntry(area_campos, width=240, placeholder_text="R$ 0,00")
     entrada_preco_venda.pack(anchor="w", pady=(0, 8))
     entrada_preco_venda.insert(0, _texto_moeda(venda.preco_venda))
     aplicar_mascara_moeda_ptbr(entrada_preco_venda)
+
+    def _atualizar_modo_valor(valor: str) -> None:
+        if valor == "Valor total":
+            modo_valor_venda["valor"] = "valor_total"
+            rotulo_preco_venda.configure(text="Valor total recebido na negociacao")
+            total = round(venda.preco_venda * venda.quantidade, 2)
+            entrada_preco_venda.delete(0, "end")
+            entrada_preco_venda.insert(0, _texto_moeda(total))
+        else:
+            modo_valor_venda["valor"] = "por_cota"
+            rotulo_preco_venda.configure(text="Preco de venda (por cota)")
+            entrada_preco_venda.delete(0, "end")
+            entrada_preco_venda.insert(0, _texto_moeda(venda.preco_venda))
 
     _secao("Resultado")
     _rotulo_campo("Dividendos recebidos no periodo")
@@ -158,6 +205,7 @@ def abrir_editar_venda_carteira(
             entrada_preco_venda.get(),
             entrada_data_venda.get(),
             entrada_dividendos.get(),
+            modo_valor_venda=modo_valor_venda["valor"],
         )
         if erro:
             messagebox.showwarning("Editar venda", erro, parent=dialogo)
