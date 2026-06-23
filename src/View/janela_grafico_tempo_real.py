@@ -33,6 +33,10 @@ from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_ca
 from src.View.campo_data_calendario_helper import montar_campo_data_calendario
 from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
 from src.View.janela_negocios_agora import JanelaNegociosAgora, abrir_janela_negocios_agora
+from src.View.janela_resumo_semana_agora import (
+    JanelaResumoSemanaAgora,
+    abrir_janela_resumo_semana_agora,
+)
 from src.View import mensagem_helper as messagebox
 from src.View.agora_painel_metricas_helper import PainelMetricasAgora
 from src.View.destaque_cotacao_helper import buscar_cotacao_com_cambio
@@ -114,6 +118,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._bloqueio_foco_alerta = False
         self._job_redimensionar_grafico: str | None = None
         self._janela_negocios: JanelaNegociosAgora | None = None
+        self._janela_resumo_semana: JanelaResumoSemanaAgora | None = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo}")
@@ -218,6 +223,17 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=96,
+            height=28,
+        ).pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(
+            barra_dia,
+            text="Resumo do mês",
+            command=self._abrir_resumo_semana,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=148,
             height=28,
         ).pack(side="left", padx=(8, 0))
 
@@ -495,6 +511,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self,
             self._simbolo,
             janela_atual=self._janela_negocios,
+        )
+
+    def _abrir_resumo_semana(self) -> None:
+        self._janela_resumo_semana = abrir_janela_resumo_semana_agora(
+            self,
+            self._simbolo,
+            janela_atual=self._janela_resumo_semana,
         )
 
     def _alternar_pausa(self) -> None:

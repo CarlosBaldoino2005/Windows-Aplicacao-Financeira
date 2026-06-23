@@ -17,5 +17,24 @@ def eh_dia_util(valor: date) -> bool:
     return valor.weekday() < 5
 
 
+def listar_ultimos_dias_uteis(quantidade: int, referencia: date | None = None) -> list[date]:
+    """Retorna os ultimos N dias uteis (seg-sex), do mais antigo ao mais recente."""
+    if quantidade <= 0:
+        return []
+
+    atual = referencia or date.today()
+    dias: list[date] = []
+    candidato = atual
+    limite_busca = max(quantidade * 4, 20)
+
+    while len(dias) < quantidade and (atual - candidato).days <= limite_busca:
+        if eh_dia_util(candidato):
+            dias.append(candidato)
+        candidato -= timedelta(days=1)
+
+    dias.reverse()
+    return dias[-quantidade:]
+
+
 def formatar_data_ptbr(valor: date) -> str:
     return valor.strftime("%d/%m/%Y")

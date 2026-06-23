@@ -63,6 +63,8 @@ _ROTULOS = {
 _LARGURAS = (90, 80, 150, 70, 90, 100, 100, 100, 100, 90, 100, 100, 130, 195)
 _LARGURA_MIN_PROX_DIVIDENDO = 175
 _FONTE_FAMILIA = "Segoe UI"
+_COLUNA_ORDENACAO_PADRAO = "resultado_reais"
+_ORDENACAO_DESC_PADRAO = True
 
 
 def _formatar_quantidade(valor: float) -> str:
@@ -101,8 +103,8 @@ def _configurar_ordenacao_colunas(tabela: ttk.Treeview) -> None:
     if getattr(tabela, "_ordenacao_configurada", False):
         return
     tabela._ordenacao_configurada = True  # type: ignore[attr-defined]
-    tabela._coluna_ordenacao = None  # type: ignore[attr-defined]
-    tabela._ordenacao_desc = False  # type: ignore[attr-defined]
+    tabela._coluna_ordenacao = _COLUNA_ORDENACAO_PADRAO  # type: ignore[attr-defined]
+    tabela._ordenacao_desc = _ORDENACAO_DESC_PADRAO  # type: ignore[attr-defined]
     tabela._linhas_originais: list[LinhaCarteira] = []  # type: ignore[attr-defined]
 
     for coluna in _COLUNAS:
