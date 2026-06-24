@@ -39,7 +39,7 @@ from src.View.tabela_mercado_helper import (
 )
 from src.View.tema import CORES
 
-TipoPainelFavoritos = Literal["acoes", "cripto", "etfs", "fiis", "dividendos"]
+TipoPainelFavoritos = Literal["acoes", "cripto", "etfs", "fiis", "dividendos", "acoes_globais"]
 
 _TITULOS_PAINEL: dict[TipoPainelFavoritos, str] = {
     "acoes": "Acoes favoritas",
@@ -47,6 +47,7 @@ _TITULOS_PAINEL: dict[TipoPainelFavoritos, str] = {
     "etfs": "ETFs favoritos",
     "fiis": "FIIs favoritos",
     "dividendos": "Empresas favoritas (dividendos)",
+    "acoes_globais": "Acoes globais favoritas",
 }
 
 _DESCRICOES_PAINEL: dict[TipoPainelFavoritos, str] = {
@@ -64,6 +65,10 @@ _DESCRICOES_PAINEL: dict[TipoPainelFavoritos, str] = {
         "Adicione empresas pagadoras de dividendos que deseja acompanhar. "
         "FIIs ficam no painel Fundos imobiliarios (lista separada)."
     ),
+    "acoes_globais": (
+        "Adicione BDRs (acoes globais na B3) que deseja acompanhar. "
+        "A lista fica salva em dados/favoritos_acoes_globais.json neste computador."
+    ),
 }
 
 _TITULOS_GRID: dict[TipoPainelFavoritos, str] = {
@@ -72,6 +77,7 @@ _TITULOS_GRID: dict[TipoPainelFavoritos, str] = {
     "etfs": "Seus ETFs favoritos (duplo clique abre o grafico)",
     "fiis": "Seus FIIs favoritos (duplo clique abre o grafico)",
     "dividendos": "Suas empresas favoritas (duplo clique abre o grafico)",
+    "acoes_globais": "Seus BDRs favoritos (duplo clique abre o grafico)",
 }
 
 
@@ -246,6 +252,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             definir_rotulo_coluna_simbolo(self._tabela, "FII")
         if self._tipo_painel == "etfs":
             definir_rotulo_coluna_simbolo(self._tabela, "ETF")
+        if self._tipo_painel == "acoes_globais":
+            definir_rotulo_coluna_simbolo(self._tabela, "BDR")
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
         rodape.pack(fill="x", padx=16, pady=(0, 12))
@@ -446,6 +454,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
             return "Nenhum FII favorito. Use Buscar ou Adicionar acima."
         if self._tipo_painel == "etfs":
             return "Nenhum ETF favorito. Use Buscar ou Adicionar acima."
+        if self._tipo_painel == "acoes_globais":
+            return "Nenhum BDR favorito. Use Buscar ou Adicionar acima."
         if self._tipo_painel == "dividendos":
             qtd_fiis = len(FavoritosFiisServico().listar())
             if qtd_fiis > 0:
@@ -506,6 +516,8 @@ class JanelaFavoritas(ctk.CTkToplevel):
                 definir_rotulo_coluna_simbolo(self._tabela, "FII")
             if self._tipo_painel == "etfs":
                 definir_rotulo_coluna_simbolo(self._tabela, "ETF")
+            if self._tipo_painel == "acoes_globais":
+                definir_rotulo_coluna_simbolo(self._tabela, "BDR")
             hora = datetime.now().strftime("%H:%M:%S")
             self._label_status.configure(
                 text=f"{len(cotacoes)} favorita(s) — atualizado as {hora}",

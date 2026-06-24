@@ -8,6 +8,7 @@ import customtkinter as ctk
 from src.Controller.controlador_mercado import ControladorMercado
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.dividendos_helper import eh_pagadora_dividendos
+from src.Tool.bdrs_helper import eh_bdr_b3
 from src.Tool.etfs_helper import eh_etf
 from src.Tool.fiis_helper import eh_fii
 from src.Tool.validadores import normalizar_simbolo, normalizar_simbolo_cripto
@@ -35,6 +36,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         modo_somente_dividendos: bool = False,
         modo_somente_fiis: bool = False,
         modo_somente_etfs: bool = False,
+        modo_somente_acoes_globais: bool = False,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
@@ -42,6 +44,7 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         self._modo_somente_dividendos = modo_somente_dividendos
         self._modo_somente_fiis = modo_somente_fiis
         self._modo_somente_etfs = modo_somente_etfs
+        self._modo_somente_acoes_globais = modo_somente_acoes_globais
         self._simbolos: list[str] = []
         self._janela_grafico: JanelaGraficoComparacao | None = None
 
@@ -284,6 +287,19 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         )
         return False
 
+    def _validar_acao_global(self, simbolo: str) -> bool:
+        if not self._modo_somente_acoes_globais:
+            return True
+        if eh_bdr_b3(simbolo):
+            return True
+        codigo = self._codigo_exibicao(simbolo)
+        messagebox.showwarning(
+            "Comparar",
+            f"{codigo} nao consta como BDR negociado na B3.",
+            parent=self,
+        )
+        return False
+
     def _incluir_simbolo(self, simbolo: str) -> bool:
         if not simbolo:
             return False
@@ -292,6 +308,8 @@ class JanelaCompararAcoes(ctk.CTkToplevel):
         if not self._validar_fii(simbolo):
             return False
         if not self._validar_etf(simbolo):
+            return False
+        if not self._validar_acao_global(simbolo):
             return False
         if simbolo in self._simbolos:
             messagebox.showinfo(

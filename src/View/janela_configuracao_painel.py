@@ -30,7 +30,7 @@ from src.View.tema import (
 _LARGURA = 480
 _ALTURA = 580
 
-EscopoQuantidadePainel = Literal["acoes", "cripto", "etfs", "fiis", "dividendos"]
+EscopoQuantidadePainel = Literal["acoes", "cripto", "etfs", "fiis", "dividendos", "acoes_globais"]
 
 _TITULOS_ESCOPO: dict[EscopoQuantidadePainel, str] = {
     "acoes": "Configuracoes do painel",
@@ -38,6 +38,7 @@ _TITULOS_ESCOPO: dict[EscopoQuantidadePainel, str] = {
     "etfs": "Configuracoes — ETFs",
     "fiis": "Configuracoes — fundos imobiliarios",
     "dividendos": "Configuracoes — empresa + dividendos",
+    "acoes_globais": "Configuracoes — acoes globais (BDRs)",
 }
 
 
@@ -163,6 +164,10 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
                 "Tema, quantidade de empresas, fonte das grids e atualizacao automatica "
                 "de cotacoes."
             ),
+            "acoes_globais": (
+                "Tema, quantidade de BDRs, fonte das grids e atualizacao automatica "
+                "de cotacoes."
+            ),
         }
         return mapa.get(self._escopo_quantidade, mapa["acoes"])
 
@@ -214,6 +219,10 @@ class JanelaConfiguracaoPainel(ctk.CTkToplevel):
             "dividendos": (
                 "Quantidade de empresas (Em alta / Em queda / Todas)",
                 "Limite de linhas em cada aba do painel de dividendos (1 a 100).",
+            ),
+            "acoes_globais": (
+                "Quantidade de BDRs (Em alta / Em queda / Todas)",
+                "Limite de linhas em cada aba do painel de acoes globais (1 a 100).",
             ),
         }
         titulo_qtd, detalhe_qtd = titulos_qtd.get(

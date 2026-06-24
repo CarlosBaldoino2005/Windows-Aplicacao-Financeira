@@ -6,6 +6,7 @@ Tela principal como hub de navegacao; cotacoes de acoes em tela dedicada.
 import customtkinter as ctk
 
 from src.View.janela_hub_acoes import JanelaHubAcoes
+from src.View.janela_hub_acoes_globais import JanelaHubAcoesGlobais
 from src.View.janela_hub_criptomoedas import JanelaHubCriptomoedas
 from src.View.janela_hub_fundos_imobiliarios import JanelaHubFundosImobiliarios
 from src.View.janela_hub_etfs import JanelaHubEtfs
@@ -51,6 +52,7 @@ class InterfaceApp(ctk.CTk):
         super().__init__()
         self._config_painel = ConfigPainelIni()
         self._janela_acoes: JanelaHubAcoes | None = None
+        self._janela_acoes_globais: JanelaHubAcoesGlobais | None = None
         self._janela_cripto: JanelaHubCriptomoedas | None = None
         self._janela_fiis: JanelaHubFundosImobiliarios | None = None
         self._janela_etfs: JanelaHubEtfs | None = None
@@ -329,6 +331,7 @@ class InterfaceApp(ctk.CTk):
 
         botoes_consultas = [
             ("Acoes", self._abrir_hub_acoes),
+            ("Acoes globais", self._abrir_hub_acoes_globais),
             ("Criptomoedas", self._abrir_hub_criptomoedas),
             ("Fundos imobiliarios", self._abrir_hub_fundos_imobiliarios),
             ("ETFs", self._abrir_hub_etfs),
@@ -371,6 +374,19 @@ class InterfaceApp(ctk.CTk):
                 pass
 
         self._janela_acoes = JanelaHubAcoes(self)
+
+    def _abrir_hub_acoes_globais(self) -> None:
+        """Abre (ou foca) o painel de BDRs (acoes globais na B3)."""
+        if self._janela_acoes_globais is not None:
+            try:
+                if self._janela_acoes_globais.winfo_exists():
+                    self._janela_acoes_globais.focus_force()
+                    self._janela_acoes_globais.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_acoes_globais = JanelaHubAcoesGlobais(self)
 
     def _abrir_hub_criptomoedas(self) -> None:
         """Abre (ou foca) o painel dedicado de criptomoedas."""
