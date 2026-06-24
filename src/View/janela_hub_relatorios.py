@@ -63,22 +63,41 @@ class JanelaHubRelatorios(ctk.CTkToplevel):
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
-            wraplength=860,
+            wraplength=900,
             justify="left",
         ).pack(anchor="w", padx=20, pady=(0, 12))
 
+        self._montar_consultas()
+
+        ctk.CTkLabel(
+            self,
+            text="Dados publicos (CVM, StockAnalysis, Yahoo Finance). Uso educacional.",
+            font=ctk.CTkFont(size=11),
+            text_color=CORES.get("textoAvisoLegal", CORES["aviso"]),
+            fg_color=CORES.get("destaqueAvisoLegal", CORES["avisoFundo"]),
+            corner_radius=8,
+        ).pack(fill="x", padx=16, pady=(0, 12))
+
+    def _montar_consultas(self) -> None:
         card = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
-        card.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        card.pack(fill="x", padx=16, pady=(0, 8))
 
         ctk.CTkLabel(
             card,
-            text="Relatorios disponiveis",
+            text="Consultas",
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(16, 8))
+        ).pack(anchor="w", padx=12, pady=(12, 4))
+
+        ctk.CTkLabel(
+            card,
+            text="Escolha o relatorio desejado nos botoes abaixo.",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+        ).pack(anchor="w", padx=12, pady=(0, 8))
 
         linha = ctk.CTkFrame(card, fg_color="transparent")
-        linha.pack(anchor="w", padx=16, pady=(0, 12))
+        linha.pack(anchor="w", padx=12, pady=(0, 8))
 
         for texto, comando in (
             ("Relatorio da carteira (PDF)", self._gerar_relatorio_carteira),
@@ -91,28 +110,22 @@ class JanelaHubRelatorios(ctk.CTkToplevel):
                 fg_color=CORES["primaria"],
                 hover_color=CORES["primariaHover"],
                 text_color=CORES.get("textoInverso", "#FFFFFF"),
-                width=260,
-                height=40,
-            ).pack(side="left", padx=(0, 12))
+                width=220,
+                height=36,
+            ).pack(side="left", padx=(0, 8))
+
+        barra = ctk.CTkFrame(card, fg_color="transparent")
+        barra.pack(fill="x", padx=12, pady=(0, 12))
 
         self._label_status = ctk.CTkLabel(
-            card,
+            barra,
             text="Escolha um relatorio acima.",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=820,
             justify="left",
         )
-        self._label_status.pack(anchor="w", padx=16, pady=(0, 16))
-
-        ctk.CTkLabel(
-            self,
-            text="Dados publicos (CVM, StockAnalysis, Yahoo Finance). Uso educacional.",
-            font=ctk.CTkFont(size=11),
-            text_color=CORES.get("textoAvisoLegal", CORES["aviso"]),
-            fg_color=CORES.get("destaqueAvisoLegal", CORES["avisoFundo"]),
-            corner_radius=8,
-        ).pack(fill="x", padx=16, pady=(0, 12))
+        self._label_status.pack(side="left")
 
     def _reconstruir_interface_apos_tema(self) -> None:
         for widget in self.winfo_children():

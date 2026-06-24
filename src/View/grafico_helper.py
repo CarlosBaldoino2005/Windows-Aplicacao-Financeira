@@ -638,6 +638,49 @@ def _desconectar_selecao_periodo(canvas: FigureCanvasTkAgg) -> None:
     canvas._cid_selecao_periodo = None
 
 
+def _registrar_meta_limpar_selecao(
+    canvas: FigureCanvasTkAgg,
+    ao_atualizar_comparacao: Callable[[dict], None],
+    *,
+    texto_instrucao: str,
+    intraday: bool = False,
+) -> None:
+    canvas._limpar_selecao_periodo_meta = {
+        "ao_atualizar_comparacao": ao_atualizar_comparacao,
+        "texto_instrucao": texto_instrucao,
+        "intraday": intraday,
+    }
+
+
+def limpar_selecao_periodo_no_grafico(canvas: FigureCanvasTkAgg) -> bool:
+    """Remove marcadores vermelhos e reinicia a selecao (ex.: botao Reset do zoom)."""
+    estado = getattr(canvas, "_estado_selecao_periodo", None)
+    if estado is None:
+        return False
+
+    havia_selecao = bool(
+        estado.get("indices") or estado.get("chaves") or estado.get("artistas")
+    )
+    _limpar_artistas(estado)
+    estado["indices"] = []
+    estado["chaves"] = []
+
+    meta = getattr(canvas, "_limpar_selecao_periodo_meta", None)
+    if meta and meta.get("ao_atualizar_comparacao"):
+        ao_atualizar = meta["ao_atualizar_comparacao"]
+        if meta.get("intraday"):
+            ao_atualizar({"tipo": "reiniciar_selecao"})
+        else:
+            ao_atualizar(
+                payload_instrucao(
+                    meta.get("texto_instrucao") or TEXTO_INSTRUCAO_GRAFICO_ACAO
+                )
+            )
+
+    canvas.draw_idle()
+    return havia_selecao
+
+
 def configurar_selecao_periodo(
     canvas: FigureCanvasTkAgg,
     eixo,
@@ -660,6 +703,12 @@ def configurar_selecao_periodo(
         else "Clique no segundo ponto no grafico (data final)."
     )
     estado = _obter_estado_selecao_periodo(canvas, reiniciar=not preservar_painel)
+    _registrar_meta_limpar_selecao(
+        canvas,
+        ao_atualizar_comparacao,
+        texto_instrucao=instrucao,
+        intraday=intraday,
+    )
 
     def _quantidade_cotas() -> int:
         if obter_quantidade_cotas is None:
@@ -848,7 +897,12 @@ def configurar_selecao_periodo_comparacao(
     if not simbolos or not linhas_grafico:
         return
 
-    estado = _criar_estado_selecao()
+    estado = _obter_estado_selecao_periodo(canvas, reiniciar=True)
+    _registrar_meta_limpar_selecao(
+        canvas,
+        ao_atualizar_comparacao,
+        texto_instrucao=TEXTO_INSTRUCAO_GRAFICO_COMPARACAO,
+    )
     quantidade = len(series[simbolos[0]])
 
     def desenhar_marcadores_no_indice(indice: int) -> None:
@@ -918,7 +972,8 @@ def configurar_selecao_periodo_comparacao(
             )
         canvas.draw_idle()
 
-    canvas.mpl_connect("button_release_event", ao_clicar)
+    _desconectar_selecao_periodo(canvas)
+    canvas._cid_selecao_periodo = canvas.mpl_connect("button_release_event", ao_clicar)
     ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_COMPARACAO))
 
 
