@@ -89,6 +89,8 @@ def calcular_comparacao_acao_unica(
     indice_inicio: int,
     indice_fim: int,
     quantidade_cotas: int = 1,
+    *,
+    intraday: bool = False,
 ) -> dict:
     """Comparacao de periodo para uma unica acao com simulacao por quantidade."""
     p_ini = pontos[indice_inicio]
@@ -121,7 +123,11 @@ def calcular_comparacao_acao_unica(
         "lucro": resultado_total >= 0,
     }
 
-    if not simbolo.endswith("-USD"):
+    if intraday:
+        acao["total_dividendos_carteira"] = 0.0
+        acao["resultado_com_dividendos"] = resultado_total
+        acao["lucro_com_dividendos"] = resultado_total >= 0
+    elif not simbolo.endswith("-USD"):
         resumo_div = analisar_dividendos_periodo(
             simbolo,
             str(p_ini["data"]),
@@ -144,12 +150,18 @@ def calcular_comparacao_acao_unica(
         "data_inicio": p_ini["data"],
         "data_fim": p_fim["data"],
         "pregoes": abs(indice_fim - indice_inicio) + 1,
+        "indice_inicio": indice_inicio,
+        "indice_fim": indice_fim,
         "acoes": [acao],
         "melhor_desempenho": codigo,
         "pior_desempenho": codigo,
         "uma_acao": True,
     }
-    if moeda == "BRL" and qtd > 0:
+    if intraday:
+        payload["rotulo_inicio"] = "Horario inicial"
+        payload["rotulo_fim"] = "Horario final"
+        payload["rotulo_contagem"] = "Pontos no intervalo"
+    elif moeda == "BRL" and qtd > 0:
         payload["comparar_cdi"] = True
     return payload
 
@@ -271,7 +283,10 @@ class PainelComparacaoPeriodo:
         ).pack(fill="x", padx=4, pady=6)
         ctk.CTkLabel(
             container,
-            text="Clique no segundo ponto no grafico (data final).",
+            text=dados.get(
+                "texto_segundo_clique",
+                "Clique no segundo ponto no grafico (data final).",
+            ),
             font=ctk.CTkFont(size=PainelComparacaoPeriodo._tamanho_fonte(12)),
             text_color=CORES["textoSecundario"],
         ).pack(anchor="w", padx=8, pady=(0, 6))
@@ -289,15 +304,15 @@ class PainelComparacaoPeriodo:
             grid_periodo.grid_columnconfigure(col, weight=1)
 
         PainelComparacaoPeriodo._celula_resumo(
-            grid_periodo, 0, "Data inicial", dados["data_inicio"], CORES["texto"]
+            grid_periodo, 0, dados.get("rotulo_inicio", "Data inicial"), dados["data_inicio"], CORES["texto"]
         )
         PainelComparacaoPeriodo._celula_resumo(
-            grid_periodo, 1, "Data final", dados["data_fim"], CORES["texto"]
+            grid_periodo, 1, dados.get("rotulo_fim", "Data final"), dados["data_fim"], CORES["texto"]
         )
         PainelComparacaoPeriodo._celula_resumo(
             grid_periodo,
             2,
-            "Pregoes no intervalo",
+            dados.get("rotulo_contagem", "Pregoes no intervalo"),
             str(dados["pregoes"]),
             CORES["primaria"],
         )
@@ -387,6 +402,20 @@ class PainelComparacaoPeriodo:
         if acao.get("quantidade_cotas"):
             qtd = int(acao["quantidade_cotas"])
             PainelComparacaoPeriodo._linha_metrica(card, "Quantidade de acoes", f"{qtd:,}".replace(",", "."))
+
+            if acao.get("modo_simulacao") == "valor" and acao.get("valor_investimento_informado") is not None:
+                PainelComparacaoPeriodo._linha_metrica(
+                    card,
+                    "Valor informado",
+                    formatar_moeda(float(acao["valor_investimento_informado"]), moeda),
+                )
+                if acao.get("valor_sobra_compra") is not None and float(acao["valor_sobra_compra"]) > 0:
+                    PainelComparacaoPeriodo._linha_metrica(
+                        card,
+                        "Sobra (nao compra acao fracionada)",
+                        formatar_moeda(float(acao["valor_sobra_compra"]), moeda),
+                        CORES["textoSecundario"],
+                    )
 
             if acao.get("valor_inicio_total") is not None:
                 PainelComparacaoPeriodo._linha_metrica(

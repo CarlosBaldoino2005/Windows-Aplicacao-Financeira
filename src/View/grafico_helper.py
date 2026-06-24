@@ -31,6 +31,11 @@ TEXTO_INSTRUCAO_GRAFICO_ACAO = (
     "e comparacao com 100% do CDI no mesmo periodo (acoes em reais)."
 )
 
+TEXTO_INSTRUCAO_GRAFICO_AGORA = (
+    "Clique no grafico: 1º ponto (inicio) e 2º ponto (fim) para ver a variacao "
+    "do preco no intervalo selecionado (marcadores vermelhos)."
+)
+
 COR_VERMELHO = "#DC2626"
 COR_LINHA_CDI = "#D97706"
 DESLOC_TOOLTIP_PONTOS = 18
@@ -501,7 +506,75 @@ def _montar_texto_comparacao(
 
 
 def _criar_estado_selecao() -> dict:
-    return {"indices": [], "artistas": []}
+    return {"indices": [], "chaves": [], "artistas": []}
+
+
+def _chave_ponto_selecao(ponto: dict) -> str:
+    return str(ponto.get("data_iso") or ponto.get("data") or "")
+
+
+def _resolver_indices_por_chaves(pontos: list[dict], chaves: list[str]) -> list[int]:
+    if not chaves:
+        return []
+
+    indices: list[int] = []
+    for chave in chaves:
+        if not chave:
+            continue
+        for indice, ponto in enumerate(pontos):
+            if _chave_ponto_selecao(ponto) == chave:
+                indices.append(indice)
+                break
+    return indices
+
+
+def _obter_estado_selecao_periodo(canvas: FigureCanvasTkAgg, *, reiniciar: bool) -> dict:
+    if reiniciar or not hasattr(canvas, "_estado_selecao_periodo"):
+        canvas._estado_selecao_periodo = _criar_estado_selecao()
+    return canvas._estado_selecao_periodo
+
+
+def _sincronizar_indices_selecao(estado: dict, pontos: list[dict]) -> list[int]:
+    chaves = list(estado.get("chaves") or [])
+    if chaves:
+        indices = _resolver_indices_por_chaves(pontos, chaves)
+        estado["indices"] = indices
+        return indices
+    return list(estado.get("indices") or [])
+
+
+def _limites_faixa_selecao_grafico(xs: np.ndarray, indice_inicio: int, indice_fim: int) -> tuple[float, float]:
+    """Usa coordenadas reais do eixo X (minutos no Agora ou indice no grafico diario)."""
+    i0 = min(indice_inicio, indice_fim)
+    i1 = max(indice_inicio, indice_fim)
+    x0 = float(xs[i0])
+    x1 = float(xs[i1])
+    if i0 == i1:
+        passo = float(np.median(np.diff(xs))) if len(xs) > 1 else 1.0
+        margem = max(abs(passo) * 0.35, 0.35)
+        return x0 - margem, x0 + margem
+    margem = max(abs(x1 - x0) * 0.04, 0.35)
+    return min(x0, x1) - margem, max(x0, x1) + margem
+
+
+def _redesenhar_selecao_periodo(
+    eixo,
+    linha: Line2D,
+    pontos: list[dict],
+    estado: dict,
+    *,
+    desenhar_marcador,
+    desenhar_intervalo,
+) -> None:
+    _limpar_artistas(estado)
+    indices = _sincronizar_indices_selecao(estado, pontos)
+    if len(indices) >= 2:
+        indice_inicio = min(indices[0], indices[1])
+        indice_fim = max(indices[0], indices[1])
+        if indice_fim < len(pontos):
+            desenhar_intervalo(indice_inicio, indice_fim)
+    elif len(indices) == 1 and indices[0] < len(pontos):
+        desenhar_marcador(indices[0])
 
 
 def _limpar_artistas(estado: dict) -> None:
@@ -553,6 +626,18 @@ def _publicar_payload_com_cdi(
     threading.Thread(target=trabalho, daemon=True).start()
 
 
+def _desconectar_selecao_periodo(canvas: FigureCanvasTkAgg) -> None:
+    """Evita multiplos handlers ao redesenhar o grafico no mesmo canvas."""
+    identificador = getattr(canvas, "_cid_selecao_periodo", None)
+    if identificador is None:
+        return
+    try:
+        canvas.mpl_disconnect(identificador)
+    except Exception:
+        pass
+    canvas._cid_selecao_periodo = None
+
+
 def configurar_selecao_periodo(
     canvas: FigureCanvasTkAgg,
     eixo,
@@ -562,9 +647,19 @@ def configurar_selecao_periodo(
     moeda: str,
     ao_atualizar_comparacao: Callable[[dict], None],
     obter_quantidade_cotas: Callable[[], int] | None = None,
+    *,
+    texto_instrucao: str | None = None,
+    intraday: bool = False,
+    preservar_painel: bool = False,
 ) -> None:
-    """Clique duplo no grafico de uma acao (marcadores e intervalo vermelhos)."""
-    estado = _criar_estado_selecao()
+    """Clique no grafico de uma acao (marcadores e intervalo vermelhos)."""
+    instrucao = texto_instrucao or TEXTO_INSTRUCAO_GRAFICO_ACAO
+    texto_segundo_clique = (
+        "Clique no segundo ponto no grafico (horario final)."
+        if intraday
+        else "Clique no segundo ponto no grafico (data final)."
+    )
+    estado = _obter_estado_selecao_periodo(canvas, reiniciar=not preservar_painel)
 
     def _quantidade_cotas() -> int:
         if obter_quantidade_cotas is None:
@@ -582,23 +677,26 @@ def configurar_selecao_periodo(
     def desenhar_intervalo(indice_inicio: int, indice_fim: int) -> None:
         xs = np.array(linha.get_xdata(), dtype=float)
         ys = np.array(linha.get_ydata(), dtype=float)
+        i0 = min(indice_inicio, indice_fim)
+        i1 = max(indice_inicio, indice_fim)
+        x_min, x_max = _limites_faixa_selecao_grafico(xs, i0, i1)
         faixa = eixo.axvspan(
-            indice_inicio - 0.35,
-            indice_fim + 0.35,
+            x_min,
+            x_max,
             color=COR_VERMELHO,
             alpha=0.18,
             zorder=1,
         )
         trecho, = eixo.plot(
-            xs[indice_inicio : indice_fim + 1],
-            ys[indice_inicio : indice_fim + 1],
+            xs[i0 : i1 + 1],
+            ys[i0 : i1 + 1],
             color=COR_VERMELHO,
             linewidth=3.5,
             zorder=5,
         )
         estado["artistas"].extend([faixa, trecho])
-        desenhar_marcador(indice_inicio)
-        desenhar_marcador(indice_fim)
+        desenhar_marcador(i0)
+        desenhar_marcador(i1)
 
     def ao_clicar(evento):
         if evento.button != 1:
@@ -613,26 +711,35 @@ def configurar_selecao_periodo(
         if len(selecionados) >= 2:
             _limpar_artistas(estado)
             selecionados.clear()
-            ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO))
+            estado["chaves"] = []
+            if intraday:
+                ao_atualizar_comparacao({"tipo": "reiniciar_selecao"})
+            else:
+                ao_atualizar_comparacao(payload_instrucao(instrucao))
 
         if len(selecionados) == 0:
             selecionados.append(indice)
+            estado["chaves"] = [_chave_ponto_selecao(pontos[indice])]
             desenhar_marcador(indice)
             p = pontos[indice]
-            ao_atualizar_comparacao(
-                payload_inicio_selecionado(
-                    p["data"],
-                    float(p["fechamento"]),
-                    moeda,
-                    _quantidade_cotas(),
-                )
+            parcial = payload_inicio_selecionado(
+                p["data"],
+                float(p["fechamento"]),
+                moeda,
+                _quantidade_cotas(),
             )
+            parcial["texto_segundo_clique"] = texto_segundo_clique
+            ao_atualizar_comparacao(parcial)
         elif len(selecionados) == 1:
             if indice == selecionados[0]:
                 return
             selecionados.append(indice)
             indice_inicio = min(selecionados)
             indice_fim = max(selecionados)
+            estado["chaves"] = [
+                _chave_ponto_selecao(pontos[indice_inicio]),
+                _chave_ponto_selecao(pontos[indice_fim]),
+            ]
             _limpar_artistas(estado)
             desenhar_intervalo(indice_inicio, indice_fim)
             _publicar_payload_com_cdi(
@@ -644,13 +751,83 @@ def configurar_selecao_periodo(
                     indice_inicio,
                     indice_fim,
                     _quantidade_cotas(),
+                    intraday=intraday,
                 ),
                 ao_atualizar_comparacao,
             )
         canvas.draw_idle()
 
-    canvas.mpl_connect("button_release_event", ao_clicar)
-    ao_atualizar_comparacao(payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO))
+    _desconectar_selecao_periodo(canvas)
+    canvas._cid_selecao_periodo = canvas.mpl_connect("button_release_event", ao_clicar)
+    if preservar_painel:
+        _redesenhar_selecao_periodo(
+            eixo,
+            linha,
+            pontos,
+            estado,
+            desenhar_marcador=desenhar_marcador,
+            desenhar_intervalo=desenhar_intervalo,
+        )
+    elif not preservar_painel:
+        ao_atualizar_comparacao(payload_instrucao(instrucao))
+
+
+def restaurar_selecao_periodo_no_grafico(
+    canvas: FigureCanvasTkAgg,
+    eixo,
+    linha: Line2D,
+    pontos: list[dict],
+    data_inicio: str,
+    data_fim: str,
+) -> None:
+    """Reaplica marcadores apos redesenho completo do grafico (ex.: troca de modelo)."""
+    if not hasattr(canvas, "_estado_selecao_periodo"):
+        canvas._estado_selecao_periodo = _criar_estado_selecao()
+
+    estado = canvas._estado_selecao_periodo
+    estado["chaves"] = [str(data_inicio), str(data_fim)]
+    indices = _sincronizar_indices_selecao(estado, pontos)
+    if len(indices) < 2:
+        return
+
+    def desenhar_marcador(indice: int) -> None:
+        xs = np.array(linha.get_xdata(), dtype=float)
+        ys = np.array(linha.get_ydata(), dtype=float)
+        _desenhar_marcador_vermelho(eixo, estado, xs[indice], ys[indice])
+
+    def desenhar_intervalo(indice_inicio: int, indice_fim: int) -> None:
+        xs = np.array(linha.get_xdata(), dtype=float)
+        ys = np.array(linha.get_ydata(), dtype=float)
+        i0 = min(indice_inicio, indice_fim)
+        i1 = max(indice_inicio, indice_fim)
+        x_min, x_max = _limites_faixa_selecao_grafico(xs, i0, i1)
+        faixa = eixo.axvspan(
+            x_min,
+            x_max,
+            color=COR_VERMELHO,
+            alpha=0.18,
+            zorder=1,
+        )
+        trecho, = eixo.plot(
+            xs[i0 : i1 + 1],
+            ys[i0 : i1 + 1],
+            color=COR_VERMELHO,
+            linewidth=3.5,
+            zorder=5,
+        )
+        estado["artistas"].extend([faixa, trecho])
+        desenhar_marcador(i0)
+        desenhar_marcador(i1)
+
+    _redesenhar_selecao_periodo(
+        eixo,
+        linha,
+        pontos,
+        estado,
+        desenhar_marcador=desenhar_marcador,
+        desenhar_intervalo=desenhar_intervalo,
+    )
+    canvas.draw_idle()
 
 
 TEXTO_INSTRUCAO_GRAFICO_COMPARACAO = (

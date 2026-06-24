@@ -29,6 +29,7 @@ from src.Tool.janela_helper import (
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
 from src.Tool.projecao_intraday_agora_helper import calcular_projecao_fim_dia
 from src.Service.agora_metricas_mercado_servico import AgoraMetricasMercadoServico, MetricasMercadoAgora
+from src.View.agora_aba_variacao_helper import GerenciadorAbaVariacaoAgora
 from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
 from src.View.campo_data_calendario_helper import montar_campo_data_calendario
 from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
@@ -51,9 +52,12 @@ from src.View.grafico_agora_helper import (
     obter_cor_tendencia_agora,
 )
 from src.View.grafico_helper import (
+    TEXTO_INSTRUCAO_GRAFICO_AGORA,
+    configurar_selecao_periodo,
     configurar_tooltip_acao,
     extrair_minutos_dia_de_ponto,
     finalizar_figura_grafico,
+    restaurar_selecao_periodo_no_grafico,
 )
 from src.View.grafico_modelo_helper import (
     ModeloGrafico,
@@ -121,6 +125,9 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._job_redimensionar_grafico: str | None = None
         self._janela_negocios: JanelaNegociosAgora | None = None
         self._janela_resumo_semana: JanelaResumoSemanaAgora | None = None
+        self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
+        self._ultimos_pontos_tooltip: list[dict] = []
+        self._ultima_moeda_grafico = "BRL"
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo}")
@@ -377,6 +384,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._abas.add(_ABA_GRAFICO)
         self._abas.add(_ABA_METRICAS)
         self._abas.set(_ABA_GRAFICO)
+        self._gerenciador_aba_variacao = GerenciadorAbaVariacaoAgora(self._abas, _ABA_GRAFICO)
 
         aba_grafico = self._abas.tab(_ABA_GRAFICO)
         aba_grafico.grid_columnconfigure(0, weight=1)
@@ -389,10 +397,15 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
         self._label_status = ctk.CTkLabel(
             self._container_grafico,
-            text="",
+            text=(
+                "Clique em 2 pontos no grafico para ver a variacao na aba Variacao "
+                "(a aba aparece apos selecionar inicio e fim)."
+            ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             anchor="w",
+            wraplength=1100,
+            justify="left",
         )
         self._label_status.grid(row=0, column=0, sticky="ew", pady=(0, 4))
 
@@ -625,6 +638,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                     "preco_fechamento_anterior": preco_fechamento_anterior,
                     "projecao": projecao,
                 }
+                self._ultimos_pontos_tooltip = pontos_tooltip
+                self._ultima_moeda_grafico = moeda
                 self._aplicar_dados_grafico(self._dados_grafico_atual)
 
                 agora = datetime.now().strftime("%H:%M:%S")
@@ -829,16 +844,100 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._eixo.set_ylim(ylim)
 
         self._linha_grafico = linha
-        configurar_tooltip_acao(
+        self._configurar_interacao_grafico(
             self._canvas,
             self._eixo,
             linha,
             pontos_tooltip,
             simbolo,
             moeda,
-            somente_horario=True,
+            preservar_painel=True,
         )
         self._canvas.draw_idle()
+
+    def _configurar_interacao_grafico(
+        self,
+        canvas: FigureCanvasTkAgg,
+        eixo,
+        linha,
+        pontos_tooltip: list[dict],
+        simbolo: str,
+        moeda: str,
+        *,
+        preservar_painel: bool = False,
+    ) -> None:
+        def atualizar_comparacao(payload: dict) -> None:
+            self._exibir_comparacao_intervalo(payload)
+
+        configurar_tooltip_acao(
+            canvas,
+            eixo,
+            linha,
+            pontos_tooltip,
+            simbolo,
+            moeda,
+            somente_horario=True,
+        )
+        configurar_selecao_periodo(
+            canvas,
+            eixo,
+            linha,
+            pontos_tooltip,
+            simbolo,
+            moeda,
+            atualizar_comparacao,
+            obter_quantidade_cotas=self._obter_quantidade_variacao_grafico,
+            texto_instrucao=TEXTO_INSTRUCAO_GRAFICO_AGORA,
+            intraday=True,
+            preservar_painel=preservar_painel,
+        )
+        if not preservar_painel:
+            self._restaurar_marcadores_selecao(canvas, eixo, linha, pontos_tooltip)
+
+    def _restaurar_marcadores_selecao(
+        self,
+        canvas: FigureCanvasTkAgg,
+        eixo,
+        linha,
+        pontos_tooltip: list[dict],
+    ) -> None:
+        if self._gerenciador_aba_variacao is None:
+            return
+        intervalo = self._gerenciador_aba_variacao.obter_intervalo_para_restaurar()
+        if intervalo is None:
+            return
+        restaurar_selecao_periodo_no_grafico(
+            canvas,
+            eixo,
+            linha,
+            pontos_tooltip,
+            intervalo[0],
+            intervalo[1],
+        )
+
+    def _obter_quantidade_variacao_grafico(self) -> int:
+        if self._gerenciador_aba_variacao is not None:
+            return self._gerenciador_aba_variacao.obter_quantidade_para_grafico()
+        return 1
+
+    def _exibir_comparacao_intervalo(self, payload: dict) -> None:
+        if self._gerenciador_aba_variacao is None:
+            return
+        self._gerenciador_aba_variacao.atualizar(
+            payload,
+            pontos=self._ultimos_pontos_tooltip,
+            simbolo=self._simbolo,
+            moeda=self._ultima_moeda_grafico,
+            ao_mensagem_parcial=self._atualizar_mensagem_selecao_grafico,
+        )
+
+    def _atualizar_mensagem_selecao_grafico(self, texto: str) -> None:
+        if not texto:
+            texto = (
+                "Clique em 2 pontos no grafico para ver a variacao na aba Variacao "
+                "(a aba aparece apos selecionar inicio e fim)."
+            )
+        self._label_status.configure(text=texto, text_color=CORES["textoSecundario"])
 
     def _montar_serie_intraday(self, pontos) -> tuple[list[float], list[float], list[dict]]:
         """Mapeia cada ponto para minutos do dia (eixo 10:00–18:00)."""
@@ -1545,14 +1644,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
-        configurar_tooltip_acao(
+        self._configurar_interacao_grafico(
             canvas,
             eixo,
             linha,
             pontos_tooltip,
             simbolo,
             moeda,
-            somente_horario=True,
         )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)

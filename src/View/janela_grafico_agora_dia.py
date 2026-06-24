@@ -17,6 +17,7 @@ from src.Tool.janela_helper import (
     executar_em_thread,
     janela_ui_ainda_ativa,
 )
+from src.View.agora_aba_variacao_helper import GerenciadorAbaVariacaoAgora
 from src.View.agora_painel_metricas_dia_helper import PainelMetricasDiaAgora
 from src.View.formatadores import formatar_moeda, formatar_variacao_com_rotulo
 from src.View.grafico_agora_helper import (
@@ -27,15 +28,19 @@ from src.View.grafico_agora_helper import (
     obter_cor_tendencia_agora,
 )
 from src.View.grafico_helper import (
+    TEXTO_INSTRUCAO_GRAFICO_AGORA,
+    configurar_selecao_periodo,
     configurar_tooltip_acao,
     extrair_minutos_dia_de_ponto,
     finalizar_figura_grafico,
+    restaurar_selecao_periodo_no_grafico,
 )
 from src.View.grafico_modelo_helper import ModeloGrafico, montar_seletor_modelo_grafico
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
 from src.View.tema import CORES
 
 ALTURA_GRAFICO_MINIMA_PX = 280
+_ABA_GRAFICO = "Grafico"
 
 
 class JanelaGraficoAgoraDia(ctk.CTkToplevel):
@@ -60,6 +65,9 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._controle_zoom = None
         self._carregando = False
         self._painel_metricas: PainelMetricasDiaAgora | None = None
+        self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
+        self._ultimos_pontos_tooltip: list[dict] = []
+        self._ultima_moeda_grafico = "BRL"
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo} — {formatar_data_ptbr(data_ref)}")
@@ -153,17 +161,42 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._painel_metricas = PainelMetricasDiaAgora(painel_preco)
         self._painel_metricas.montar().pack(fill="x", padx=16, pady=(0, 10))
 
-        self._container_grafico = ctk.CTkFrame(self, fg_color="transparent")
-        self._container_grafico.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        self._abas = ctk.CTkTabview(
+            self,
+            fg_color=CORES["fundo"],
+            segmented_button_fg_color=CORES["superficie"],
+            segmented_button_selected_color=CORES["primaria"],
+            segmented_button_selected_hover_color=CORES["primariaHover"],
+            segmented_button_unselected_color=CORES["zebraEscura"],
+            segmented_button_unselected_hover_color=CORES["borda"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+        )
+        self._abas.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        self._abas.add(_ABA_GRAFICO)
+        self._abas.set(_ABA_GRAFICO)
+        self._gerenciador_aba_variacao = GerenciadorAbaVariacaoAgora(self._abas, _ABA_GRAFICO)
+        self._abas.configure(command=self._ao_mudar_aba_agora_dia)
+
+        aba_grafico = self._abas.tab(_ABA_GRAFICO)
+        aba_grafico.grid_columnconfigure(0, weight=1)
+        aba_grafico.grid_rowconfigure(0, weight=1)
+
+        self._container_grafico = ctk.CTkFrame(aba_grafico, fg_color="transparent")
+        self._container_grafico.grid(row=0, column=0, sticky="nsew")
         self._container_grafico.grid_rowconfigure(2, weight=1)
         self._container_grafico.grid_columnconfigure(0, weight=1)
 
         self._label_status = ctk.CTkLabel(
             self._container_grafico,
-            text="",
+            text=(
+                "Clique em 2 pontos no grafico para ver a variacao na aba Variacao "
+                "(a aba aparece apos selecionar inicio e fim)."
+            ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             anchor="w",
+            wraplength=1100,
+            justify="left",
         )
         self._label_status.grid(row=0, column=0, sticky="ew", pady=(0, 4))
 
@@ -273,6 +306,8 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
 
     def _desenhar_grafico(self, pontos, resumo: ResumoDiaAgora) -> None:
         posicoes_x, valores, pontos_tooltip = self._montar_serie_intraday(pontos)
+        self._ultimos_pontos_tooltip = pontos_tooltip
+        self._ultima_moeda_grafico = resumo.moeda
         if not valores:
             self._label_status.configure(
                 text="Grafico indisponivel (horarios invalidos).",
@@ -330,6 +365,10 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         finalizar_figura_grafico(eixo, figura, titulo)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
+
+        def atualizar_comparacao(payload: dict) -> None:
+            self._exibir_comparacao_intervalo(payload)
+
         configurar_tooltip_acao(
             canvas,
             eixo,
@@ -339,6 +378,19 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             resumo.moeda,
             somente_horario=True,
         )
+        configurar_selecao_periodo(
+            canvas,
+            eixo,
+            linha,
+            pontos_tooltip,
+            self._simbolo,
+            resumo.moeda,
+            atualizar_comparacao,
+            obter_quantidade_cotas=self._obter_quantidade_variacao_grafico,
+            texto_instrucao=TEXTO_INSTRUCAO_GRAFICO_AGORA,
+            intraday=True,
+        )
+        self._restaurar_marcadores_selecao(canvas, eixo, linha, pontos_tooltip)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -347,6 +399,65 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._eixo = eixo
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
         montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
+
+    def _restaurar_marcadores_selecao(
+        self,
+        canvas: FigureCanvasTkAgg,
+        eixo,
+        linha,
+        pontos_tooltip: list[dict],
+    ) -> None:
+        if self._gerenciador_aba_variacao is None:
+            return
+        intervalo = self._gerenciador_aba_variacao.obter_intervalo_para_restaurar()
+        if intervalo is None:
+            return
+        restaurar_selecao_periodo_no_grafico(
+            canvas,
+            eixo,
+            linha,
+            pontos_tooltip,
+            intervalo[0],
+            intervalo[1],
+        )
+
+    def _ao_mudar_aba_agora_dia(self) -> None:
+        if not janela_ui_ainda_ativa(self):
+            return
+        if getattr(self, "_abas", None) is None:
+            return
+        if self._abas.get() == _ABA_GRAFICO and self._canvas is not None:
+            self._canvas.draw_idle()
+
+    def _obter_quantidade_variacao_grafico(self) -> int:
+        if self._gerenciador_aba_variacao is not None:
+            return self._gerenciador_aba_variacao.obter_quantidade_para_grafico()
+        return 1
+
+    def _exibir_comparacao_intervalo(self, payload: dict) -> None:
+        if self._gerenciador_aba_variacao is None:
+            return
+        self._gerenciador_aba_variacao.atualizar(
+            payload,
+            pontos=self._ultimos_pontos_tooltip,
+            simbolo=self._simbolo,
+            moeda=self._ultima_moeda_grafico,
+            ao_mensagem_parcial=self._atualizar_mensagem_selecao_grafico,
+        )
+
+    def _atualizar_mensagem_selecao_grafico(self, texto: str) -> None:
+        if not texto:
+            if self._resumo_dia is not None and self._pontos_intraday:
+                texto = (
+                    f"Dia {formatar_data_ptbr(self._data_ref)} · "
+                    f"{len(self._pontos_intraday)} pontos intraday"
+                )
+            else:
+                texto = (
+                    "Clique em 2 pontos no grafico para ver a variacao na aba Variacao "
+                    "(a aba aparece apos selecionar inicio e fim)."
+                )
+        self._label_status.configure(text=texto, text_color=CORES["textoSecundario"])
 
 
 def abrir_grafico_agora_dia(
