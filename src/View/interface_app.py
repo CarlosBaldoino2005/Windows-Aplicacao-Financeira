@@ -12,6 +12,7 @@ from src.View.janela_hub_fundos_imobiliarios import JanelaHubFundosImobiliarios
 from src.View.janela_hub_etfs import JanelaHubEtfs
 from src.View.janela_hub_tesouro import JanelaHubTesouro
 from src.View.janela_hub_renda_fixa_bancaria import JanelaHubRendaFixaBancaria
+from src.View.janela_hub_relatorios import JanelaHubRelatorios
 from src.View.janela_configuracao_painel import (
     JanelaConfiguracaoPainel,
     ResultadoConfiguracaoPainel,
@@ -62,6 +63,7 @@ class InterfaceApp(ctk.CTk):
         self._janela_configuracao: JanelaConfiguracaoPainel | None = None
         self._janela_monitoramento: JanelaMonitoramento | None = None
         self._janela_carteira: JanelaCarteira | None = None
+        self._janela_relatorios: JanelaHubRelatorios | None = None
         self._botao_alerta_monitoramento: ctk.CTkButton | None = None
         self._botao_monitoramento: ctk.CTkButton | None = None
         self._reconstruindo_tema = False
@@ -177,6 +179,19 @@ class InterfaceApp(ctk.CTk):
 
         janela = abrir_carteira(self)
         self._janela_carteira = janela
+
+    def _abrir_hub_relatorios(self) -> None:
+        """Abre (ou foca) o hub de relatorios (carteira e IPOs)."""
+        if self._janela_relatorios is not None:
+            try:
+                if self._janela_relatorios.winfo_exists():
+                    self._janela_relatorios.focus_force()
+                    self._janela_relatorios.lift()
+                    return
+            except Exception:
+                pass
+
+        self._janela_relatorios = JanelaHubRelatorios(self)
 
     def _ao_concluir_relatorio_automatico_carteira(
         self,
@@ -339,6 +354,7 @@ class InterfaceApp(ctk.CTk):
             ("LCI/LCA", self._abrir_hub_lci_lca),
             ("CDB", self._abrir_hub_cdb),
             ("Carteira", self._abrir_carteira),
+            ("Relatorios", self._abrir_hub_relatorios),
             ("Monitoramento", self._abrir_monitoramento),
         ]
 

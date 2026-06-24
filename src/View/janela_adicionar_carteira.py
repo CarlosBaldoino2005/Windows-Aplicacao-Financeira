@@ -38,6 +38,8 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         *,
         posicao: PosicaoCarteira | None = None,
         preencher_ativo: tuple[str, TipoAtivoCarteira] | None = None,
+        preco_compra_sugerido: float | None = None,
+        quantidade_sugerida: float | None = None,
     ) -> None:
         super().__init__(pai)
         self._controlador = controlador
@@ -45,6 +47,8 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         self._janela_pai_ref = pai
         self._posicao = posicao
         self._editando = posicao is not None
+        self._preco_compra_sugerido = preco_compra_sugerido
+        self._quantidade_sugerida = quantidade_sugerida
         self._nova_compra_ativo = preencher_ativo is not None and not self._editando
         if posicao is not None:
             self._simbolo_selecionado = posicao.simbolo
@@ -290,6 +294,17 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                     )
                 )
             self._entrada_data.insert(0, hoje)
+            if self._preco_compra_sugerido is not None and self._preco_compra_sugerido > 0:
+                preco_texto = (
+                    f"{self._preco_compra_sugerido:,.2f}"
+                    .replace(",", "X")
+                    .replace(".", ",")
+                    .replace("X", ".")
+                )
+                self._entrada_preco.insert(0, preco_texto)
+            if self._quantidade_sugerida is not None and self._quantidade_sugerida > 0:
+                qtd = f"{self._quantidade_sugerida:.8f}".rstrip("0").rstrip(".")
+                self._entrada_quantidade.insert(0, qtd.replace(".", ","))
             return
 
         if self._posicao is None:
@@ -521,6 +536,8 @@ def abrir_adicionar_carteira(
     *,
     posicao: PosicaoCarteira | None = None,
     preencher_ativo: tuple[str, TipoAtivoCarteira] | None = None,
+    preco_compra_sugerido: float | None = None,
+    quantidade_sugerida: float | None = None,
 ) -> JanelaAdicionarCarteira | None:
     if not pai.winfo_exists():
         return None
@@ -530,4 +547,6 @@ def abrir_adicionar_carteira(
         ao_salvar,
         posicao=posicao,
         preencher_ativo=preencher_ativo,
+        preco_compra_sugerido=preco_compra_sugerido,
+        quantidade_sugerida=quantidade_sugerida,
     )

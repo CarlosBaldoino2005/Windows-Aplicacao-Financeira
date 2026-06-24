@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 from typing import Any
 
 from src.Controller.controlador_mercado import ControladorMercado
+from src.Controller.controlador_carteira import ControladorCarteira
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.janela_helper import executar_em_thread, configurar_janela_maximizada
 from src.Tool.mascara_moeda_helper import aplicar_mascara_inteiro_ptbr, formatar_inteiro_ptbr
@@ -29,11 +30,13 @@ from src.View.grafico_helper import (
     configurar_tooltip_acao,
     finalizar_figura_grafico,
 )
-from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
+from src.Tool.carteira_ativo_helper import inferir_tipo_ativo_carteira
 from src.View.destaque_cotacao_helper import PainelDestaqueCotacao, iniciar_atualizacao_destaque
+from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
 from src.View.janela_calcular_quantidade import JanelaCalcularQuantidade
 from src.View.janela_desvalorizacao import JanelaDesvalorizacao
 from src.View.janela_adicionar_monitoramento import abrir_adicionar_monitoramento
+from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
 from src.Controller.controlador_monitoramento import ControladorMonitoramento
 from src.Tool.controlador_ativo_helper import inferir_tipo_ativo_monitoramento
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
@@ -87,9 +90,11 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._janela_resumo_periodo: ctk.CTkToplevel | None = None
         self._janela_grafico_ampliado: ctk.CTkToplevel | None = None
         self._janela_adicionar_monitoramento: ctk.CTkToplevel | None = None
+        self._janela_adicionar_carteira: ctk.CTkToplevel | None = None
         self._janela_grafico_agora: ctk.CTkToplevel | None = None
         self._janela_blacklist: ctk.CTkToplevel | None = None
         self._controlador_monitoramento = ControladorMonitoramento()
+        self._controlador_carteira = ControladorCarteira()
         self._config_ini = ConfigPainelIni()
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
         self._dados_grafico_atual: dict | None = None
@@ -124,6 +129,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             "_janela_resumo_periodo",
             "_janela_grafico_ampliado",
             "_janela_adicionar_monitoramento",
+            "_janela_adicionar_carteira",
             "_janela_grafico_agora",
             "_janela_blacklist",
         ):
@@ -182,12 +188,12 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
-        barra = ctk.CTkFrame(cabecalho, fg_color="transparent")
-        barra.pack(fill="x", padx=16, pady=(0, 8))
+        barra_linha1 = ctk.CTkFrame(cabecalho, fg_color="transparent")
+        barra_linha1.pack(fill="x", padx=16, pady=(0, 6))
 
-        ctk.CTkLabel(barra, text="Periodo").pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(barra_linha1, text="Periodo").pack(side="left", padx=(0, 8))
         self._combo_periodo = ctk.CTkComboBox(
-            barra,
+            barra_linha1,
             values=[p[1] for p in PERIODOS],
             width=140,
             command=self._alternar_datas,
@@ -196,13 +202,13 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._combo_periodo.pack(side="left", padx=(0, 16))
 
         self._combo_modelo_grafico = montar_seletor_modelo_grafico(
-            barra,
+            barra_linha1,
             modelo_inicial=self._modelo_grafico,
             ao_mudar=self._alternar_modelo_grafico,
         )
 
         ctk.CTkButton(
-            barra,
+            barra_linha1,
             text="Atualizar grafico",
             command=self._carregar_grafico,
             fg_color=CORES["primaria"],
@@ -211,7 +217,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
-            barra,
+            barra_linha1,
             text="Agora",
             command=self._abrir_grafico_agora,
             fg_color=CORES["primaria"],
@@ -221,34 +227,47 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
-            barra,
+            barra_linha1,
             text="Black List",
             command=self._abrir_blacklist,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=110,
-        ).pack(side="left", padx=(0, 16))
+        ).pack(side="left")
 
-        ctk.CTkLabel(barra, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
-        self._entrada_quantidade_cotas = ctk.CTkEntry(barra, width=110, justify="center")
+        barra_linha2 = ctk.CTkFrame(cabecalho, fg_color="transparent")
+        barra_linha2.pack(fill="x", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(barra_linha2, text="Qtd. de acoes").pack(side="left", padx=(0, 6))
+        self._entrada_quantidade_cotas = ctk.CTkEntry(barra_linha2, width=110, justify="center")
         qtd_ini = self._config_ini.carregar_quantidade_cotas_grafico()
         self._entrada_quantidade_cotas.insert(0, formatar_inteiro_ptbr(qtd_ini))
         aplicar_mascara_inteiro_ptbr(self._entrada_quantidade_cotas)
         self._entrada_quantidade_cotas.pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
-            barra,
+            barra_linha2,
             text="Calcular",
             command=self._abrir_calcular_quantidade,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=90,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            barra_linha2,
+            text="Comprar",
+            command=self._abrir_registrar_compra,
+            fg_color=CORES.get("sucesso", CORES["primaria"]),
+            hover_color=CORES.get("sucessoHover", CORES["primariaHover"]),
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=100,
         ).pack(side="left", padx=(0, 16))
 
         ctk.CTkButton(
-            barra,
+            barra_linha2,
             text="Desvalorizacao",
             command=self._abrir_desvalorizacao,
             fg_color=CORES["primaria"],
@@ -258,7 +277,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
-            barra,
+            barra_linha2,
             text="Mais detalhes",
             command=self._abrir_mais_detalhes,
             fg_color=CORES["primaria"],
@@ -268,7 +287,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
-            barra,
+            barra_linha2,
             text="Monitoramento",
             command=self._abrir_monitoramento,
             fg_color=CORES["primaria"],
@@ -515,6 +534,41 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             preco_atual_texto=preco_atual_texto,
             preco_atual=preco_atual,
             moeda_ativo=moeda_ativo,
+        )
+
+    def _abrir_registrar_compra(self) -> None:
+        if self._janela_adicionar_carteira is not None:
+            try:
+                if self._janela_adicionar_carteira.winfo_exists():
+                    self._janela_adicionar_carteira.focus_force()
+                    self._janela_adicionar_carteira.lift()
+                    return
+            except Exception:
+                pass
+
+        tipo = inferir_tipo_ativo_carteira(self._simbolo)
+        cotacao = self._painel_destaque_cotacao.cotacao_atual
+        preco_sugerido = cotacao.preco if cotacao is not None else None
+
+        quantidade_sugerida: float | None = None
+        qtd_cotas, erro_qtd = self._ler_quantidade_cotas()
+        if not erro_qtd and qtd_cotas is not None and qtd_cotas > 0:
+            quantidade_sugerida = float(qtd_cotas)
+
+        def ao_salvar() -> None:
+            messagebox.showinfo(
+                "Carteira",
+                f"Compra de {codigo_exibicao(self._simbolo)} registrada na carteira.",
+                parent=self,
+            )
+
+        self._janela_adicionar_carteira = abrir_adicionar_carteira(
+            self,
+            self._controlador_carteira,
+            ao_salvar,
+            preencher_ativo=(self._simbolo, tipo),
+            preco_compra_sugerido=preco_sugerido,
+            quantidade_sugerida=quantidade_sugerida,
         )
 
     def _ler_quantidade_cotas(self) -> tuple[int | None, str | None]:
