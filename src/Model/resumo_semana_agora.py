@@ -36,3 +36,4 @@ class ResumoSemanaAgora:
     variacao_acumulada_pct: float | None
     media_fechamento: float | None
     volume_total: int | None
+    aviso: str = ""

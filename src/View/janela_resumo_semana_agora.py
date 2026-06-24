@@ -84,7 +84,9 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
         for coluna in range(3):
             grade.grid_columnconfigure(coluna, weight=1)
 
-        self._valor_variacao_acum, _ = self._criar_card_resumo(grade, 0, "Variacao acumulada (30 pregões)")
+        self._valor_variacao_acum, self._rotulo_variacao_acum = self._criar_card_resumo(
+            grade, 0, "Variacao acumulada (30 pregões)"
+        )
         self._valor_media_fechamento, _ = self._criar_card_resumo(grade, 1, "Media de fechamento")
         self._valor_volume_total, _ = self._criar_card_resumo(grade, 2, "Volume total")
 
@@ -134,16 +136,17 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
         pai: ctk.CTkFrame,
         coluna: int,
         rotulo: str,
-    ) -> tuple[ctk.CTkLabel, ctk.CTkFrame]:
+    ) -> tuple[ctk.CTkLabel, ctk.CTkLabel]:
         quadro = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=8)
         quadro.grid(row=0, column=coluna, sticky="nsew", padx=(0 if coluna == 0 else 6, 0))
-        ctk.CTkLabel(
+        rotulo_label = ctk.CTkLabel(
             quadro,
             text=rotulo,
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
             anchor="w",
-        ).pack(anchor="w", padx=10, pady=(8, 2))
+        )
+        rotulo_label.pack(anchor="w", padx=10, pady=(8, 2))
         valor = ctk.CTkLabel(
             quadro,
             text="—",
@@ -152,7 +155,7 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
             anchor="w",
         )
         valor.pack(anchor="w", padx=10, pady=(0, 8))
-        return valor, quadro
+        return valor, rotulo_label
 
     def _carregar_dados(self) -> None:
         if self._carregando or not janela_ui_ainda_ativa(self):
@@ -190,6 +193,10 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
 
     def _aplicar_resumo(self, resumo: ResumoSemanaAgora) -> None:
         moeda = resumo.moeda
+        quantidade_dias = len(resumo.dias)
+        self._rotulo_variacao_acum.configure(
+            text=f"Variacao acumulada ({quantidade_dias} pregão(ões))",
+        )
         if resumo.variacao_acumulada_valor is not None and resumo.variacao_acumulada_pct is not None:
             texto_var = formatar_variacao(
                 resumo.variacao_acumulada_valor,
@@ -230,10 +237,19 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
                 f"{resumo.dias[0].data.strftime('%d/%m/%Y')} a "
                 f"{resumo.dias[-1].data.strftime('%d/%m/%Y')}"
             )
-        self._label_status.configure(
-            text=f"{len(resumo.dias)} dias uteis · {periodo}",
-            text_color=CORES["textoSecundario"],
-        )
+
+        if resumo.aviso:
+            texto_status = resumo.aviso
+            if periodo:
+                texto_status = (
+                    f"{resumo.aviso} Exibindo {quantidade_dias} dia(s): {periodo}."
+                )
+            self._label_status.configure(text=texto_status, text_color=CORES["aviso"])
+        else:
+            self._label_status.configure(
+                text=f"{quantidade_dias} dias uteis · {periodo}",
+                text_color=CORES["textoSecundario"],
+            )
 
 
 def abrir_janela_resumo_semana_agora(

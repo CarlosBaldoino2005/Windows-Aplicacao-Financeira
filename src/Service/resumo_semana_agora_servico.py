@@ -50,13 +50,19 @@ class ResumoSemanaAgoraServico:
             )
 
         candles_filtrados = self._filtrar_pregoes(candles, simbolo_ok)
-        if len(candles_filtrados) < _QUANTIDADE_DIAS_UTEIS:
+        if not candles_filtrados:
             return None, (
+                f"Nao foi possivel carregar pregões para {codigo_exibicao(simbolo_ok)}."
+            )
+
+        aviso = ""
+        if len(candles_filtrados) < _QUANTIDADE_DIAS_UTEIS:
+            aviso = (
                 f"Dados insuficientes: apenas {len(candles_filtrados)} pregão(ões) "
                 f"disponiveis para {codigo_exibicao(simbolo_ok)}."
             )
 
-        inicio_global = len(candles_filtrados) - _QUANTIDADE_DIAS_UTEIS
+        inicio_global = max(0, len(candles_filtrados) - _QUANTIDADE_DIAS_UTEIS)
         ultimos = candles_filtrados[inicio_global:]
         moeda = self._moeda_padrao(simbolo_ok)
         dias: list[DiaResumoSemanaAgora] = []
@@ -126,6 +132,7 @@ class ResumoSemanaAgoraServico:
                 variacao_acumulada_pct=variacao_acumulada_pct,
                 media_fechamento=media_fechamento,
                 volume_total=volume_total,
+                aviso=aviso,
             ),
             None,
         )
