@@ -217,6 +217,8 @@ class ProvedorYahooChart:
             indicadores = resultado["indicators"]["quote"][0]
             aberturas = indicadores.get("open") or []
             fechamentos = indicadores.get("close") or []
+            maximas = indicadores.get("high") or []
+            minimas = indicadores.get("low") or []
             volumes = indicadores.get("volume") or []
         except (KeyError, IndexError, TypeError):
             return None
@@ -231,6 +233,8 @@ class ProvedorYahooChart:
 
             data_obj = datetime.fromtimestamp(int(ts))
             abertura = aberturas[indice] if indice < len(aberturas) else None
+            maxima = maximas[indice] if indice < len(maximas) else None
+            minima = minimas[indice] if indice < len(minimas) else None
             volume = volumes[indice] if indice < len(volumes) else None
 
             pontos.append(
@@ -239,6 +243,8 @@ class ProvedorYahooChart:
                     data_exibicao=data_para_exibicao(data_obj),
                     preco_fechamento=round(float(close), 2),
                     preco_abertura=round(float(abertura), 2) if abertura is not None else None,
+                    preco_maxima=round(float(maxima), 2) if maxima is not None else None,
+                    preco_minima=round(float(minima), 2) if minima is not None else None,
                     volume=int(volume) if volume is not None else None,
                 )
             )

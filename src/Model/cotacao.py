@@ -23,7 +23,9 @@ class PontoHistorico:
     data_exibicao: str
     preco_fechamento: float
     preco_abertura: float | None
-    volume: int | None
+    volume: int | None = None
+    preco_maxima: float | None = None
+    preco_minima: float | None = None
 
 
 @dataclass

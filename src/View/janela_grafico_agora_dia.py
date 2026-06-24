@@ -263,6 +263,8 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
                     "data_iso": ponto.data_iso,
                     "fechamento": ponto.preco_fechamento,
                     "abertura": ponto.preco_abertura,
+                    "maxima": ponto.preco_maxima,
+                    "minima": ponto.preco_minima,
                     "volume": ponto.volume,
                     "minutos_dia": minutos,
                 }

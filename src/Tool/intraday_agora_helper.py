@@ -66,6 +66,8 @@ def completar_serie_intraday_com_cotacao(
                 data_exibicao=ultimo.data_exibicao,
                 preco_fechamento=preco_vivo,
                 preco_abertura=ultimo.preco_abertura,
+                preco_maxima=_extremo_maximo(ultimo.preco_maxima, ultimo.preco_fechamento, preco_vivo),
+                preco_minima=_extremo_minimo(ultimo.preco_minima, ultimo.preco_fechamento, preco_vivo),
                 volume=ultimo.volume,
             ),
         ]
@@ -114,6 +116,16 @@ def _data_do_ponto(ponto: PontoHistorico, data_padrao: date) -> date:
     return data_padrao
 
 
+def _extremo_maximo(*valores: float | None) -> float | None:
+    numeros = [float(valor) for valor in valores if valor is not None]
+    return max(numeros) if numeros else None
+
+
+def _extremo_minimo(*valores: float | None) -> float | None:
+    numeros = [float(valor) for valor in valores if valor is not None]
+    return min(numeros) if numeros else None
+
+
 def _criar_ponto_sintetico(minutos_dia: int, preco: float, data_ref: date) -> PontoHistorico:
     hora = minutos_dia // 60
     minuto = minutos_dia % 60
@@ -122,6 +134,8 @@ def _criar_ponto_sintetico(minutos_dia: int, preco: float, data_ref: date) -> Po
         data_iso=data_obj.isoformat(),
         data_exibicao=data_para_exibicao(data_obj),
         preco_fechamento=preco,
-        preco_abertura=None,
+        preco_abertura=preco,
+        preco_maxima=preco,
+        preco_minima=preco,
         volume=None,
     )

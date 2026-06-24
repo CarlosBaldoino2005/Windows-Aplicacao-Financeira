@@ -101,6 +101,12 @@ class ProvedorBrapi:
                     data_exibicao=data_para_exibicao(data_obj),
                     preco_fechamento=round(float(barra["close"]), 2),
                     preco_abertura=round(float(barra["open"]), 2),
+                    preco_maxima=round(float(barra["high"]), 2)
+                    if barra.get("high") is not None
+                    else None,
+                    preco_minima=round(float(barra["low"]), 2)
+                    if barra.get("low") is not None
+                    else None,
                     volume=int(barra.get("volume") or 0) or None,
                 )
             )

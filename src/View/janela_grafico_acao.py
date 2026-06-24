@@ -702,6 +702,8 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
                     "data": p.data_exibicao,
                     "fechamento": p.preco_fechamento,
                     "abertura": p.preco_abertura,
+                    "maxima": p.preco_maxima,
+                    "minima": p.preco_minima,
                     "volume": p.volume,
                 }
                 for p in serie.pontos

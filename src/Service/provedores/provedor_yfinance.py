@@ -162,6 +162,12 @@ class ProvedorYfinance:
                     preco_abertura=round(float(linha["Open"]), 2)
                     if "Open" in linha and linha["Open"] == linha["Open"]
                     else None,
+                    preco_maxima=round(float(linha["High"]), 2)
+                    if "High" in linha and linha["High"] == linha["High"]
+                    else None,
+                    preco_minima=round(float(linha["Low"]), 2)
+                    if "Low" in linha and linha["Low"] == linha["Low"]
+                    else None,
                     volume=int(linha["Volume"])
                     if "Volume" in linha and linha["Volume"] == linha["Volume"]
                     else None,

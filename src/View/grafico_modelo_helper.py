@@ -288,30 +288,43 @@ def _desenhar_velas(
     pontos_tooltip: list[dict],
     largura_corpo: float,
 ) -> None:
-    """Desenha candlesticks simplificados com abertura e fechamento."""
+    """Desenha candlesticks com pavio (maxima/minima) e corpo (abertura/fechamento)."""
     for indice, ponto in zip(indices, pontos_tooltip, strict=False):
         fechamento = float(ponto.get("fechamento") or 0)
         abertura_raw = ponto.get("abertura")
         abertura = float(abertura_raw) if abertura_raw is not None else fechamento
-        topo = max(abertura, fechamento)
-        base = min(abertura, fechamento)
+
+        topo_corpo = max(abertura, fechamento)
+        base_corpo = min(abertura, fechamento)
+
+        maxima_raw = ponto.get("maxima")
+        minima_raw = ponto.get("minima")
+        maxima = float(maxima_raw) if maxima_raw is not None else topo_corpo
+        minima = float(minima_raw) if minima_raw is not None else base_corpo
+        maxima = max(maxima, topo_corpo)
+        minima = min(minima, base_corpo)
+
         cor = _COR_ALTA if fechamento >= abertura else _COR_BAIXA
 
-        eixo.plot(
-            [indice, indice],
-            [base, topo],
-            color=cor,
-            linewidth=1.2,
-            solid_capstyle="round",
-            zorder=2,
-        )
+        if maxima > minima:
+            eixo.plot(
+                [indice, indice],
+                [minima, maxima],
+                color=cor,
+                linewidth=1.0,
+                solid_capstyle="round",
+                zorder=2,
+            )
 
-        altura = topo - base
+        altura = topo_corpo - base_corpo
         if altura <= 0:
-            altura = max(abs(topo) * 0.0005, 0.01)
+            altura = max(abs(topo_corpo) * 0.0005, 0.01)
+            centro = topo_corpo
+            base_corpo = centro - altura / 2
+            topo_corpo = centro + altura / 2
 
         corpo = Rectangle(
-            (float(indice) - largura_corpo / 2, base),
+            (float(indice) - largura_corpo / 2, base_corpo),
             largura_corpo,
             altura,
             facecolor=cor,
