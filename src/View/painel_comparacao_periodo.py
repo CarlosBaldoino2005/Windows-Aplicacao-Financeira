@@ -466,6 +466,21 @@ class PainelComparacaoPeriodo:
                     f"{sinal_preco}{pct_preco:.2f}%",
                     CORES["sucesso"] if pct_preco >= 0 else CORES["erro"],
                 )
+                if acao.get("preco_inicio") is not None and acao.get("preco_fim") is not None:
+                    lucro_acao = float(acao["preco_fim"]) - float(acao["preco_inicio"])
+                    lucro_preco = lucro_acao >= 0
+                    rotulo_valor = (
+                        "Lucro em valor (por acao)"
+                        if lucro_preco
+                        else "Prejuizo em valor (por acao)"
+                    )
+                    sinal_valor = "+" if lucro_preco else "-"
+                    PainelComparacaoPeriodo._linha_metrica(
+                        card,
+                        rotulo_valor,
+                        f"{sinal_valor} {formatar_moeda(abs(lucro_acao), moeda)}",
+                        CORES["sucesso"] if lucro_preco else CORES["erro"],
+                    )
 
         if somente_preco and acao.get("volume_inicio") is not None:
             vol_ini = f"{int(acao['volume_inicio']):,}".replace(",", ".")

@@ -1058,6 +1058,19 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             height=38,
         ).pack(side="left")
 
+        self._label_lucro_alerta_venda = ctk.CTkLabel(
+            linha_alerta,
+            text="",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["textoSecundario"],
+            anchor="w",
+        )
+        self._entrada_alerta_valorizacao.bind(
+            "<KeyRelease>",
+            lambda _e: self._atualizar_lucro_alerta_venda(),
+            add="+",
+        )
+
         self._label_variacao_5_dias_carteira = ctk.CTkLabel(
             frame_alerta,
             text="—",
@@ -1213,10 +1226,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             if hasattr(self, "_frame_posicao_topo"):
                 if not self._frame_posicao_topo.winfo_ismapped():
                     self._frame_posicao_topo.pack(side="right", fill="y", padx=(8, 10), pady=(6, 6))
+            self._atualizar_lucro_alerta_venda()
             return
 
         if hasattr(self, "_frame_posicao_topo"):
             self._frame_posicao_topo.pack_forget()
+        if hasattr(self, "_label_lucro_alerta_venda"):
+            self._label_lucro_alerta_venda.pack_forget()
         self._alerta_venda_ativo = False
         self._label_alerta_venda.pack_forget()
         self._frame_alerta_topo_venda.pack_forget()
@@ -1288,6 +1304,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             return
         centavos = int(round(self._alerta_preco_venda_limite * 100))
         self._entrada_alerta_valorizacao.insert(0, f"R$ {formatar_centavos_ptbr(centavos)}")
+        self._atualizar_lucro_alerta_venda()
 
     def _salvar_alerta_valorizacao(self) -> None:
         texto = self._entrada_alerta_valorizacao.get().strip()
@@ -1307,6 +1324,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             )
             self._verificar_alerta_venda(self._preco_atual_cotacao)
             self._atualizar_resumo_alertas_lateral(self._preco_atual_cotacao)
+            self._atualizar_lucro_alerta_venda()
             return
 
         valor, erro = CarteiraServico.parse_preco(texto)
@@ -1337,6 +1355,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         )
         self._verificar_alerta_venda(self._preco_atual_cotacao)
         self._atualizar_resumo_alertas_lateral(self._preco_atual_cotacao)
+        self._atualizar_lucro_alerta_venda()
 
     def _atualizar_campos_carteira(self, preco_atual: float | None) -> None:
         if self._resumo_carteira is None:
@@ -1359,6 +1378,44 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             text_color=cor,
         )
         self._verificar_alerta_venda(preco_atual)
+        self._atualizar_lucro_alerta_venda()
+
+    def _atualizar_lucro_alerta_venda(self) -> None:
+        """Exibe lucro total no preco alvo: (alerta - compra) x quantidade."""
+        if not hasattr(self, "_label_lucro_alerta_venda"):
+            return
+        if self._resumo_carteira is None:
+            self._label_lucro_alerta_venda.pack_forget()
+            return
+
+        if not self._label_lucro_alerta_venda.winfo_ismapped():
+            self._label_lucro_alerta_venda.pack(side="left", padx=(12, 0))
+
+        texto_alerta = self._entrada_alerta_valorizacao.get().strip()
+        if not texto_alerta or texto_alerta == "R$":
+            self._label_lucro_alerta_venda.configure(
+                text="Lucro no alvo: —",
+                text_color=CORES["textoSecundario"],
+            )
+            return
+
+        preco_alvo, erro = CarteiraServico.parse_preco(texto_alerta)
+        if erro or preco_alvo is None or preco_alvo <= 0:
+            self._label_lucro_alerta_venda.configure(
+                text="Lucro no alvo: —",
+                text_color=CORES["textoSecundario"],
+            )
+            return
+
+        resumo = self._resumo_carteira
+        lucro = resumo.lucro_no_preco_alvo(preco_alvo)
+        moeda = resumo.moeda
+        cor = CORES["sucesso"] if lucro >= 0 else CORES["erro"]
+        sinal = "+" if lucro >= 0 else "-"
+        self._label_lucro_alerta_venda.configure(
+            text=f"Lucro no alvo: {sinal} {formatar_moeda(abs(lucro), moeda)}",
+            text_color=cor,
+        )
 
     def _atualizar_resumo_alertas_lateral(self, preco_atual: float | None) -> None:
         texto_carteira, cor_carteira = self._montar_resumo_alerta_lateral(

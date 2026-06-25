@@ -68,11 +68,17 @@ class ControladorCarteira:
         quantidade_texto: str,
         preco_texto: str,
         data_compra: str,
+        *,
+        modo_valor_compra: str = "por_cota",
     ) -> tuple[PosicaoCarteira | None, str | None]:
         quantidade, erro_qtd = self._persistencia.parse_quantidade(quantidade_texto)
         if erro_qtd:
             return None, erro_qtd
-        preco, erro_preco = self._persistencia.parse_preco(preco_texto)
+        preco, erro_preco = self._persistencia.resolver_preco_venda(
+            preco_texto,
+            quantidade or 0,
+            "valor_total" if modo_valor_compra == "valor_total" else "por_cota",
+        )
         if erro_preco:
             return None, erro_preco
         return self._persistencia.adicionar(
@@ -91,11 +97,17 @@ class ControladorCarteira:
         quantidade_texto: str,
         preco_texto: str,
         data_compra: str,
+        *,
+        modo_valor_compra: str = "por_cota",
     ) -> tuple[PosicaoCarteira | None, str | None]:
         quantidade, erro_qtd = self._persistencia.parse_quantidade(quantidade_texto)
         if erro_qtd:
             return None, erro_qtd
-        preco, erro_preco = self._persistencia.parse_preco(preco_texto)
+        preco, erro_preco = self._persistencia.resolver_preco_venda(
+            preco_texto,
+            quantidade or 0,
+            "valor_total" if modo_valor_compra == "valor_total" else "por_cota",
+        )
         if erro_preco:
             return None, erro_preco
         return self._persistencia.atualizar(

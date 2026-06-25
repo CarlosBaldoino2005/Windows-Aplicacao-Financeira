@@ -41,6 +41,7 @@ from src.View.tema import CORES
 
 ALTURA_GRAFICO_MINIMA_PX = 280
 _ABA_GRAFICO = "Grafico"
+_ABA_METRICAS = "Metricas"
 
 
 class JanelaGraficoAgoraDia(ctk.CTkToplevel):
@@ -136,7 +137,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         painel_preco.pack(fill="x", padx=16, pady=(4, 8))
 
         linha_preco = ctk.CTkFrame(painel_preco, fg_color="transparent")
-        linha_preco.pack(fill="x", padx=16, pady=(10, 4))
+        linha_preco.pack(fill="x", padx=16, pady=(10, 12))
 
         self._label_preco = ctk.CTkLabel(
             linha_preco,
@@ -158,9 +159,6 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         )
         self._label_variacao_dia.pack(anchor="w")
 
-        self._painel_metricas = PainelMetricasDiaAgora(painel_preco)
-        self._painel_metricas.montar().pack(fill="x", padx=16, pady=(0, 10))
-
         self._abas = ctk.CTkTabview(
             self,
             fg_color=CORES["fundo"],
@@ -173,6 +171,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         )
         self._abas.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
         self._abas.add(_ABA_GRAFICO)
+        self._abas.add(_ABA_METRICAS)
         self._abas.set(_ABA_GRAFICO)
         self._gerenciador_aba_variacao = GerenciadorAbaVariacaoAgora(self._abas, _ABA_GRAFICO)
         self._abas.configure(command=self._ao_mudar_aba_agora_dia)
@@ -212,6 +211,20 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._frame_grafico.grid(row=2, column=0, sticky="nsew")
         self._frame_grafico.grid_rowconfigure(0, weight=1)
         self._frame_grafico.grid_columnconfigure(0, weight=1)
+
+        aba_metricas = self._abas.tab(_ABA_METRICAS)
+        aba_metricas.grid_columnconfigure(0, weight=1)
+        aba_metricas.grid_rowconfigure(0, weight=1)
+
+        self._area_metricas = ctk.CTkScrollableFrame(
+            aba_metricas,
+            fg_color=CORES["fundo"],
+            label_text="",
+        )
+        self._area_metricas.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+
+        self._painel_metricas = PainelMetricasDiaAgora(self._area_metricas)
+        self._painel_metricas.montar(expandido_inicial=True).pack(fill="x", pady=(0, 12))
 
     def _carregar_dados(self) -> None:
         if self._carregando or not janela_ui_ainda_ativa(self):

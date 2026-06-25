@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date
 
 import customtkinter as ctk
 from src.View import mensagem_helper as messagebox
@@ -19,12 +19,22 @@ from src.Tool.blacklist_ativos_helper import confirmar_cadastro_blacklist
 from src.Tool.carteira_ativo_helper import normalizar_simbolo_carteira
 from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
-from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
+from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
+from src.View.campo_data_calendario_helper import (
+    CampoDataCalendario,
+    data_de_texto_ptbr,
+    montar_campo_data_calendario,
+)
 from src.View.tema import CORES
 
 _LARGURA = 520
-_ALTURA = 640
+_ALTURA = 700
 _MARGEM_ALTURA_EXTRA_PX = 24
+
+
+def _texto_moeda(valor: float) -> str:
+    centavos = max(0, int(round(valor * 100)))
+    return f"R$ {formatar_centavos_ptbr(centavos)}"
 
 
 class JanelaAdicionarCarteira(ctk.CTkToplevel):
@@ -247,17 +257,91 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         linha1.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(linha1, text="Quantidade").pack(side="left", padx=(0, 8))
         self._entrada_quantidade = ctk.CTkEntry(linha1, width=120, placeholder_text="Ex.: 100")
-        self._entrada_quantidade.pack(side="left", padx=(0, 16))
-        ctk.CTkLabel(linha1, text="Preco de compra").pack(side="left", padx=(0, 8))
-        self._entrada_preco = ctk.CTkEntry(linha1, width=140, placeholder_text="R$ 0,00")
-        self._entrada_preco.pack(side="left")
+        self._entrada_quantidade.pack(side="left")
+
+        self._modo_valor_compra = {"valor": "por_cota"}
+
+        ctk.CTkLabel(
+            bloco,
+            text="Valor da compra",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=CORES["texto"],
+        ).pack(anchor="w", pady=(0, 4))
+
+        self._seletor_modo_compra = ctk.CTkSegmentedButton(
+            bloco,
+            values=["Por cota", "Valor total"],
+            command=self._atualizar_modo_valor_compra,
+            selected_color=CORES["primaria"],
+            unselected_color=CORES["superficie"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+        )
+        self._seletor_modo_compra.set("Por cota")
+        self._seletor_modo_compra.pack(anchor="w", pady=(0, 8))
+
+        self._rotulo_preco_compra = ctk.CTkLabel(
+            bloco,
+            text="Preco de compra (por cota)",
+            font=ctk.CTkFont(size=12),
+            text_color=CORES["textoSecundario"],
+        )
+        self._rotulo_preco_compra.pack(anchor="w", pady=(0, 4))
+
+        self._entrada_preco = ctk.CTkEntry(bloco, width=200, placeholder_text="R$ 0,00")
+        self._entrada_preco.pack(anchor="w", pady=(0, 8))
         aplicar_mascara_moeda_ptbr(self._entrada_preco)
 
         linha2 = ctk.CTkFrame(bloco, fg_color="transparent")
         linha2.pack(fill="x")
         ctk.CTkLabel(linha2, text="Data da compra").pack(side="left", padx=(0, 8))
-        self._entrada_data = ctk.CTkEntry(linha2, width=120, placeholder_text="dd/mm/aaaa")
-        self._entrada_data.pack(side="left")
+        self._campo_data: CampoDataCalendario = montar_campo_data_calendario(
+            linha2,
+            valor_inicial=date.today(),
+            largura_entrada=118,
+        )
+
+    def _atualizar_modo_valor_compra(self, valor: str) -> None:
+        if valor == "Valor total":
+            self._modo_valor_compra["valor"] = "valor_total"
+            self._rotulo_preco_compra.configure(text="Valor total gasto na negociacao")
+            self._entrada_preco.configure(placeholder_text="Ex.: 1.625,00")
+            total = self._calcular_valor_total_compra_atual()
+            if total is not None:
+                self._entrada_preco.delete(0, "end")
+                self._entrada_preco.insert(0, _texto_moeda(total))
+            return
+
+        self._modo_valor_compra["valor"] = "por_cota"
+        self._rotulo_preco_compra.configure(text="Preco de compra (por cota)")
+        self._entrada_preco.configure(placeholder_text="R$ 0,00")
+        if self._posicao is not None:
+            self._entrada_preco.delete(0, "end")
+            self._entrada_preco.insert(0, _texto_moeda(self._posicao.preco_compra))
+            return
+
+        from src.Tool.validadores import validar_quantidade_posicao, validar_valor_monetario_ptbr
+
+        quantidade, _ = validar_quantidade_posicao(self._entrada_quantidade.get())
+        total, _ = validar_valor_monetario_ptbr(self._entrada_preco.get())
+        if quantidade and quantidade > 0 and total and total > 0:
+            self._entrada_preco.delete(0, "end")
+            self._entrada_preco.insert(0, _texto_moeda(round(total / quantidade, 4)))
+
+    def _calcular_valor_total_compra_atual(self) -> float | None:
+        from src.Tool.validadores import validar_quantidade_posicao, validar_valor_monetario_ptbr
+
+        quantidade, erro_qtd = validar_quantidade_posicao(self._entrada_quantidade.get())
+        if erro_qtd or quantidade is None or quantidade <= 0:
+            if self._posicao is not None:
+                return round(self._posicao.preco_compra * self._posicao.quantidade, 2)
+            return None
+
+        preco, erro_preco = validar_valor_monetario_ptbr(self._entrada_preco.get())
+        if self._modo_valor_compra["valor"] == "por_cota" and not erro_preco and preco is not None:
+            return round(preco * quantidade, 2)
+        if self._posicao is not None:
+            return round(self._posicao.preco_compra * self._posicao.quantidade, 2)
+        return None
 
     def _montar_botoes(self, pai: ctk.CTkBaseClass) -> None:
         barra = ctk.CTkFrame(pai, fg_color=CORES["fundo"])
@@ -282,7 +366,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         ).pack(side="right", padx=(0, 8))
 
     def _aplicar_preenchimento_inicial(self) -> None:
-        hoje = datetime.now().strftime("%d/%m/%Y")
+        hoje = date.today()
 
         if self._nova_compra_ativo and self._tipo_selecionado and self._simbolo_selecionado:
             self._definir_tipo_automatico(self._tipo_selecionado)
@@ -293,22 +377,16 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                         f"({ROTULOS_TIPO_CARTEIRA[self._tipo_selecionado]})"
                     )
                 )
-            self._entrada_data.insert(0, hoje)
+            self._campo_data.definir_data(hoje)
             if self._preco_compra_sugerido is not None and self._preco_compra_sugerido > 0:
-                preco_texto = (
-                    f"{self._preco_compra_sugerido:,.2f}"
-                    .replace(",", "X")
-                    .replace(".", ",")
-                    .replace("X", ".")
-                )
-                self._entrada_preco.insert(0, preco_texto)
+                self._entrada_preco.insert(0, _texto_moeda(self._preco_compra_sugerido))
             if self._quantidade_sugerida is not None and self._quantidade_sugerida > 0:
                 qtd = f"{self._quantidade_sugerida:.8f}".rstrip("0").rstrip(".")
                 self._entrada_quantidade.insert(0, qtd.replace(".", ","))
             return
 
         if self._posicao is None:
-            self._entrada_data.insert(0, hoje)
+            self._campo_data.definir_data(hoje)
             return
 
         self._combo_tipo.set(ROTULOS_TIPO_CARTEIRA[self._posicao.tipo_ativo])
@@ -321,9 +399,12 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
 
         qtd = f"{self._posicao.quantidade:.8f}".rstrip("0").rstrip(".")
         self._entrada_quantidade.insert(0, qtd.replace(".", ","))
-        preco_texto = f"{self._posicao.preco_compra:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        self._entrada_preco.insert(0, preco_texto)
-        self._entrada_data.insert(0, self._posicao.data_compra)
+        self._entrada_preco.insert(0, _texto_moeda(self._posicao.preco_compra))
+        data_posicao = data_de_texto_ptbr(self._posicao.data_compra)
+        if data_posicao is not None:
+            self._campo_data.definir_data(data_posicao)
+        else:
+            self._campo_data.definir_texto_ptbr(self._posicao.data_compra)
 
     def _definir_tipo_automatico(self, tipo: TipoAtivoCarteira) -> None:
         self._tipo_selecionado = tipo
@@ -495,7 +576,8 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             return
         quantidade = self._entrada_quantidade.get()
         preco = self._entrada_preco.get()
-        data = self._entrada_data.get().strip()
+        data = self._campo_data.obter_texto()
+        modo_valor = self._modo_valor_compra["valor"]
 
         precisa_aviso_blacklist = not self._editando
         if self._editando and self._posicao and simbolo != self._posicao.simbolo:
@@ -511,6 +593,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                 quantidade,
                 preco,
                 data,
+                modo_valor_compra=modo_valor,
             )
         else:
             _, erro = self._controlador.adicionar_posicao(
@@ -519,6 +602,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                 quantidade,
                 preco,
                 data,
+                modo_valor_compra=modo_valor,
             )
 
         if erro:

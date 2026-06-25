@@ -28,6 +28,10 @@ class ResumoCarteiraAgora:
             return None
         return round((self.valorizacao_reais(preco_atual) / self.valor_investido) * 100, 2)
 
+    def lucro_no_preco_alvo(self, preco_alvo: float) -> float:
+        """Lucro total se vender toda a posicao ao preco alvo informado."""
+        return round((preco_alvo - self.preco_compra) * self.quantidade, 2)
+
     @classmethod
     def de_linha(cls, linha: LinhaCarteira) -> ResumoCarteiraAgora:
         moeda = linha.cotacao.moeda if linha.cotacao else _moeda_padrao_por_tipo(linha.posicao.tipo_ativo)

@@ -1,7 +1,7 @@
 """Tela de manutencao de ativos da carteira (compras, vendas e edicao)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from tkinter import ttk
 
 import customtkinter as ctk
@@ -28,6 +28,7 @@ from src.Tool.janela_helper import (
     liberar_modal_janela_filha,
 )
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr
+from src.View.campo_data_calendario_helper import montar_campo_data_calendario
 from src.View.formatadores import formatar_moeda
 from src.View.janela_adicionar_carteira import abrir_adicionar_carteira
 from src.View.janela_grafico_acao import JanelaGraficoAcao
@@ -407,9 +408,13 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(0, 4))
 
-        entrada_data = ctk.CTkEntry(painel, width=220)
-        entrada_data.pack(anchor="w", padx=16, pady=(0, 10))
-        entrada_data.insert(0, datetime.now().strftime("%d/%m/%Y"))
+        linha_data = ctk.CTkFrame(painel, fg_color="transparent")
+        linha_data.pack(anchor="w", padx=16, pady=(0, 10))
+        campo_data = montar_campo_data_calendario(
+            linha_data,
+            valor_inicial=date.today(),
+            largura_entrada=200,
+        )
 
         ctk.CTkLabel(
             painel,
@@ -427,7 +432,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
                 posicao.id,
                 entrada_qtd.get(),
                 entrada_preco.get(),
-                entrada_data.get(),
+                campo_data.obter_texto(),
                 modo_valor_venda=modo_valor_venda["valor"],
             )
             if erro:
@@ -460,7 +465,7 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
 
         entrada_qtd.bind("<Return>", lambda _e: confirmar())
         entrada_preco.bind("<Return>", lambda _e: confirmar())
-        entrada_data.bind("<Return>", lambda _e: confirmar())
+        campo_data.entrada.bind("<Return>", lambda _e: confirmar())
 
         largura = 380
         altura_minima = 460

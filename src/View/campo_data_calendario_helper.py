@@ -20,6 +20,12 @@ from src.Tool.validadores import validar_data_ptbr
 from src.View.tema import CORES
 
 
+def data_de_texto_ptbr(texto: str) -> date | None:
+    """Converte texto dd/mm/aaaa em date, ou None se invalido."""
+    dt, _ = validar_data_ptbr((texto or "").strip())
+    return dt.date() if dt is not None else None
+
+
 class CampoDataCalendario:
     """Entrada dd/mm/aaaa com seletor visual de calendario."""
 
@@ -54,6 +60,10 @@ class CampoDataCalendario:
             text_color=CORES["texto"],
         ).pack(side="left")
 
+    @property
+    def entrada(self) -> ctk.CTkEntry:
+        return self._entrada
+
     def obter_texto(self) -> str:
         return self._entrada.get().strip()
 
@@ -69,6 +79,16 @@ class CampoDataCalendario:
         self._entrada.insert(0, formatar_data_ptbr(valor))
         self._mes_visivel = valor
         self._data_destaque = valor
+
+    def definir_texto_ptbr(self, texto: str) -> None:
+        """Preenche o campo a partir de dd/mm/aaaa (ou mantem texto se incompleto)."""
+        data = data_de_texto_ptbr(texto)
+        if data is not None:
+            self.definir_data(data)
+            return
+        self._entrada.delete(0, "end")
+        if texto:
+            self._entrada.insert(0, texto.strip())
 
     def _sincronizar_data_do_input(self) -> None:
         """Atualiza mes visivel e destaque com a data valida do campo."""

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 import customtkinter as ctk
 from src.View import mensagem_helper as messagebox
@@ -15,6 +16,10 @@ from src.Tool.janela_helper import (
     liberar_modal_janela_filha,
 )
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
+from src.View.campo_data_calendario_helper import (
+    data_de_texto_ptbr,
+    montar_campo_data_calendario,
+)
 from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
@@ -105,9 +110,14 @@ def abrir_editar_compra_carteira(
     entrada_qtd.insert(0, _formatar_quantidade(compra.quantidade))
 
     _rotulo_campo("Data da compra (dd/mm/aaaa)")
-    entrada_data = ctk.CTkEntry(area_campos, width=240)
-    entrada_data.pack(anchor="w", pady=(0, 8))
-    entrada_data.insert(0, compra.data_compra)
+    linha_data = ctk.CTkFrame(area_campos, fg_color="transparent")
+    linha_data.pack(anchor="w", pady=(0, 8))
+    data_inicial = data_de_texto_ptbr(compra.data_compra) or date.today()
+    campo_data = montar_campo_data_calendario(
+        linha_data,
+        valor_inicial=data_inicial,
+        largura_entrada=200,
+    )
 
     modo_valor_compra = {"valor": "por_cota"}
 
@@ -166,7 +176,7 @@ def abrir_editar_compra_carteira(
             compra.id,
             entrada_qtd.get(),
             entrada_preco.get(),
-            entrada_data.get(),
+            campo_data.obter_texto(),
             modo_valor_compra=modo_valor_compra["valor"],
         )
         if erro:
@@ -197,7 +207,7 @@ def abrir_editar_compra_carteira(
         width=110,
     ).pack(side="right", padx=(0, 8))
 
-    for entrada in (entrada_qtd, entrada_data, entrada_preco):
+    for entrada in (entrada_qtd, campo_data.entrada, entrada_preco):
         entrada.bind("<Return>", lambda _e: salvar())
 
     def aplicar_tamanho() -> None:

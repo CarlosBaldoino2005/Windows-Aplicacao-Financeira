@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 import customtkinter as ctk
 from src.View import mensagem_helper as messagebox
@@ -15,6 +16,10 @@ from src.Tool.janela_helper import (
     liberar_modal_janela_filha,
 )
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
+from src.View.campo_data_calendario_helper import (
+    data_de_texto_ptbr,
+    montar_campo_data_calendario,
+)
 from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
@@ -120,9 +125,13 @@ def abrir_editar_venda_carteira(
 
     _secao("Compra")
     _rotulo_campo("Data da compra (dd/mm/aaaa)")
-    entrada_data_compra = ctk.CTkEntry(area_campos, width=240)
-    entrada_data_compra.pack(anchor="w", pady=(0, 8))
-    entrada_data_compra.insert(0, venda.data_compra)
+    linha_data_compra = ctk.CTkFrame(area_campos, fg_color="transparent")
+    linha_data_compra.pack(anchor="w", pady=(0, 8))
+    campo_data_compra = montar_campo_data_calendario(
+        linha_data_compra,
+        valor_inicial=data_de_texto_ptbr(venda.data_compra) or date.today(),
+        largura_entrada=200,
+    )
 
     _rotulo_campo("Preco de compra (por cota)")
     entrada_preco_compra = ctk.CTkEntry(area_campos, width=240, placeholder_text="R$ 0,00")
@@ -132,9 +141,13 @@ def abrir_editar_venda_carteira(
 
     _secao("Venda")
     _rotulo_campo("Data da venda (dd/mm/aaaa)")
-    entrada_data_venda = ctk.CTkEntry(area_campos, width=240)
-    entrada_data_venda.pack(anchor="w", pady=(0, 8))
-    entrada_data_venda.insert(0, venda.data_venda)
+    linha_data_venda = ctk.CTkFrame(area_campos, fg_color="transparent")
+    linha_data_venda.pack(anchor="w", pady=(0, 8))
+    campo_data_venda = montar_campo_data_calendario(
+        linha_data_venda,
+        valor_inicial=data_de_texto_ptbr(venda.data_venda) or date.today(),
+        largura_entrada=200,
+    )
 
     modo_valor_venda = {"valor": "por_cota"}
 
@@ -201,9 +214,9 @@ def abrir_editar_venda_carteira(
             venda.id,
             entrada_qtd.get(),
             entrada_preco_compra.get(),
-            entrada_data_compra.get(),
+            campo_data_compra.obter_texto(),
             entrada_preco_venda.get(),
-            entrada_data_venda.get(),
+            campo_data_venda.obter_texto(),
             entrada_dividendos.get(),
             modo_valor_venda=modo_valor_venda["valor"],
         )
@@ -237,9 +250,9 @@ def abrir_editar_venda_carteira(
 
     for entrada in (
         entrada_qtd,
-        entrada_data_compra,
+        campo_data_compra.entrada,
         entrada_preco_compra,
-        entrada_data_venda,
+        campo_data_venda.entrada,
         entrada_preco_venda,
         entrada_dividendos,
     ):

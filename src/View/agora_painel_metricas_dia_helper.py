@@ -30,7 +30,7 @@ class PainelMetricasDiaAgora:
         self._btn_expandir: ctk.CTkButton | None = None
         self._valores: dict[str, ctk.CTkLabel] = {}
 
-    def montar(self) -> ctk.CTkFrame:
+    def montar(self, *, expandido_inicial: bool = False) -> ctk.CTkFrame:
         card = ctk.CTkFrame(
             self._pai,
             fg_color=CORES.get("infoFundo", CORES["fundo"]),
@@ -91,8 +91,12 @@ class PainelMetricasDiaAgora:
         coluna_3 = self._montar_coluna(2)
         self._adicionar_linha(coluna_3, "volume", "Volume")
 
-        self._frame_grade.pack_forget()
-        self._btn_expandir.configure(text="▶")
+        if expandido_inicial:
+            self._expandido = True
+            self._btn_expandir.configure(text="▼")
+        else:
+            self._frame_grade.pack_forget()
+            self._btn_expandir.configure(text="▶")
 
         return card
 
