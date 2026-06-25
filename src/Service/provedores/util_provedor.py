@@ -13,17 +13,15 @@ from src.Tool.registrador_log import RegistradorLog
 _carregou_env = False
 
 
-def carregar_variaveis_ambiente() -> None:
-    """Le .env na raiz do projeto (opcional, sem dependencia extra)."""
-    global _carregou_env
-    if _carregou_env:
-        return
-    _carregou_env = True
+def obter_caminho_env() -> Path:
+    """Retorna o caminho do .env na raiz do projeto."""
+    return Path(__file__).resolve().parents[3] / ".env"
 
-    caminho = Path(__file__).resolve().parents[3] / ".env"
+
+def _ler_pares_env(caminho: Path) -> dict[str, str]:
+    pares: dict[str, str] = {}
     if not caminho.exists():
-        return
-
+        return pares
     try:
         for linha in caminho.read_text(encoding="utf-8").splitlines():
             texto = linha.strip()
@@ -32,10 +30,37 @@ def carregar_variaveis_ambiente() -> None:
             chave, valor = texto.split("=", 1)
             chave = chave.strip()
             valor = valor.strip().strip('"').strip("'")
-            if chave and chave not in os.environ:
+            if chave:
+                pares[chave] = valor
+    except OSError:
+        pass
+    return pares
+
+
+def carregar_variaveis_ambiente(*, forcar: bool = False) -> None:
+    """Le .env na raiz do projeto (opcional, sem dependencia extra)."""
+    global _carregou_env
+    if _carregou_env and not forcar:
+        return
+    _carregou_env = True
+
+    caminho = obter_caminho_env()
+    if not caminho.exists():
+        return
+
+    try:
+        for chave, valor in _ler_pares_env(caminho).items():
+            if forcar or chave not in os.environ:
                 os.environ[chave] = valor
     except OSError:
         pass
+
+
+def aplicar_variaveis_ambiente(pares: dict[str, str]) -> None:
+    """Atualiza variaveis ja carregadas em memoria (ex.: apos salvar na tela)."""
+    for chave, valor in pares.items():
+        if chave:
+            os.environ[chave] = valor
 
 
 carregar_variaveis_ambiente()

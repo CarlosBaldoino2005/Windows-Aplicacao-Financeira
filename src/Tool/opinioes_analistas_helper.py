@@ -11,6 +11,9 @@ from src.Model.opinioes_analistas import (
     OpinioesAnalistasPacote,
     ResumoOpinioesAnalistas,
 )
+from src.Tool.acao_b3_adr_helper import eh_acao_b3_para_adr, resolver_adr_eua_para_acao_b3
+from src.Tool.bdrs_helper import eh_bdr_b3, resolver_ticker_eua_para_bdr
+from src.Tool.cotacao_dual_helper import codigo_exibicao
 
 _TRADUCAO_NOTA = {
     "buy": "Comprar",
@@ -97,31 +100,30 @@ def _formatar_data(valor) -> str:
         return texto[:10] if len(texto) >= 10 else texto
 
 
-def montar_opinioes_analistas(
-    simbolo: str,
-    nome_empresa: str,
-    moeda: str,
-    ticker: yf.Ticker | None = None,
-) -> OpinioesAnalistasPacote | None:
-    """Monta o pacote de opinioes; retorna None se nao houver dados uteis."""
-    if simbolo.endswith("-USD"):
-        return None
+def _pacote_tem_dados_uteis(pacote: OpinioesAnalistasPacote) -> bool:
+    """Indica se ha recomendacao, precos-alvo ou historico utilizavel."""
+    resumo = pacote.resumo
+    if resumo.quantidade_analistas and resumo.quantidade_analistas > 0:
+        return True
+    if resumo.preco_alvo_medio is not None or resumo.preco_alvo_mediano is not None:
+        return True
+    if pacote.historico or pacote.movimentos:
+        return True
+    texto = (resumo.recomendacao_texto or "").strip()
+    return bool(texto and texto not in {"—", "Sem cobertura"})
 
-    codigo = simbolo.replace(".SA", "")
-    pacote = OpinioesAnalistasPacote(
-        simbolo=simbolo,
-        codigo=codigo,
-        nome_empresa=nome_empresa or codigo,
-        moeda=moeda or ("BRL" if simbolo.endswith(".SA") else "USD"),
-    )
+
+def _preencher_pacote_de_ticker(
+    pacote: OpinioesAnalistasPacote,
+    ticker: yf.Ticker,
+) -> None:
+    resumo = pacote.resumo
 
     try:
-        ticker = ticker or yf.Ticker(simbolo)
         info = ticker.info or {}
     except Exception:
         info = {}
 
-    resumo = pacote.resumo
     resumo.recomendacao_texto = traduzir_nota_analista(str(info.get("recommendationKey") or ""))
     resumo.recomendacao_media = _float_opcional(info.get("recommendationMean"))
     resumo.nota_media_descricao = str(info.get("averageAnalystRating") or "").strip()
@@ -154,39 +156,154 @@ def montar_opinioes_analistas(
     except Exception:
         pacote.avisos.append("Historico mensal de recomendacoes indisponivel.")
 
+    _preencher_movimentos_de_ticker(pacote, ticker)
+
+
+def _preencher_movimentos_de_ticker(pacote: OpinioesAnalistasPacote, ticker: yf.Ticker) -> int:
+    """Carrega upgrades/downgrades por instituicao. Retorna quantidade adicionada."""
+    quantidade_antes = len(pacote.movimentos)
     try:
         df_mov = ticker.upgrades_downgrades
-        if df_mov is not None and not df_mov.empty:
-            for indice, linha in df_mov.head(40).iterrows():
-                pacote.movimentos.append(
-                    MovimentoAnalista(
-                        data=_formatar_data(indice),
-                        instituicao=str(linha.get("Firm") or "—"),
-                        nota_anterior=traduzir_nota_analista(str(linha.get("FromGrade") or "")),
-                        nota_nova=traduzir_nota_analista(str(linha.get("ToGrade") or "")),
-                        acao=str(linha.get("Action") or "—"),
-                        preco_alvo=_float_opcional(linha.get("currentPriceTarget")),
-                        preco_alvo_anterior=_float_opcional(linha.get("priorPriceTarget")),
-                    )
+        if df_mov is None or df_mov.empty:
+            return 0
+        for indice, linha in df_mov.head(40).iterrows():
+            pacote.movimentos.append(
+                MovimentoAnalista(
+                    data=_formatar_data(indice),
+                    instituicao=str(linha.get("Firm") or "—"),
+                    nota_anterior=traduzir_nota_analista(str(linha.get("FromGrade") or "")),
+                    nota_nova=traduzir_nota_analista(str(linha.get("ToGrade") or "")),
+                    acao=str(linha.get("Action") or "—"),
+                    preco_alvo=_float_opcional(linha.get("currentPriceTarget")),
+                    preco_alvo_anterior=_float_opcional(linha.get("priorPriceTarget")),
                 )
+            )
     except Exception:
-        pass
+        return 0
+    return len(pacote.movimentos) - quantidade_antes
 
-    tem_resumo = any(
-        [
-            resumo.recomendacao_texto and resumo.recomendacao_texto != "—",
-            resumo.quantidade_analistas,
-            resumo.preco_alvo_medio is not None,
-            pacote.historico,
-            pacote.movimentos,
-        ]
+
+def _complementar_movimentos_via_adr(pacote: OpinioesAnalistasPacote, simbolo_b3: str) -> None:
+    """Busca movimentos por instituicao no ADR nos EUA quando a B3 nao publica."""
+    if pacote.movimentos:
+        return
+    if not eh_acao_b3_para_adr(simbolo_b3):
+        return
+
+    adr = resolver_adr_eua_para_acao_b3(simbolo_b3)
+    if not adr:
+        return
+
+    adicionados = _preencher_movimentos_de_ticker(pacote, yf.Ticker(adr))
+    if adicionados > 0:
+        pacote.moeda_movimentos = "USD"
+        pacote.avisos.insert(
+            0,
+            (
+                f"Movimentos por instituicao obtidos via ADR nos EUA ({adr}). "
+                "Precos-alvo dessa tabela em USD. O resumo acima permanece da acao na B3."
+            ),
+        )
+
+
+def _aviso_movimentos_indisponiveis(pacote: OpinioesAnalistasPacote, simbolo: str) -> None:
+    if pacote.movimentos:
+        return
+    if eh_bdr_b3(simbolo):
+        pacote.avisos.append(
+            "Movimentos individuais por instituicao nao disponiveis. "
+            "Consolidacao via Yahoo Finance."
+        )
+        return
+    if eh_acao_b3_para_adr(simbolo):
+        pacote.avisos.append(
+            "Movimentos por instituicao nao disponiveis para este ativo na B3. "
+            "Tentamos complementar via ADR nos EUA, mas o Yahoo Finance nao retornou historico."
+        )
+        return
+    pacote.avisos.append(
+        "Movimentos individuais por instituicao nao disponiveis para este ativo. "
+        "Exibimos a consolidacao de recomendacoes do Yahoo Finance."
     )
-    if not tem_resumo:
+
+
+def _criar_pacote_base(simbolo: str, nome_empresa: str, moeda: str) -> OpinioesAnalistasPacote:
+    codigo = codigo_exibicao(simbolo)
+    return OpinioesAnalistasPacote(
+        simbolo=simbolo,
+        codigo=codigo,
+        nome_empresa=nome_empresa or codigo,
+        moeda=moeda or ("BRL" if simbolo.endswith(".SA") else "USD"),
+    )
+
+
+def _montar_de_simbolo(
+    simbolo: str,
+    nome_empresa: str,
+    moeda: str,
+    ticker: yf.Ticker | None = None,
+) -> OpinioesAnalistasPacote:
+    pacote = _criar_pacote_base(simbolo, nome_empresa, moeda)
+    ticker_yf = ticker or yf.Ticker(simbolo)
+    _preencher_pacote_de_ticker(pacote, ticker_yf)
+    return pacote
+
+
+def montar_opinioes_analistas(
+    simbolo: str,
+    nome_empresa: str,
+    moeda: str,
+    ticker: yf.Ticker | None = None,
+) -> OpinioesAnalistasPacote | None:
+    """Monta o pacote de opinioes; retorna None se nao houver dados uteis."""
+    if simbolo.endswith("-USD"):
         return None
 
-    if not pacote.movimentos:
-        pacote.avisos.append(
-            "Movimentos individuais por instituicao nao disponiveis para este ativo. "
-            "Exibimos a consolidacao de recomendacoes do Yahoo Finance."
+    pacote = _montar_de_simbolo(simbolo, nome_empresa, moeda, ticker=ticker)
+    if _pacote_tem_dados_uteis(pacote):
+        _complementar_movimentos_via_adr(pacote, simbolo)
+        _aviso_movimentos_indisponiveis(pacote, simbolo)
+        return pacote
+
+    if eh_bdr_b3(simbolo):
+        ticker_eua = resolver_ticker_eua_para_bdr(simbolo)
+        if ticker_eua:
+            pacote_eua = _montar_de_simbolo(ticker_eua, nome_empresa, "USD")
+            if _pacote_tem_dados_uteis(pacote_eua):
+                pacote_eua.codigo = codigo_exibicao(simbolo)
+                pacote_eua.simbolo = simbolo
+                if pacote_eua.movimentos:
+                    pacote_eua.moeda_movimentos = "USD"
+                pacote_eua.avisos.insert(
+                    0,
+                    (
+                        f"O BDR {codigo_exibicao(simbolo)} nao possui cobertura de analistas na B3. "
+                        f"Exibimos os dados do ativo subjacente nos EUA ({ticker_eua}). "
+                        "Precos-alvo em USD."
+                    ),
+                )
+                if not pacote_eua.movimentos:
+                    _aviso_movimentos_indisponiveis(pacote_eua, simbolo)
+                return pacote_eua
+
+        pacote.avisos.insert(
+            0,
+            (
+                "Este BDR nao possui cobertura de analistas na B3 no Yahoo Finance. "
+                "Tambem nao encontramos dados do ativo subjacente nos EUA."
+            ),
         )
-    return pacote
+        _complementar_movimentos_via_adr(pacote, simbolo)
+        _aviso_movimentos_indisponiveis(pacote, simbolo)
+        return pacote
+
+    if pacote.resumo.recomendacao_texto == "Sem cobertura":
+        pacote.avisos.insert(
+            0,
+            "O Yahoo Finance indica sem cobertura de analistas para este ativo.",
+        )
+        _complementar_movimentos_via_adr(pacote, simbolo)
+        _aviso_movimentos_indisponiveis(pacote, simbolo)
+        return pacote
+
+    return None

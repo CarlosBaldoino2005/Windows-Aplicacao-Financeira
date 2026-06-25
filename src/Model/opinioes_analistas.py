@@ -56,6 +56,7 @@ class OpinioesAnalistasPacote:
     codigo: str
     nome_empresa: str
     moeda: str
+    moeda_movimentos: str = ""
     resumo: ResumoOpinioesAnalistas = field(default_factory=ResumoOpinioesAnalistas)
     historico: list[HistoricoRecomendacaoPeriodo] = field(default_factory=list)
     movimentos: list[MovimentoAnalista] = field(default_factory=list)

@@ -109,6 +109,32 @@ Se o Yahoo falhar, o sistema troca sozinho para a proxima fonte e registra no `l
 
 Token opcional da Brapi (mais limite): variavel `BRAPI_TOKEN` no arquivo `.env` (modelo em `config.example.env`).
 
+### Analise com IA (tela Agora)
+
+Opcional. **Nao existe IA gratuita so de mercado financeiro** — o app envia preco, variacao e metricas do ativo para um modelo de linguagem com prompt especializado.
+
+**Pela tela (recomendado):** na janela **Analise** (Agora), clique em **Configurar IA**, escolha o provedor e informe a chave. A configuracao e salva automaticamente no arquivo `.env` na raiz do projeto.
+
+**Recomendado (gratuito, sem cartao): Google Gemini** — chave em [Google AI Studio](https://aistudio.google.com/apikey)
+
+**Alternativa gratuita: Groq** — [console.groq.com](https://console.groq.com)
+
+**OpenAI** (pago / exige creditos): [platform.openai.com](https://platform.openai.com/api-keys)
+
+Edicao manual no `.env` (opcional):
+
+```env
+IA_PROVEDOR=gemini
+GEMINI_API_KEY=sua_chave_gemini
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Com `IA_PROVEDOR=auto`, o app tenta **Gemini → Groq → OpenAI**, usando a primeira chave encontrada.
+
+Na tela **Agora**, use **Analise** → **Analisar com IA**. Conteudo informativo — nao e recomendacao de investimento.
+
+**Ja gratuito no app (sem IA):** aba **Analistas** usa dados reais do Yahoo Finance (recomendacoes e precos-alvo).
+
 ## Configuracao do painel (INI)
 
 Arquivo: `dados/painel.ini` (criado automaticamente na primeira execucao).

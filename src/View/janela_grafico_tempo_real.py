@@ -11,6 +11,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from src.Model.carteira import LinhaCarteira
+from src.Model.contexto_analise_agora import ContextoAnaliseAgora
 from src.Service.agora_historico_dia_servico import data_padrao_consulta_agora
 from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
@@ -32,6 +33,7 @@ from src.Service.agora_metricas_mercado_servico import AgoraMetricasMercadoServi
 from src.View.agora_aba_variacao_helper import GerenciadorAbaVariacaoAgora
 from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_carteira
 from src.View.campo_data_calendario_helper import montar_campo_data_calendario
+from src.View.janela_analise_agora import JanelaAnaliseAgora, abrir_janela_analise_agora
 from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
 from src.View.janela_negocios_agora import JanelaNegociosAgora, abrir_janela_negocios_agora
 from src.View.janela_resumo_semana_agora import (
@@ -125,9 +127,14 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._job_redimensionar_grafico: str | None = None
         self._janela_negocios: JanelaNegociosAgora | None = None
         self._janela_resumo_semana: JanelaResumoSemanaAgora | None = None
+        self._janela_analise: JanelaAnaliseAgora | None = None
         self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
         self._ultimos_pontos_tooltip: list[dict] = []
         self._ultima_moeda_grafico = "BRL"
+        self._nome_ativo = codigo_exibicao(simbolo)
+        self._variacao_dia_valor: float | None = None
+        self._variacao_dia_pct: float | None = None
+        self._ultimas_metricas: MetricasMercadoAgora | None = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Agora — {codigo}")
@@ -243,6 +250,17 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=148,
+            height=28,
+        ).pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(
+            barra_dia,
+            text="Analise",
+            command=self._abrir_analise,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=88,
             height=28,
         ).pack(side="left", padx=(8, 0))
 
@@ -505,6 +523,41 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             janela_atual=self._janela_resumo_semana,
         )
 
+    def _abrir_analise(self) -> None:
+        if self._janela_analise is not None:
+            try:
+                if self._janela_analise.winfo_exists():
+                    self._janela_analise.lift()
+                    self._janela_analise.focus_force()
+                    return
+            except Exception:
+                pass
+        self._janela_analise = abrir_janela_analise_agora(
+            self,
+            obter_contexto=self._montar_contexto_analise,
+        )
+
+    def _montar_contexto_analise(self) -> ContextoAnaliseAgora:
+        resumo = self._resumo_carteira
+        metricas_resumo = ""
+        if self._ultimas_metricas is not None and self._ultimas_metricas.resumo:
+            metricas_resumo = self._ultimas_metricas.resumo
+        return ContextoAnaliseAgora(
+            simbolo=self._simbolo,
+            nome_ativo=self._nome_ativo,
+            moeda=self._ultima_moeda_grafico,
+            tipo_ativo=rotulo_tipo_ativo(self._simbolo),
+            preco_atual=self._preco_atual_cotacao,
+            variacao_valor=self._variacao_dia_valor,
+            variacao_pct=self._variacao_dia_pct,
+            metricas_resumo=metricas_resumo,
+            quantidade_carteira=resumo.quantidade if resumo else None,
+            preco_compra_carteira=resumo.preco_compra if resumo else None,
+            valor_investido_carteira=resumo.valor_investido if resumo else None,
+            alerta_preco_venda=self._alerta_preco_venda_limite,
+            alerta_preco_compra=self._alerta_compra_limite,
+        )
+
     def _alternar_pausa(self) -> None:
         self._ao_vivo = not self._ao_vivo
         if self._ao_vivo:
@@ -685,6 +738,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         atualizar_variacao_5d: bool = True,
     ) -> None:
         self._ultima_busca_metricas_ms = int(time.monotonic() * 1000)
+        self._ultimas_metricas = metricas
         self._preco_referencia_5_dias = metricas.preco_referencia_5_dias
         if self._painel_metricas is not None:
             self._painel_metricas.atualizar(metricas)
@@ -1589,6 +1643,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         cotacao, taxa, aviso = cotacao_dados
         if cotacao is None:
             self._preco_atual_cotacao = None
+            self._variacao_dia_valor = None
+            self._variacao_dia_pct = None
             self._label_preco.configure(text="—")
             self._label_variacao_dia.configure(
                 text=aviso or "Cotacao indisponivel",
@@ -1604,6 +1660,10 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
 
         moeda = cotacao.moeda or "BRL"
         self._preco_atual_cotacao = cotacao.preco
+        self._nome_ativo = cotacao.nome or codigo_exibicao(cotacao.simbolo)
+        self._ultima_moeda_grafico = moeda
+        self._variacao_dia_valor = cotacao.variacao_valor
+        self._variacao_dia_pct = cotacao.variacao_percentual
         self._label_preco.configure(text=formatar_moeda(cotacao.preco, moeda))
 
         cor_var = CORES["sucesso"] if cotacao.variacao_percentual >= 0 else CORES["erro"]
