@@ -42,6 +42,10 @@ from src.Tool.controlador_ativo_helper import inferir_tipo_ativo_monitoramento
 from src.Model.periodos_mercado import PERIODOS_MERCADO, rotulo_periodo_por_chave
 from src.View.grafico_helper import _publicar_payload_com_cdi
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
+from src.View.grafico_ferramentas_analise_helper import (
+    montar_ferramentas_analise_grafico,
+    restaurar_ferramentas_analise_apos_redesenho,
+)
 from src.View.janela_grafico_ampliado import (
     abrir_grafico_ampliado_acao,
     atualizar_estado_botao_grafico_ampliado,
@@ -99,6 +103,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._payload_resumo_periodo: dict = payload_instrucao(TEXTO_INSTRUCAO_GRAFICO_ACAO)
         self._dados_grafico_atual: dict | None = None
         self._controle_zoom = None
+        self._ferramentas_analise = None
         self._carregando_grafico = False
         self._modelo_grafico: ModeloGrafico = "area"
 
@@ -347,6 +352,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         barra_grafico = ctk.CTkFrame(self._area_rolagem, fg_color="transparent")
         barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
         montar_botoes_zoom_grafico(barra_grafico, lambda: self._controle_zoom)
+        montar_ferramentas_analise_grafico(barra_grafico, lambda: self._ferramentas_analise)
         self._btn_grafico_ampliado = ctk.CTkButton(
             barra_grafico,
             text="Ver grafico ampliado",
@@ -840,6 +846,12 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             simbolo,
             moeda,
             atualizar_painel,
+        )
+        self._ferramentas_analise = restaurar_ferramentas_analise_apos_redesenho(
+            canvas,
+            eixo,
+            self._ferramentas_analise,
+            moeda=moeda,
         )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)

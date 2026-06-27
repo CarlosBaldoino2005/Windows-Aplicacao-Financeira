@@ -182,8 +182,10 @@ class ControleZoomGrafico:
     def resetar(self) -> None:
         # Import tardio evita dependencia circular com grafico_helper.
         from src.View.grafico_helper import limpar_selecao_periodo_no_grafico
+        from src.View.grafico_ferramentas_analise_helper import limpar_ferramentas_analise_no_grafico
 
         limpar_selecao_periodo_no_grafico(self._canvas)
+        limpar_ferramentas_analise_no_grafico(self._canvas)
         if self._xlim_base is None or self._ylim_base is None:
             return
         self._eixo.set_xlim(self._xlim_base)

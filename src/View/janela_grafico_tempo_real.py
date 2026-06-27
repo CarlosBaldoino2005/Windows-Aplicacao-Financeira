@@ -48,17 +48,20 @@ from src.View.grafico_agora_helper import (
     calcular_limites_eixo_agora,
     calcular_preco_fechamento_anterior,
     configurar_eixo_intraday_agora,
+    criar_subplots_agora,
     desenhar_linha_fechamento_anterior,
     desenhar_projecao_fim_dia_agora,
     desenhar_serie_agora,
+    desenhar_volume_agora,
+    finalizar_figura_grafico_agora,
     obter_cor_tendencia_agora,
+    ocultar_rotulos_eixo_x_preco,
 )
 from src.View.grafico_helper import (
     TEXTO_INSTRUCAO_GRAFICO_AGORA,
     configurar_selecao_periodo,
     configurar_tooltip_acao,
     extrair_minutos_dia_de_ponto,
-    finalizar_figura_grafico,
     restaurar_selecao_periodo_no_grafico,
 )
 from src.View.grafico_modelo_helper import (
@@ -66,6 +69,10 @@ from src.View.grafico_modelo_helper import (
     montar_seletor_modelo_grafico,
 )
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
+from src.View.grafico_ferramentas_analise_helper import (
+    montar_ferramentas_analise_grafico,
+    restaurar_ferramentas_analise_apos_redesenho,
+)
 from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
@@ -109,8 +116,10 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._eixo = None
+        self._eixo_volume = None
         self._linha_grafico = None
         self._controle_zoom = None
+        self._ferramentas_analise = None
         self._area_grafico = None
         self._job_atualizacao: str | None = None
         self._ao_vivo = True
@@ -430,6 +439,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._barra_zoom = ctk.CTkFrame(self._container_grafico, fg_color="transparent")
         self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
+        montar_ferramentas_analise_grafico(self._barra_zoom, lambda: self._ferramentas_analise)
 
         self._frame_grafico = ctk.CTkFrame(
             self._container_grafico,
@@ -814,6 +824,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         projecao=None,
         xlim_fixo: tuple[float, float] | None = None,
         ylim_fixo: tuple[float, float] | None = None,
+        eixo_volume=None,
     ):
         posicoes = np.asarray(posicoes_x, dtype=float)
         if xlim_fixo is None or ylim_fixo is None:
@@ -845,7 +856,11 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         configurar_eixo_intraday_agora(eixo, xlim, ylim)
         eixo.set_ylabel("")
         eixo.set_xlabel("")
-        finalizar_figura_grafico(eixo, figura, titulo)
+        com_volume = eixo_volume is not None
+        if com_volume:
+            ocultar_rotulos_eixo_x_preco(eixo)
+            desenhar_volume_agora(eixo_volume, figura, posicoes, pontos_tooltip, xlim)
+        finalizar_figura_grafico_agora(eixo, figura, titulo, com_painel_volume=com_volume)
         if projecao is not None:
             legenda = eixo.legend(
                 loc="upper left",
@@ -877,6 +892,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         preservar_zoom = self._grafico_tem_visualizacao_alterada()
 
         self._eixo.clear()
+        if self._eixo_volume is not None:
+            self._eixo_volume.clear()
 
         dados = self._dados_grafico_atual or {}
         linha, _, _ = self._aplicar_camadas_grafico_agora(
@@ -891,6 +908,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             projecao=dados.get("projecao"),
             xlim_fixo=tuple(xlim) if preservar_zoom else None,
             ylim_fixo=tuple(ylim) if preservar_zoom else None,
+            eixo_volume=self._eixo_volume,
         )
 
         if preservar_zoom:
@@ -898,6 +916,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             self._eixo.set_ylim(ylim)
 
         self._linha_grafico = linha
+        if self._ferramentas_analise is not None:
+            self._ferramentas_analise.reaplicar(self._eixo)
         self._configurar_interacao_grafico(
             self._canvas,
             self._eixo,
@@ -931,6 +951,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             simbolo,
             moeda,
             somente_horario=True,
+            eixo_volume=self._eixo_volume,
         )
         configurar_selecao_periodo(
             canvas,
@@ -1735,6 +1756,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             plt.close(self._figura)
             self._figura = None
         self._eixo = None
+        self._eixo_volume = None
         self._linha_grafico = None
         self._controle_zoom = None
 
@@ -1746,7 +1768,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             dpi=dpi,
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
-        eixo = figura.add_subplot(111)
+        eixo, eixo_volume = criar_subplots_agora(figura)
         dados = self._dados_grafico_atual or {}
         linha, _, _ = self._aplicar_camadas_grafico_agora(
             eixo,
@@ -1758,6 +1780,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             moeda=moeda,
             preco_fechamento_anterior=dados.get("preco_fechamento_anterior"),
             projecao=dados.get("projecao"),
+            eixo_volume=eixo_volume,
         )
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
@@ -1769,12 +1792,19 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             simbolo,
             moeda,
         )
+        self._ferramentas_analise = restaurar_ferramentas_analise_apos_redesenho(
+            canvas,
+            eixo,
+            self._ferramentas_analise,
+            moeda=moeda,
+        )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
         self._figura = figura
         self._canvas = canvas
         self._eixo = eixo
+        self._eixo_volume = eixo_volume
         self._linha_grafico = linha
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))

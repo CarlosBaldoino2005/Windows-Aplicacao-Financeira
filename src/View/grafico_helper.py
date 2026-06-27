@@ -16,6 +16,7 @@ from matplotlib.ticker import FixedFormatter, FixedLocator, NullFormatter, NullL
 from src.Tool.janela_helper import agendar_na_ui
 from src.View.formatadores import formatar_moeda
 from src.View.grafico_zoom_helper import consumir_arraste_pan
+from src.View.grafico_ferramentas_analise_helper import ferramenta_analise_bloqueia_selecao_periodo
 from src.View.tema import CORES
 from src.View.painel_comparacao_periodo import (
     calcular_comparacao_acao_unica,
@@ -311,6 +312,37 @@ def _gesto_pan_ativo(canvas: FigureCanvasTkAgg) -> bool:
     return bool(gesto and gesto.get("ativo"))
 
 
+def _criar_linha_vertical_guia(eixo) -> Line2D:
+    """Linha vertical tracejada para painel auxiliar (ex.: volume)."""
+    cor = _cor_guia_mouse_grafico()
+    trans_vertical = mtransforms.blended_transform_factory(eixo.transData, eixo.transAxes)
+    linha = Line2D(
+        [0, 0],
+        [0, 1],
+        transform=trans_vertical,
+        color=cor,
+        linestyle="--",
+        linewidth=1.1,
+        alpha=0.9,
+        visible=False,
+        zorder=8,
+    )
+    eixo.add_line(linha)
+    return linha
+
+
+def _atualizar_linha_vertical_guia(linha: Line2D, x_ponto: float) -> None:
+    linha.set_data([x_ponto, x_ponto], [0, 1])
+    linha.set_visible(True)
+
+
+def _esconder_linha_vertical_guia(linha: Line2D | None) -> bool:
+    if linha is None or not linha.get_visible():
+        return False
+    linha.set_visible(False)
+    return True
+
+
 def _criar_guia_mouse(eixo) -> dict:
     """Linhas tracejadas, faixa vertical e marcador do ponto sob o mouse."""
     cor = _cor_guia_mouse_grafico()
@@ -380,13 +412,20 @@ def _criar_guia_mouse(eixo) -> dict:
     }
 
 
-def _esconder_guia_mouse(guia: dict, canvas: FigureCanvasTkAgg) -> None:
+def _esconder_guia_mouse(
+    guia: dict,
+    canvas: FigureCanvasTkAgg,
+    *,
+    linha_vertical_volume: Line2D | None = None,
+) -> None:
     alterou = False
     for chave in ("retangulo", "linha_vertical", "linha_horizontal", "marcador", "anotacao"):
         artista = guia[chave]
         if artista.get_visible():
             artista.set_visible(False)
             alterou = True
+    if _esconder_linha_vertical_guia(linha_vertical_volume):
+        alterou = True
     if alterou:
         canvas.draw_idle()
 
@@ -398,6 +437,8 @@ def _atualizar_guia_mouse(
     x_ponto: float,
     y_ponto: float,
     texto: str,
+    *,
+    linha_vertical_volume: Line2D | None = None,
 ) -> None:
     ylim = eixo.get_ylim()
     guia["retangulo"].set_xy((x_ponto - 0.4, ylim[0]))
@@ -417,6 +458,10 @@ def _atualizar_guia_mouse(
     anotacao.set_text(texto)
     _posicionar_tooltip(anotacao, eixo, x_ponto, y_ponto)
     anotacao.set_visible(True)
+
+    if linha_vertical_volume is not None:
+        _atualizar_linha_vertical_guia(linha_vertical_volume, x_ponto)
+
     canvas.draw_idle()
 
 
@@ -750,6 +795,8 @@ def configurar_selecao_periodo(
     def ao_clicar(evento):
         if evento.button != 1:
             return
+        if ferramenta_analise_bloqueia_selecao_periodo(canvas):
+            return
         if consumir_arraste_pan(canvas):
             return
         indice = _indice_mais_proximo(evento, linha, eixo)
@@ -940,6 +987,8 @@ def configurar_selecao_periodo_comparacao(
     def ao_clicar(evento):
         if evento.button != 1:
             return
+        if ferramenta_analise_bloqueia_selecao_periodo(canvas):
+            return
         if consumir_arraste_pan(canvas):
             return
         indice = _indice_por_eixo_x(evento, eixo, quantidade)
@@ -986,6 +1035,7 @@ def configurar_tooltip_acao(
     moeda: str = "BRL",
     *,
     somente_horario: bool = False,
+    eixo_volume=None,
 ) -> None:
     def texto_tooltip(indice: int) -> str:
         p = pontos[indice]
@@ -1009,7 +1059,7 @@ def configurar_tooltip_acao(
             linhas.append(f"Volume: {_formatar_volume(p['volume'])}")
         return "\n".join(linhas)
 
-    _configurar_tooltip(eixo, canvas, linha, texto_tooltip)
+    _configurar_tooltip(eixo, canvas, linha, texto_tooltip, eixo_volume=eixo_volume)
 
 
 def configurar_tooltip_comparacao(
@@ -1097,16 +1147,20 @@ def _desconectar_eventos_tooltip(canvas: FigureCanvasTkAgg) -> None:
     canvas._ids_tooltip_grafico = []
 
 
-def _configurar_tooltip(eixo, canvas, linha, texto_fn) -> None:
+def _configurar_tooltip(eixo, canvas, linha, texto_fn, *, eixo_volume=None) -> None:
     _desconectar_eventos_tooltip(canvas)
     guia = _criar_guia_mouse(eixo)
+    linha_vertical_volume = (
+        _criar_linha_vertical_guia(eixo_volume) if eixo_volume is not None else None
+    )
+    eixos_interativos = (eixo, eixo_volume) if eixo_volume is not None else (eixo,)
 
     def ao_mover(evento):
         if _gesto_pan_ativo(canvas):
-            _esconder_guia_mouse(guia, canvas)
+            _esconder_guia_mouse(guia, canvas, linha_vertical_volume=linha_vertical_volume)
             return
-        if evento.inaxes != eixo or evento.xdata is None:
-            _esconder_guia_mouse(guia, canvas)
+        if evento.inaxes not in eixos_interativos or evento.xdata is None:
+            _esconder_guia_mouse(guia, canvas, linha_vertical_volume=linha_vertical_volume)
             return
 
         xs = np.array(linha.get_xdata(), dtype=float)
@@ -1117,16 +1171,24 @@ def _configurar_tooltip(eixo, canvas, linha, texto_fn) -> None:
         indice = int(np.argmin(np.abs(xs - evento.xdata)))
         limiar = max((eixo.get_xlim()[1] - eixo.get_xlim()[0]) * 0.05, 0.3)
         if abs(xs[indice] - evento.xdata) > limiar:
-            _esconder_guia_mouse(guia, canvas)
+            _esconder_guia_mouse(guia, canvas, linha_vertical_volume=linha_vertical_volume)
             return
 
         x_ponto = float(xs[indice])
         y_ponto = float(ys[indice])
-        _atualizar_guia_mouse(guia, eixo, canvas, x_ponto, y_ponto, texto_fn(indice))
+        _atualizar_guia_mouse(
+            guia,
+            eixo,
+            canvas,
+            x_ponto,
+            y_ponto,
+            texto_fn(indice),
+            linha_vertical_volume=linha_vertical_volume,
+        )
 
-    def ao_sair(_evento) -> None:
-        _esconder_guia_mouse(guia, canvas)
+    def ao_sair_figura(_evento) -> None:
+        _esconder_guia_mouse(guia, canvas, linha_vertical_volume=linha_vertical_volume)
 
     cid_mover = canvas.mpl_connect("motion_notify_event", ao_mover)
-    cid_sair = canvas.mpl_connect("axes_leave_event", ao_sair)
+    cid_sair = canvas.mpl_connect("figure_leave_event", ao_sair_figura)
     canvas._ids_tooltip_grafico = [cid_mover, cid_sair]

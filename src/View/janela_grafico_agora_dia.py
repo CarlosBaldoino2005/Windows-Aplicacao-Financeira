@@ -23,20 +23,27 @@ from src.View.formatadores import formatar_moeda, formatar_variacao_com_rotulo
 from src.View.grafico_agora_helper import (
     calcular_limites_eixo_agora,
     configurar_eixo_intraday_agora,
+    criar_subplots_agora,
     desenhar_linha_fechamento_anterior,
     desenhar_serie_agora,
+    desenhar_volume_agora,
+    finalizar_figura_grafico_agora,
     obter_cor_tendencia_agora,
+    ocultar_rotulos_eixo_x_preco,
 )
 from src.View.grafico_helper import (
     TEXTO_INSTRUCAO_GRAFICO_AGORA,
     configurar_selecao_periodo,
     configurar_tooltip_acao,
     extrair_minutos_dia_de_ponto,
-    finalizar_figura_grafico,
     restaurar_selecao_periodo_no_grafico,
 )
 from src.View.grafico_modelo_helper import ModeloGrafico, montar_seletor_modelo_grafico
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
+from src.View.grafico_ferramentas_analise_helper import (
+    montar_ferramentas_analise_grafico,
+    restaurar_ferramentas_analise_apos_redesenho,
+)
 from src.View.tema import CORES
 
 ALTURA_GRAFICO_MINIMA_PX = 280
@@ -63,7 +70,9 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._figura: Figure | None = None
         self._canvas: FigureCanvasTkAgg | None = None
         self._eixo = None
+        self._eixo_volume = None
         self._controle_zoom = None
+        self._ferramentas_analise = None
         self._carregando = False
         self._painel_metricas: PainelMetricasDiaAgora | None = None
         self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
@@ -202,6 +211,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._barra_zoom = ctk.CTkFrame(self._container_grafico, fg_color="transparent")
         self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
+        montar_ferramentas_analise_grafico(self._barra_zoom, lambda: self._ferramentas_analise)
 
         self._frame_grafico = ctk.CTkFrame(
             self._container_grafico,
@@ -351,7 +361,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             dpi=dpi,
             facecolor=CORES.get("graficoFundo", CORES["superficie"]),
         )
-        eixo = figura.add_subplot(111)
+        eixo, eixo_volume = criar_subplots_agora(figura)
 
         posicoes = np.asarray(posicoes_x, dtype=float)
         xlim, ylim = calcular_limites_eixo_agora(
@@ -371,11 +381,13 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         )
         desenhar_linha_fechamento_anterior(eixo, resumo.fechamento_anterior, resumo.moeda, xlim)
         configurar_eixo_intraday_agora(eixo, xlim, ylim)
+        ocultar_rotulos_eixo_x_preco(eixo)
+        desenhar_volume_agora(eixo_volume, figura, posicoes, pontos_tooltip, xlim)
         titulo = (
             f"Intraday — {codigo_exibicao(self._simbolo)} "
             f"({formatar_data_ptbr(self._data_ref)})"
         )
-        finalizar_figura_grafico(eixo, figura, titulo)
+        finalizar_figura_grafico_agora(eixo, figura, titulo, com_painel_volume=True)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
 
@@ -390,6 +402,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             self._simbolo,
             resumo.moeda,
             somente_horario=True,
+            eixo_volume=self._eixo_volume,
         )
         configurar_selecao_periodo(
             canvas,
@@ -404,12 +417,19 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             intraday=True,
         )
         self._restaurar_marcadores_selecao(canvas, eixo, linha, pontos_tooltip)
+        self._ferramentas_analise = restaurar_ferramentas_analise_apos_redesenho(
+            canvas,
+            eixo,
+            self._ferramentas_analise,
+            moeda=resumo.moeda,
+        )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
         self._figura = figura
         self._canvas = canvas
         self._eixo = eixo
+        self._eixo_volume = eixo_volume
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
 
     def _restaurar_marcadores_selecao(

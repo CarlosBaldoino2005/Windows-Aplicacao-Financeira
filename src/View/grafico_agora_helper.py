@@ -12,6 +12,13 @@ from src.View.grafico_helper import (
     HORA_INICIO_PREGAO_AGORA,
     INTERVALO_TICKS_HORARIO_AGORA,
     LARGURA_LINHA_GRAFICO,
+    MARGEM_GRAFICO_BOTTOM,
+    MARGEM_GRAFICO_LEFT,
+    MARGEM_GRAFICO_RIGHT,
+    MARGEM_GRAFICO_TOP,
+    aplicar_grade_padrao_grafico,
+    aplicar_tema_matplotlib,
+    aplicar_titulo_padrao_grafico,
     minutos_dia_para_horario,
 )
 from src.View.grafico_modelo_helper import ModeloGrafico, _marcar_ultimo_ponto_serie, desenhar_serie_preco_principal
@@ -203,6 +210,169 @@ def desenhar_projecao_fim_dia_agora(
         clip_on=False,
         zorder=5,
     )
+
+
+_PROPORCAO_PRECO_VOLUME = (4, 1)
+_LARGURA_BARRA_VOLUME = 1.4
+
+
+def formatar_volume_agora(volume: int | None) -> str:
+    """Formata volume inteiro no padrao pt-BR (ex.: 24.224)."""
+    if volume is None:
+        return "—"
+    return f"{int(volume):,}".replace(",", ".")
+
+
+def criar_subplots_agora(figura):
+    """Cria eixo de preco (topo) e volume (base) com eixo X compartilhado."""
+    from matplotlib.gridspec import GridSpec
+
+    grade = GridSpec(
+        2,
+        1,
+        figure=figura,
+        height_ratios=list(_PROPORCAO_PRECO_VOLUME),
+        hspace=0.04,
+    )
+    eixo_preco = figura.add_subplot(grade[0])
+    eixo_volume = figura.add_subplot(grade[1], sharex=eixo_preco)
+    return eixo_preco, eixo_volume
+
+
+def ocultar_rotulos_eixo_x_preco(eixo) -> None:
+    """Esconde horarios no painel de preco quando o volume exibe o eixo X."""
+    eixo.tick_params(axis="x", labelbottom=False)
+    eixo.xaxis.set_minor_locator(NullLocator())
+    eixo.xaxis.set_minor_formatter(NullFormatter())
+
+
+def obter_cor_barra_volume(ponto: dict) -> str:
+    """Verde se fechamento >= abertura; vermelho caso contrario."""
+    fechamento = float(ponto.get("fechamento") or 0)
+    abertura_raw = ponto.get("abertura")
+    abertura = float(abertura_raw) if abertura_raw is not None else fechamento
+    if fechamento >= abertura:
+        return CORES.get("sucesso", _COR_ALTA_GOOGLE)
+    return CORES.get("erro", _COR_BAIXA_GOOGLE)
+
+
+def calcular_limites_eixo_volume(pontos_tooltip: list[dict]) -> tuple[float, float]:
+    """Limites Y do painel de volume (sempre a partir de zero)."""
+    volumes = [int(p["volume"]) for p in pontos_tooltip if p.get("volume")]
+    if not volumes:
+        return (0.0, 1.0)
+    maximo = float(max(volumes))
+    return (0.0, max(maximo * 1.08, 1.0))
+
+
+def configurar_eixo_volume_agora(
+    eixo,
+    xlim: tuple[float, float],
+    ylim: tuple[float, float],
+) -> None:
+    """Eixo X alinhado ao preco; ticks de horario apenas no painel inferior."""
+    eixo.set_xlim(xlim)
+    eixo.set_ylim(ylim)
+
+    passo = max(1, INTERVALO_TICKS_HORARIO_AGORA) * 60
+    inicio = HORA_INICIO_PREGAO_AGORA * 60
+    fim = HORA_FIM_PREGAO_AGORA * 60
+    ticks = [pos for pos in range(inicio, fim + 1, passo) if xlim[0] <= pos <= xlim[1]]
+    if not ticks:
+        ticks = [int(xlim[0]), int(xlim[1])]
+
+    rotulos = [minutos_dia_para_horario(posicao) for posicao in ticks]
+    eixo.xaxis.set_major_locator(FixedLocator(ticks))
+    eixo.xaxis.set_major_formatter(FixedFormatter(rotulos))
+    eixo.xaxis.set_minor_locator(NullLocator())
+    eixo.xaxis.set_minor_formatter(NullFormatter())
+    eixo.tick_params(axis="x", rotation=0, labelsize=9)
+    for rotulo in eixo.get_xticklabels():
+        rotulo.set_ha("center")
+    eixo.tick_params(axis="y", labelsize=8)
+
+
+def desenhar_volume_agora(
+    eixo,
+    figura,
+    posicoes_x: list[float] | np.ndarray,
+    pontos_tooltip: list[dict],
+    xlim: tuple[float, float],
+    *,
+    largura_barra: float = _LARGURA_BARRA_VOLUME,
+) -> int | None:
+    """Desenha barras de volume abaixo do grafico de preco."""
+    posicoes = np.asarray(posicoes_x, dtype=float)
+    ultimo_volume: int | None = None
+
+    for posicao, ponto in zip(posicoes, pontos_tooltip, strict=False):
+        volume_bruto = ponto.get("volume")
+        if volume_bruto is None:
+            continue
+        try:
+            volume = int(volume_bruto)
+        except (TypeError, ValueError):
+            continue
+        if volume <= 0:
+            continue
+        ultimo_volume = volume
+        eixo.bar(
+            float(posicao),
+            volume,
+            width=largura_barra,
+            color=obter_cor_barra_volume(ponto),
+            alpha=0.88,
+            align="center",
+            zorder=2,
+        )
+
+    ylim = calcular_limites_eixo_volume(pontos_tooltip)
+    configurar_eixo_volume_agora(eixo, xlim, ylim)
+    aplicar_grade_padrao_grafico(eixo, apenas_horizontal=True)
+    aplicar_tema_matplotlib(eixo, figura)
+
+    rotulo = formatar_volume_agora(ultimo_volume)
+    cor_texto = CORES.get("textoSecundario", "#94A3B8")
+    eixo.text(
+        0.01,
+        0.06,
+        f"Volume  {rotulo}",
+        transform=eixo.transAxes,
+        va="bottom",
+        ha="left",
+        fontsize=8,
+        color=cor_texto,
+        zorder=5,
+    )
+    return ultimo_volume
+
+
+def finalizar_figura_grafico_agora(
+    eixo_preco,
+    figura,
+    titulo: str,
+    *,
+    com_painel_volume: bool = False,
+) -> None:
+    """Titulo, grade e margens do grafico Agora (com ou sem volume)."""
+    aplicar_titulo_padrao_grafico(eixo_preco, titulo)
+    aplicar_grade_padrao_grafico(eixo_preco, apenas_horizontal=True)
+    aplicar_tema_matplotlib(eixo_preco, figura)
+    if com_painel_volume:
+        figura.subplots_adjust(
+            bottom=max(0.10, MARGEM_GRAFICO_BOTTOM - 0.02),
+            left=MARGEM_GRAFICO_LEFT,
+            right=MARGEM_GRAFICO_RIGHT,
+            top=MARGEM_GRAFICO_TOP,
+            hspace=0.04,
+        )
+    else:
+        figura.subplots_adjust(
+            bottom=MARGEM_GRAFICO_BOTTOM,
+            left=MARGEM_GRAFICO_LEFT,
+            right=MARGEM_GRAFICO_RIGHT,
+            top=MARGEM_GRAFICO_TOP,
+        )
 
 
 def desenhar_serie_agora(
