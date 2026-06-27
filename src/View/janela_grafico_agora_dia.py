@@ -201,7 +201,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
 
         self._barra_zoom = ctk.CTkFrame(self._container_grafico, fg_color="transparent")
         self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
-        self._controle_zoom = None
+        montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
 
         self._frame_grafico = ctk.CTkFrame(
             self._container_grafico,
@@ -411,7 +411,6 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._canvas = canvas
         self._eixo = eixo
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
-        montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
 
     def _restaurar_marcadores_selecao(
         self,

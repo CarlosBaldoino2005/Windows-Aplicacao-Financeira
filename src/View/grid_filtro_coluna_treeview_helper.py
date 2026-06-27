@@ -10,6 +10,7 @@ import customtkinter as ctk
 
 from src.View.grid_ordenacao_helper import SUFIXO_ASCENDENTE, SUFIXO_DESCENDENTE
 from src.View.grid_interacao_treeview_helper import treeview_ainda_ativa
+from src.Tool.janela_helper import reaplicar_controles_barra_titulo_janela
 from src.View.tema import CORES
 
 T = TypeVar("T")
@@ -139,6 +140,7 @@ def abrir_popup_filtro_coluna_treeview(
     popup.configure(fg_color=CORES["superficie"])
     popup.resizable(False, False)
     popup.transient(raiz)
+    popup.after(150, lambda: reaplicar_controles_barra_titulo_janela(popup))
 
     pos_x, pos_y = _calcular_posicao_popup(tabela, coluna)
     popup.geometry(f"{_LARGURA_POPUP}x460+{pos_x}+{pos_y}")

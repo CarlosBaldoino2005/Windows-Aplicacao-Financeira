@@ -15,7 +15,7 @@ from src.Tool.calendario_semana_helper import (
 from src.Tool.dia_util_helper import formatar_data_ptbr
 from src.Tool.icone_calendario_helper import criar_botao_calendario
 from src.Tool.mascara_data_helper import aplicar_mascara_data_ptbr
-from src.Tool.janela_helper import janela_ui_ainda_ativa
+from src.Tool.janela_helper import janela_ui_ainda_ativa, reaplicar_controles_barra_titulo_janela
 from src.Tool.validadores import validar_data_ptbr
 from src.View.tema import CORES
 
@@ -115,6 +115,7 @@ class CampoDataCalendario:
         self._popup.configure(fg_color=CORES["superficie"])
         self._popup.resizable(False, False)
         self._popup.transient(raiz)
+        self._popup.after(150, lambda: reaplicar_controles_barra_titulo_janela(self._popup))
         try:
             self._popup.grab_set()
         except Exception:

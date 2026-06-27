@@ -11,6 +11,15 @@ _GA_RAIZ = 2
 _SW_MAXIMIZE = 3
 _SW_RESTORE = 9
 _SWP_SHOWWINDOW = 0x0040
+_GWL_STYLE = -16
+_WS_MINIMIZEBOX = 0x00020000
+_WS_MAXIMIZEBOX = 0x00010000
+_WS_SYSMENU = 0x00080000
+_WS_CAPTION = 0x00C00000
+_SWP_FRAMECHANGED = 0x0020
+_SWP_NOMOVE = 0x0002
+_SWP_NOSIZE = 0x0001
+_SWP_NOZORDER = 0x0004
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19
 _MONITORINFOF_PRIMARIO = 1
@@ -821,6 +830,48 @@ def ajustar_janela_area_trabalho(
     _garantir_tamanho_monitor_final(janela, ref, area)
 
 
+def garantir_controles_barra_titulo_janela(janela) -> None:
+    """
+    Restaura botoes minimizar, maximizar/restaurar e fechar no Windows.
+    Aplicacao unica e sem alterar tamanho/estado — evita loop com geometry/maximizar.
+    """
+    if getattr(janela, "_financeiro_controles_titulo_ok", False):
+        return
+
+    if not _eh_windows():
+        janela._financeiro_controles_titulo_ok = True
+        return
+
+    try:
+        janela.update_idletasks()
+    except Exception:
+        pass
+
+    hwnd = _hwnd(janela)
+    if not hwnd:
+        return
+
+    try:
+        flags = _WS_MINIMIZEBOX | _WS_MAXIMIZEBOX | _WS_SYSMENU
+        estilo = _user32().GetWindowLongW(hwnd, _GWL_STYLE)
+        if (estilo & flags) == flags:
+            janela._financeiro_controles_titulo_ok = True
+            return
+        _user32().SetWindowLongW(hwnd, _GWL_STYLE, estilo | flags)
+        _user32().SetWindowPos(
+            hwnd,
+            0,
+            0,
+            0,
+            0,
+            0,
+            _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOZORDER | _SWP_FRAMECHANGED,
+        )
+        janela._financeiro_controles_titulo_ok = True
+    except Exception:
+        pass
+
+
 def aplicar_tema_barra_titulo_janela(janela, escuro: bool | None = None) -> None:
     """Aplica barra de titulo escura ou clara no Windows conforme o tema do programa."""
     if not _eh_windows():
@@ -1071,6 +1122,7 @@ def configurar_janela_filha_modal(janela, janela_pai=None) -> None:
     janela._financeiro_modal_configurada = True
     janela._financeiro_janela_pai_modal = pai
     configurar_aparencia_janela(janela)
+    garantir_controles_barra_titulo_janela(janela)
 
     try:
         janela.transient(pai)
