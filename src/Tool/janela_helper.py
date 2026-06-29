@@ -643,58 +643,41 @@ def centralizar_janela_sobre_referencia(
     altura: int,
     *,
     margem: int = _MARGEM_CENTRALIZAR_MODAL,
-    reagendar: bool = True,
+    reagendar: bool = False,
 ) -> None:
     """
     Centraliza janela modal na area de trabalho do monitor (acima da barra de tarefas).
-    Reaplica a posicao ao exibir a janela para o Windows nao sobrescrever o geometry.
+    Por padrao aplica uma unica vez; reagendar=True repete apos 80 ms sem escutar <Map>.
     """
+    largura_fixa = max(200, int(largura))
+    altura_fixa = max(120, int(altura))
     try:
         _aplicar_posicao_modal_centralizado(
             janela,
             referencia,
-            largura,
-            altura,
+            largura_fixa,
+            altura_fixa,
             margem=margem,
         )
         if not reagendar:
             return
 
-        estado = {"largura": largura, "altura": altura}
-
-        def reaplicar() -> None:
+        def reaplicar_posicao() -> None:
             if not janela_ui_ainda_ativa(janela):
                 return
             try:
-                janela.update_idletasks()
-                largura_atual = max(estado["largura"], int(janela.winfo_reqwidth()))
-                altura_atual = max(estado["altura"], int(janela.winfo_reqheight()))
-                estado["largura"] = largura_atual
-                estado["altura"] = altura_atual
                 _aplicar_posicao_modal_centralizado(
                     janela,
                     referencia,
-                    largura_atual,
-                    altura_atual,
+                    largura_fixa,
+                    altura_fixa,
                     margem=margem,
                 )
             except Exception:
                 pass
 
-        def ao_exibir(_evento=None) -> None:
-            agendar_na_ui(janela, reaplicar)
-
-        if not getattr(janela, "_financeiro_reagendar_centralizar", False):
-            janela._financeiro_reagendar_centralizar = True
-            try:
-                janela.bind("<Map>", ao_exibir, add=True)
-            except Exception:
-                pass
-
-        agendar_na_ui(janela, reaplicar)
         try:
-            janela.after(80, reaplicar)
-            janela.after(250, reaplicar)
+            janela.after(80, reaplicar_posicao)
         except Exception:
             pass
     except Exception:
@@ -1132,13 +1115,13 @@ def configurar_janela_filha_modal(janela, janela_pai=None) -> None:
     configurar_aparencia_janela(janela)
 
     def _controles_apos_exibir() -> None:
+        if not janela_ui_ainda_ativa(janela):
+            return
+        if getattr(janela, "_financeiro_controles_titulo_ok", False):
+            return
         _reaplicar_controles_barra_titulo_apos_layout(janela)
 
     agendar_na_ui(janela, _controles_apos_exibir)
-    try:
-        janela.after(150, _controles_apos_exibir)
-    except Exception:
-        pass
 
     try:
         janela.transient(pai)

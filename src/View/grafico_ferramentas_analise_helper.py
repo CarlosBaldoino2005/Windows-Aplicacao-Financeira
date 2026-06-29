@@ -12,6 +12,7 @@ from matplotlib.lines import Line2D
 from src.View.botao_helper import estilo_botao_padrao
 from src.View.formatadores import formatar_moeda
 from src.View.grafico_zoom_helper import consumir_arraste_pan
+from src.View.grafico_marcador_cruz_helper import reaplicar_marcador_cruz_canvas
 from src.View.tema import CORES
 
 FerramentaAnalise = Literal["navegar", "fibonacci", "tendencia", "horizontal"]
@@ -340,6 +341,7 @@ def restaurar_ferramentas_analise_apos_redesenho(
     *,
     moeda: str = "BRL",
     formatar_rotulo_y: Callable[[float], str] | None = None,
+    eixo_volume=None,
 ) -> GerenciadorFerramentasAnaliseGrafico:
     """Recria o gerenciador no novo canvas preservando desenhos."""
     ferramenta: FerramentaAnalise = "navegar"
@@ -358,6 +360,7 @@ def restaurar_ferramentas_analise_apos_redesenho(
     canvas._ferramenta_analise_ativa = ferramenta
     if desenhos or pendente:
         gerenciador.reaplicar(eixo)
+    reaplicar_marcador_cruz_canvas(canvas, eixo, eixo_volume=eixo_volume)
     return gerenciador
 
 

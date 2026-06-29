@@ -365,6 +365,30 @@ def validar_quantidade_cotas(
     return valor, None
 
 
+def validar_periodo_media_movel(
+    texto: str,
+    *,
+    padrao: int = 20,
+    minimo: int = 2,
+    maximo: int = 500,
+) -> tuple[int | None, str | None]:
+    """Valida periodo (numero de candles) para media movel ou exponencial."""
+    if not texto or not str(texto).strip():
+        return padrao, None
+
+    limpo = str(texto).strip()
+    if not limpo.isdigit():
+        return None, "Informe apenas numeros no periodo da media."
+
+    valor = int(limpo)
+    if valor < minimo:
+        return None, f"O periodo minimo e {minimo}."
+    if valor > maximo:
+        return None, f"O periodo maximo e {maximo}."
+
+    return valor, None
+
+
 def validar_sim_nao_config(
     texto: str,
     padrao: bool = False,

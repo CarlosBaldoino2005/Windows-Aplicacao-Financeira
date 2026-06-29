@@ -299,12 +299,20 @@ class ControleZoomGrafico:
         self._canvas.draw_idle()
 
 
-def criar_controle_zoom(canvas: FigureCanvasTkAgg, eixo) -> ControleZoomGrafico:
+def criar_controle_zoom(
+    canvas: FigureCanvasTkAgg,
+    eixo,
+    *,
+    eixo_volume=None,
+) -> ControleZoomGrafico:
     """Cria zoom, roda do mouse e arraste para mover o grafico."""
     controle = ControleZoomGrafico(canvas, eixo)
     controle.registrar_limites_iniciais()
     controle.configurar_roda_mouse()
     controle.configurar_arrastar()
+    from src.View.grafico_marcador_cruz_helper import configurar_marcador_cruz_scroll
+
+    configurar_marcador_cruz_scroll(canvas, eixo, eixo_volume=eixo_volume)
     return controle
 
 
@@ -366,7 +374,7 @@ def montar_botoes_zoom_grafico(
 
     ctk.CTkLabel(
         frame,
-        text="Arraste o grafico com o mouse apos ampliar",
+        text="Arraste o grafico com o mouse apos ampliar · clique com o scroll para marcar cruz",
         font=ctk.CTkFont(size=11),
         text_color=CORES["textoSecundario"],
     ).pack(side="left", padx=(12, 0))

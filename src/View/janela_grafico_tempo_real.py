@@ -35,6 +35,10 @@ from src.View.agora_carteira_helper import ResumoCarteiraAgora, buscar_resumo_ca
 from src.View.campo_data_calendario_helper import montar_campo_data_calendario
 from src.View.janela_analise_agora import JanelaAnaliseAgora, abrir_janela_analise_agora
 from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
+from src.View.janela_grafico_agora_tela_cheia import (
+    abrir_grafico_agora_tela_cheia,
+    atualizar_estado_botao_grafico_tela_cheia,
+)
 from src.View.janela_negocios_agora import JanelaNegociosAgora, abrir_janela_negocios_agora
 from src.View.janela_resumo_semana_agora import (
     JanelaResumoSemanaAgora,
@@ -73,6 +77,15 @@ from src.View.grafico_ferramentas_analise_helper import (
     montar_ferramentas_analise_grafico,
     restaurar_ferramentas_analise_apos_redesenho,
 )
+from src.View.grafico_marcador_cruz_helper import reaplicar_marcador_cruz_canvas
+from src.View.grafico_medias_moveis_helper import (
+    aplicar_legenda_com_medias,
+    desenhar_medias_moveis,
+    montar_botao_config_medias_moveis_grafico,
+    obter_opcoes_medias_do_frame,
+    valores_medias_para_limites,
+)
+from src.Model.opcoes_medias_moveis_grafico import OpcoesMediasMoveisGrafico
 from src.View.tabela_carteira_helper import _formatar_quantidade
 from src.View.tema import CORES
 
@@ -120,6 +133,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._linha_grafico = None
         self._controle_zoom = None
         self._ferramentas_analise = None
+        self._controles_medias_moveis = None
         self._area_grafico = None
         self._job_atualizacao: str | None = None
         self._ao_vivo = True
@@ -137,6 +151,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._janela_negocios: JanelaNegociosAgora | None = None
         self._janela_resumo_semana: JanelaResumoSemanaAgora | None = None
         self._janela_analise: JanelaAnaliseAgora | None = None
+        self._janela_grafico_tela_cheia = None
         self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
         self._ultimos_pontos_tooltip: list[dict] = []
         self._ultima_moeda_grafico = "BRL"
@@ -175,6 +190,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             except Exception:
                 pass
             self._job_atualizacao = None
+        if self._janela_grafico_tela_cheia is not None:
+            try:
+                if self._janela_grafico_tela_cheia.winfo_exists():
+                    self._janela_grafico_tela_cheia.destroy()
+            except Exception:
+                pass
+            self._janela_grafico_tela_cheia = None
         if self._figura is not None:
             import matplotlib.pyplot as plt
 
@@ -440,6 +462,25 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
         montar_ferramentas_analise_grafico(self._barra_zoom, lambda: self._ferramentas_analise)
+        self._controles_medias_moveis = montar_botao_config_medias_moveis_grafico(
+            self._barra_zoom,
+            self._config_painel,
+            self._ao_alterar_medias_moveis_grafico,
+        )
+
+        self._btn_grafico_tela_cheia = ctk.CTkButton(
+            self._barra_zoom,
+            text="Grafico em tela cheia",
+            width=170,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            command=self._abrir_grafico_tela_cheia,
+            state="disabled",
+        )
+        self._btn_grafico_tela_cheia.pack(side="right", padx=(8, 0))
 
         self._frame_grafico = ctk.CTkFrame(
             self._container_grafico,
@@ -800,15 +841,77 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
                 dados["moeda"],
                 dados["pontos_tooltip"],
             )
+        else:
+            self._desenhar_grafico(
+                dados["posicoes_x"],
+                dados["valores"],
+                dados["titulo"],
+                dados["simbolo"],
+                dados["moeda"],
+                dados["pontos_tooltip"],
+            )
+        atualizar_estado_botao_grafico_tela_cheia(self._btn_grafico_tela_cheia, True)
+        self._sincronizar_grafico_tela_cheia(dados)
+
+    def _abrir_grafico_tela_cheia(self) -> None:
+        if self._janela_grafico_tela_cheia is not None:
+            try:
+                if self._janela_grafico_tela_cheia.winfo_exists():
+                    self._janela_grafico_tela_cheia.focus_force()
+                    self._janela_grafico_tela_cheia.lift()
+                    return
+            except Exception:
+                pass
+
+        dados = self._dados_grafico_atual
+        if not dados:
             return
-        self._desenhar_grafico(
-            dados["posicoes_x"],
-            dados["valores"],
-            dados["titulo"],
-            dados["simbolo"],
-            dados["moeda"],
-            dados["pontos_tooltip"],
+
+        titulo = f"Grafico em tela cheia — {codigo_exibicao(self._simbolo)}"
+        self._janela_grafico_tela_cheia = abrir_grafico_agora_tela_cheia(
+            self,
+            titulo_janela=titulo,
+            dados_iniciais=dados,
+            obter_modelo=lambda: self._modelo_grafico,
+            obter_opcoes_medias=self._obter_opcoes_medias_moveis,
+            config_painel=self._config_painel,
+            ao_mudar_modelo=self._alternar_modelo_grafico,
+            ao_alterar_medias=self._ao_alterar_medias_moveis_grafico,
+            ao_fechar=self._limpar_referencia_grafico_tela_cheia,
         )
+
+    def _limpar_referencia_grafico_tela_cheia(self) -> None:
+        self._janela_grafico_tela_cheia = None
+
+    def _sincronizar_grafico_tela_cheia(self, dados: dict | None = None) -> None:
+        janela = self._janela_grafico_tela_cheia
+        if janela is None:
+            return
+        try:
+            if not janela.winfo_exists():
+                self._janela_grafico_tela_cheia = None
+                return
+        except Exception:
+            self._janela_grafico_tela_cheia = None
+            return
+
+        payload = dados or self._dados_grafico_atual
+        if not payload:
+            return
+
+        janela.atualizar_grafico(
+            payload,
+            self._modelo_grafico,
+            self._obter_opcoes_medias_moveis(),
+        )
+
+    def _obter_opcoes_medias_moveis(self) -> OpcoesMediasMoveisGrafico:
+        return self._config_painel.carregar_opcoes_medias_moveis_grafico()
+
+    def _ao_alterar_medias_moveis_grafico(self) -> None:
+        dados = self._dados_grafico_atual
+        if dados:
+            self._aplicar_dados_grafico(dados)
 
     def _aplicar_camadas_grafico_agora(
         self,
@@ -825,14 +928,18 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         xlim_fixo: tuple[float, float] | None = None,
         ylim_fixo: tuple[float, float] | None = None,
         eixo_volume=None,
+        opcoes_medias: OpcoesMediasMoveisGrafico | None = None,
     ):
+        opcoes_medias = opcoes_medias or self._obter_opcoes_medias_moveis()
         posicoes = np.asarray(posicoes_x, dtype=float)
+        extras_y = valores_medias_para_limites(valores, opcoes_medias)
         if xlim_fixo is None or ylim_fixo is None:
             xlim, ylim = calcular_limites_eixo_agora(
                 posicoes,
                 valores,
                 preco_fechamento_anterior=preco_fechamento_anterior,
                 projecao=projecao,
+                referencias_y_extra=extras_y,
             )
         else:
             xlim, ylim = xlim_fixo, ylim_fixo
@@ -853,6 +960,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         if projecao is not None:
             desenhar_projecao_fim_dia_agora(eixo, projecao, moeda, xlim)
         desenhar_linha_fechamento_anterior(eixo, preco_fechamento_anterior, moeda, xlim)
+        tem_medias = desenhar_medias_moveis(eixo, posicoes, valores, opcoes_medias)
         configurar_eixo_intraday_agora(eixo, xlim, ylim)
         eixo.set_ylabel("")
         eixo.set_xlabel("")
@@ -861,16 +969,8 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             ocultar_rotulos_eixo_x_preco(eixo)
             desenhar_volume_agora(eixo_volume, figura, posicoes, pontos_tooltip, xlim)
         finalizar_figura_grafico_agora(eixo, figura, titulo, com_painel_volume=com_volume)
-        if projecao is not None:
-            legenda = eixo.legend(
-                loc="upper left",
-                fontsize=8,
-                framealpha=0.85,
-                facecolor=CORES.get("superficie", "#FFFFFF"),
-                edgecolor=CORES.get("borda", "#E2E8F0"),
-            )
-            for texto in legenda.get_texts():
-                texto.set_color(CORES.get("texto", "#0F172A"))
+        if projecao is not None or tem_medias:
+            aplicar_legenda_com_medias(eixo)
         return linha, xlim, ylim
 
     def _atualizar_serie_grafico_preservando_zoom(
@@ -918,6 +1018,11 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._linha_grafico = linha
         if self._ferramentas_analise is not None:
             self._ferramentas_analise.reaplicar(self._eixo)
+        reaplicar_marcador_cruz_canvas(
+            self._canvas,
+            self._eixo,
+            eixo_volume=self._eixo_volume,
+        )
         self._configurar_interacao_grafico(
             self._canvas,
             self._eixo,
@@ -1797,6 +1902,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             eixo,
             self._ferramentas_analise,
             moeda=moeda,
+            eixo_volume=eixo_volume,
         )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
@@ -1806,7 +1912,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._eixo = eixo
         self._eixo_volume = eixo_volume
         self._linha_grafico = linha
-        self._controle_zoom = criar_controle_zoom(canvas, eixo)
+        self._controle_zoom = criar_controle_zoom(canvas, eixo, eixo_volume=eixo_volume)
         self.after(80, lambda: self._ajustar_grafico_ao_redimensionar(0))
 
     def _medir_largura_frame_grafico(self) -> int:

@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 
 from src.Model.agora_dia_historico import ResumoDiaAgora
 from src.Service.agora_historico_dia_servico import AgoraHistoricoDiaServico
+from src.Tool.config_painel import ConfigPainelIni
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
 from src.Tool.dia_util_helper import formatar_data_ptbr
 from src.Tool.janela_helper import (
@@ -44,6 +45,13 @@ from src.View.grafico_ferramentas_analise_helper import (
     montar_ferramentas_analise_grafico,
     restaurar_ferramentas_analise_apos_redesenho,
 )
+from src.View.grafico_medias_moveis_helper import (
+    aplicar_legenda_com_medias,
+    desenhar_medias_moveis,
+    montar_botao_config_medias_moveis_grafico,
+    obter_opcoes_medias_do_frame,
+    valores_medias_para_limites,
+)
 from src.View.tema import CORES
 
 ALTURA_GRAFICO_MINIMA_PX = 280
@@ -64,6 +72,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._simbolo = simbolo
         self._data_ref = data_ref
         self._servico = AgoraHistoricoDiaServico()
+        self._config_painel = ConfigPainelIni()
         self._resumo_dia: ResumoDiaAgora | None = None
         self._pontos_intraday = None
         self._modelo_grafico: ModeloGrafico = "area"
@@ -73,6 +82,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._eixo_volume = None
         self._controle_zoom = None
         self._ferramentas_analise = None
+        self._controles_medias_moveis = None
         self._carregando = False
         self._painel_metricas: PainelMetricasDiaAgora | None = None
         self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
@@ -212,6 +222,11 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._barra_zoom.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         montar_botoes_zoom_grafico(self._barra_zoom, lambda: self._controle_zoom)
         montar_ferramentas_analise_grafico(self._barra_zoom, lambda: self._ferramentas_analise)
+        self._controles_medias_moveis = montar_botao_config_medias_moveis_grafico(
+            self._barra_zoom,
+            self._config_painel,
+            self._ao_alterar_medias_moveis_grafico,
+        )
 
         self._frame_grafico = ctk.CTkFrame(
             self._container_grafico,
@@ -297,6 +312,10 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         if self._painel_metricas is not None:
             self._painel_metricas.atualizar(resumo)
 
+    def _ao_alterar_medias_moveis_grafico(self) -> None:
+        if self._resumo_dia is not None and self._pontos_intraday:
+            self._desenhar_grafico(self._pontos_intraday, self._resumo_dia)
+
     def _alternar_modelo_grafico(self, modelo: ModeloGrafico) -> None:
         self._modelo_grafico = modelo
         if self._resumo_dia is not None and self._pontos_intraday:
@@ -364,10 +383,12 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         eixo, eixo_volume = criar_subplots_agora(figura)
 
         posicoes = np.asarray(posicoes_x, dtype=float)
+        opcoes_medias = obter_opcoes_medias_do_frame(self._controles_medias_moveis)
         xlim, ylim = calcular_limites_eixo_agora(
             posicoes,
             valores,
             preco_fechamento_anterior=resumo.fechamento_anterior,
+            referencias_y_extra=valores_medias_para_limites(valores, opcoes_medias),
         )
         cor = obter_cor_tendencia_agora(resumo.fechamento, resumo.fechamento_anterior)
         linha = desenhar_serie_agora(
@@ -380,6 +401,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             y_base=ylim[0],
         )
         desenhar_linha_fechamento_anterior(eixo, resumo.fechamento_anterior, resumo.moeda, xlim)
+        tem_medias = desenhar_medias_moveis(eixo, posicoes, valores, opcoes_medias)
         configurar_eixo_intraday_agora(eixo, xlim, ylim)
         ocultar_rotulos_eixo_x_preco(eixo)
         desenhar_volume_agora(eixo_volume, figura, posicoes, pontos_tooltip, xlim)
@@ -388,6 +410,8 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             f"({formatar_data_ptbr(self._data_ref)})"
         )
         finalizar_figura_grafico_agora(eixo, figura, titulo, com_painel_volume=True)
+        if tem_medias:
+            aplicar_legenda_com_medias(eixo)
 
         canvas = FigureCanvasTkAgg(figura, master=self._frame_grafico)
 
@@ -422,6 +446,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
             eixo,
             self._ferramentas_analise,
             moeda=resumo.moeda,
+            eixo_volume=eixo_volume,
         )
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
@@ -430,7 +455,7 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         self._canvas = canvas
         self._eixo = eixo
         self._eixo_volume = eixo_volume
-        self._controle_zoom = criar_controle_zoom(canvas, eixo)
+        self._controle_zoom = criar_controle_zoom(canvas, eixo, eixo_volume=eixo_volume)
 
     def _restaurar_marcadores_selecao(
         self,

@@ -16,6 +16,7 @@ from matplotlib.ticker import FixedFormatter, FixedLocator, NullFormatter, NullL
 from src.Tool.janela_helper import agendar_na_ui
 from src.View.formatadores import formatar_moeda
 from src.View.grafico_zoom_helper import consumir_arraste_pan
+from src.View.grafico_marcador_cruz_helper import configurar_marcador_cruz_scroll
 from src.View.grafico_ferramentas_analise_helper import ferramenta_analise_bloqueia_selecao_periodo
 from src.View.tema import CORES
 from src.View.painel_comparacao_periodo import (
@@ -1060,6 +1061,7 @@ def configurar_tooltip_acao(
         return "\n".join(linhas)
 
     _configurar_tooltip(eixo, canvas, linha, texto_tooltip, eixo_volume=eixo_volume)
+    configurar_marcador_cruz_scroll(canvas, eixo, eixo_volume=eixo_volume)
 
 
 def configurar_tooltip_comparacao(
@@ -1130,8 +1132,10 @@ def configurar_tooltip_comparacao(
     def ao_sair(_evento) -> None:
         _esconder_guia_mouse(guia, canvas)
 
-    canvas.mpl_connect("motion_notify_event", ao_mover)
-    canvas.mpl_connect("axes_leave_event", ao_sair)
+    cid_mover = canvas.mpl_connect("motion_notify_event", ao_mover)
+    cid_sair = canvas.mpl_connect("axes_leave_event", ao_sair)
+    canvas._ids_tooltip_grafico = [cid_mover, cid_sair]
+    configurar_marcador_cruz_scroll(canvas, eixo)
 
 
 def _desconectar_eventos_tooltip(canvas: FigureCanvasTkAgg) -> None:
@@ -1192,3 +1196,4 @@ def _configurar_tooltip(eixo, canvas, linha, texto_fn, *, eixo_volume=None) -> N
     cid_mover = canvas.mpl_connect("motion_notify_event", ao_mover)
     cid_sair = canvas.mpl_connect("figure_leave_event", ao_sair_figura)
     canvas._ids_tooltip_grafico = [cid_mover, cid_sair]
+    configurar_marcador_cruz_scroll(canvas, eixo, eixo_volume=eixo_volume)

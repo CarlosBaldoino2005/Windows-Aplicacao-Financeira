@@ -57,6 +57,7 @@ def calcular_limites_eixo_agora(
     preco_fechamento_anterior: float | None = None,
     projecao: ProjecaoFimDiaAgora | None = None,
     margem_y_pct: float = 0.12,
+    referencias_y_extra: list[float] | None = None,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     """Limites de X e Y com zoom no preco (sem iniciar em zero)."""
     xs = np.asarray(posicoes_x, dtype=float)
@@ -67,6 +68,8 @@ def calcular_limites_eixo_agora(
         referencias_y.append(float(preco_fechamento_anterior))
     if projecao is not None and projecao.valores:
         referencias_y.extend(float(valor) for valor in projecao.valores)
+    if referencias_y_extra:
+        referencias_y.extend(float(valor) for valor in referencias_y_extra)
 
     y_min = float(min(referencias_y))
     y_max = float(max(referencias_y))

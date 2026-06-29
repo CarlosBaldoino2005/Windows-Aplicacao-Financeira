@@ -29,6 +29,7 @@ from src.View.grafico_helper import (
     finalizar_figura_grafico,
 )
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
+from src.View.grafico_marcador_cruz_helper import reaplicar_marcador_cruz_canvas
 from src.View.painel_comparacao_periodo import calcular_comparacao_acao_unica
 from src.View.tema import CORES
 
@@ -203,6 +204,7 @@ class JanelaGraficoAmpliadoAcao(ctk.CTkToplevel):
         self._figura = figura
         self._canvas = canvas
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
+        reaplicar_marcador_cruz_canvas(canvas, eixo)
 
     def _publicar_resumo_periodo(
         self,
@@ -426,6 +428,7 @@ class JanelaGraficoAmpliadoComparacao(ctk.CTkToplevel):
         self._figura = figura
         self._canvas = canvas
         self._controle_zoom = criar_controle_zoom(canvas, eixo)
+        reaplicar_marcador_cruz_canvas(canvas, eixo)
 
     def _ajustar_grafico(self, tentativa: int = 0) -> None:
         if self._canvas is None or self._figura is None:

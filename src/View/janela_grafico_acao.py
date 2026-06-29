@@ -46,6 +46,12 @@ from src.View.grafico_ferramentas_analise_helper import (
     montar_ferramentas_analise_grafico,
     restaurar_ferramentas_analise_apos_redesenho,
 )
+from src.View.grafico_medias_moveis_helper import (
+    aplicar_legenda_com_medias,
+    desenhar_medias_moveis,
+    montar_botao_config_medias_moveis_grafico,
+    obter_opcoes_medias_do_frame,
+)
 from src.View.janela_grafico_ampliado import (
     abrir_grafico_ampliado_acao,
     atualizar_estado_botao_grafico_ampliado,
@@ -104,6 +110,7 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         self._dados_grafico_atual: dict | None = None
         self._controle_zoom = None
         self._ferramentas_analise = None
+        self._controles_medias_moveis = None
         self._carregando_grafico = False
         self._modelo_grafico: ModeloGrafico = "area"
 
@@ -353,6 +360,11 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
         barra_grafico.pack(fill="x", padx=16, pady=(4, 0))
         montar_botoes_zoom_grafico(barra_grafico, lambda: self._controle_zoom)
         montar_ferramentas_analise_grafico(barra_grafico, lambda: self._ferramentas_analise)
+        self._controles_medias_moveis = montar_botao_config_medias_moveis_grafico(
+            barra_grafico,
+            self._config_ini,
+            self._redesenhar_grafico_em_cache,
+        )
         self._btn_grafico_ampliado = ctk.CTkButton(
             barra_grafico,
             text="Ver grafico ampliado",
@@ -805,7 +817,10 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
             cor=CORES["primaria"],
             label="Acao (fechamento)",
         )
-        if valores_cdi and len(valores_cdi) == len(valores):
+        opcoes_medias = obter_opcoes_medias_do_frame(self._controles_medias_moveis)
+        tem_medias = desenhar_medias_moveis(eixo, indices, valores, opcoes_medias)
+        tem_cdi = bool(valores_cdi and len(valores_cdi) == len(valores))
+        if tem_cdi:
             eixo.plot(
                 indices,
                 valores_cdi,
@@ -816,9 +831,10 @@ class JanelaGraficoAcao(ctk.CTkToplevel):
                 markersize=3,
                 label="100% CDI (mesmo valor no 1º dia)",
             )
-            eixo.legend(loc="best", fontsize=9)
+        if tem_cdi or tem_medias:
+            aplicar_legenda_com_medias(eixo, loc="best")
         rotulo_eixo = "Preco de fechamento"
-        if valores_cdi:
+        if tem_cdi:
             rotulo_eixo = "Preco da acao e equivalente em 100% CDI"
         eixo.set_ylabel(rotulo_eixo, fontsize=11)
         configurar_rotulos_eixo_x(eixo, labels)

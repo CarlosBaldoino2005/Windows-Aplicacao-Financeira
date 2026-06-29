@@ -28,6 +28,7 @@ from src.Tool.validadores import (
     validar_fotos_noticias,
     validar_intervalo_atualizacao_segundos,
     validar_modo_aparencia,
+    validar_periodo_media_movel,
     validar_quantidade_acoes,
     validar_quantidade_cotas,
     validar_quantidade_cripto,
@@ -39,7 +40,11 @@ from src.Model.provedores_noticias import (
     PROVEDOR_PADRAO_CRIPTO,
     PROVEDOR_PADRAO_MERCADO,
 )
-from src.View.tema import MODO_PADRAO
+from src.Model.opcoes_medias_moveis_grafico import (
+    PERIODO_MME_PADRAO,
+    PERIODO_MM_PADRAO,
+    OpcoesMediasMoveisGrafico,
+)
 
 SECAO_PAINEL = "PAINEL"
 SECAO_JANELA = "JANELA"
@@ -68,6 +73,11 @@ CHAVE_CARTEIRA_RELATORIO_AUTOMATICO = "carteira_relatorio_automatico"
 CHAVE_CARTEIRA_RELATORIO_HORARIOS = "carteira_relatorio_horarios"
 CHAVE_CARTEIRA_RELATORIO_EMAILS = "carteira_relatorio_emails"
 SECAO_AGORA_ALERTAS = "AGORA_ALERTAS"
+SECAO_GRAFICO = "GRAFICO"
+CHAVE_GRAFICO_MM_ATIVA = "media_movel_ativa"
+CHAVE_GRAFICO_MM_PERIODO = "media_movel_periodo"
+CHAVE_GRAFICO_MME_ATIVA = "media_movel_exp_ativa"
+CHAVE_GRAFICO_MME_PERIODO = "media_movel_exp_periodo"
 CARTEIRA_VARIACAO_PADRAO_PCT = 10.0
 QUANTIDADE_PADRAO_COTAS_GRAFICO = 100
 VALOR_PADRAO_SIMULACAO_RENDA_FIXA = 10000.0
@@ -533,6 +543,59 @@ class ConfigPainelIni:
         if SECAO_PAINEL not in parser:
             parser[SECAO_PAINEL] = {}
         parser[SECAO_PAINEL][CHAVE_QUANTIDADE_COTAS_GRAFICO] = str(quantidade)
+        self._gravar(parser)
+
+    def carregar_opcoes_medias_moveis_grafico(self) -> OpcoesMediasMoveisGrafico:
+        """Periodos e exibicao de MM e MME nos graficos de preco."""
+        parser = self._ler_parser()
+        secao = dict(parser[SECAO_GRAFICO]) if SECAO_GRAFICO in parser else {}
+
+        if CHAVE_GRAFICO_MM_PERIODO not in secao and CHAVE_GRAFICO_MME_PERIODO not in secao:
+            opcoes = OpcoesMediasMoveisGrafico()
+            self.salvar_opcoes_medias_moveis_grafico(opcoes)
+            return opcoes
+
+        mm_ativa, _ = validar_sim_nao_config(
+            secao.get(CHAVE_GRAFICO_MM_ATIVA, ""),
+            padrao=False,
+        )
+        mme_ativa, _ = validar_sim_nao_config(
+            secao.get(CHAVE_GRAFICO_MME_ATIVA, ""),
+            padrao=False,
+        )
+        mm_periodo, _ = validar_periodo_media_movel(
+            secao.get(CHAVE_GRAFICO_MM_PERIODO, ""),
+            padrao=PERIODO_MM_PADRAO,
+        )
+        mme_periodo, _ = validar_periodo_media_movel(
+            secao.get(CHAVE_GRAFICO_MME_PERIODO, ""),
+            padrao=PERIODO_MME_PADRAO,
+        )
+        return OpcoesMediasMoveisGrafico(
+            mm_ativa=mm_ativa,
+            mm_periodo=mm_periodo or PERIODO_MM_PADRAO,
+            mme_ativa=mme_ativa,
+            mme_periodo=mme_periodo or PERIODO_MME_PADRAO,
+        )
+
+    def salvar_opcoes_medias_moveis_grafico(self, opcoes: OpcoesMediasMoveisGrafico) -> None:
+        mm_periodo, _ = validar_periodo_media_movel(
+            str(opcoes.mm_periodo),
+            padrao=PERIODO_MM_PADRAO,
+        )
+        mme_periodo, _ = validar_periodo_media_movel(
+            str(opcoes.mme_periodo),
+            padrao=PERIODO_MME_PADRAO,
+        )
+        parser = self._ler_parser()
+        if SECAO_GRAFICO not in parser:
+            parser[SECAO_GRAFICO] = {}
+        parser[SECAO_GRAFICO][CHAVE_GRAFICO_MM_ATIVA] = "sim" if opcoes.mm_ativa else "nao"
+        parser[SECAO_GRAFICO][CHAVE_GRAFICO_MM_PERIODO] = str(mm_periodo or PERIODO_MM_PADRAO)
+        parser[SECAO_GRAFICO][CHAVE_GRAFICO_MME_ATIVA] = "sim" if opcoes.mme_ativa else "nao"
+        parser[SECAO_GRAFICO][CHAVE_GRAFICO_MME_PERIODO] = str(
+            mme_periodo or PERIODO_MME_PADRAO
+        )
         self._gravar(parser)
 
     def carregar_monitor_janela(self) -> str | None:
