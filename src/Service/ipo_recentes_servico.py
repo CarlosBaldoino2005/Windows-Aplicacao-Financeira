@@ -12,7 +12,7 @@ from urllib import request
 import pandas as pd
 import yfinance as yf
 
-from src.Model.ipo_recente import LinhaIpoRecente
+from src.Model.ipo_recente import LinhaIpoRecente, TipoAtivoIpo
 from src.Service.provedores.util_provedor import USER_AGENT, eh_acao_b3
 from src.Tool.bdrs_helper import eh_bdr_b3
 from src.Tool.registrador_log import RegistradorLog
@@ -20,9 +20,27 @@ from src.Tool.validadores import normalizar_simbolo
 
 _DIAS_JANELA = 30
 _URL_STOCKANALYSIS = "https://stockanalysis.com/ipos/"
+_URL_ETFS_NOVOS = "https://stockanalysis.com/etf/list/new/"
 _URL_CVM_ZIP = "https://dados.cvm.gov.br/dados/OFERTA/DISTRIB/DADOS/oferta_distribuicao.zip"
 _REGEX_IPO_SA = re.compile(
     r'\{s:"(?P<s>[^"]+)",n:"(?P<n>[^"]*)",ipoDate:"(?P<ipoDate>\d{4}-\d{2}-\d{2})"(?P<rest>[^}]*)\}'
+)
+_REGEX_ETF_NOVO_SA = re.compile(
+    r'\{s:"(?P<s>[^"]+)",n:"(?P<n>[^"]*)",inceptionDate:"(?P<inceptionDate>\d{4}-\d{2}-\d{2})"(?P<rest>[^}]*)\}'
+)
+_PALAVRAS_CRIPTO_NOME = (
+    "bitcoin",
+    "crypto",
+    "cryptocurrency",
+    "blockchain",
+    "ethereum",
+    "digital asset",
+    "bitgo",
+    "coinbase",
+    "binance",
+    "token",
+    "defi",
+    "web3",
 )
 
 
@@ -36,6 +54,7 @@ class _IpoBruto:
     moeda: str
     preco_referencia_fonte: float | None = None
     variacao_ipo_pct_fonte: float | None = None
+    tipo_sugerido: TipoAtivoIpo | None = None
 
 
 class IpoRecentesServico:
@@ -45,7 +64,9 @@ class IpoRecentesServico:
         self._log = RegistradorLog()
         self._cache_bdr: dict[str, str | None] = {}
 
-    def listar_ultimos_30_dias(self) -> tuple[list[LinhaIpoRecente], str | None]:
+    def listar_ultimos_30_dias(
+        self,
+    ) -> tuple[dict[TipoAtivoIpo, list[LinhaIpoRecente]], str | None]:
         self._cache_bdr.clear()
         limite = date.today() - timedelta(days=_DIAS_JANELA)
         brutos: dict[str, _IpoBruto] = {}
@@ -53,21 +74,64 @@ class IpoRecentesServico:
         for item in self._buscar_ipos_globais_stockanalysis(limite):
             brutos[item.simbolo.upper()] = item
 
+        for item in self._buscar_etfs_novos_stockanalysis(limite):
+            chave = item.simbolo.upper()
+            if chave in brutos:
+                existente = brutos[chave]
+                brutos[chave] = _IpoBruto(
+                    simbolo=existente.simbolo,
+                    nome=existente.nome or item.nome,
+                    mercado=item.mercado,
+                    data_ipo=item.data_ipo,
+                    preco_ipo=existente.preco_ipo or item.preco_ipo,
+                    moeda=existente.moeda,
+                    preco_referencia_fonte=existente.preco_referencia_fonte,
+                    variacao_ipo_pct_fonte=existente.variacao_ipo_pct_fonte,
+                    tipo_sugerido="etfs",
+                )
+            else:
+                brutos[chave] = item
+
         for item in self._buscar_ipos_brasil_cvm(limite):
             chave = item.simbolo.upper()
             if chave not in brutos:
                 brutos[chave] = item
 
+        vazio: dict[TipoAtivoIpo, list[LinhaIpoRecente]] = {
+            "acoes": [],
+            "cripto": [],
+            "etfs": [],
+        }
         if not brutos:
-            return [], (
+            return vazio, (
                 "Nenhum IPO encontrado nos ultimos 30 dias. "
                 "Tente atualizar mais tarde."
             )
 
         lista_bruta = sorted(brutos.values(), key=lambda x: x.data_ipo, reverse=True)
         enriquecidas = self._enriquecer_em_lote(lista_bruta)
-        enriquecidas.sort(key=lambda linha: linha.data_ipo, reverse=True)
-        return enriquecidas, None
+        por_tipo = self._agrupar_por_tipo(enriquecidas)
+        if not any(por_tipo.values()):
+            return vazio, (
+                "Nenhum IPO encontrado nos ultimos 30 dias. "
+                "Tente atualizar mais tarde."
+            )
+        return por_tipo, None
+
+    @staticmethod
+    def _agrupar_por_tipo(
+        linhas: list[LinhaIpoRecente],
+    ) -> dict[TipoAtivoIpo, list[LinhaIpoRecente]]:
+        por_tipo: dict[TipoAtivoIpo, list[LinhaIpoRecente]] = {
+            "acoes": [],
+            "cripto": [],
+            "etfs": [],
+        }
+        for linha in linhas:
+            por_tipo[linha.tipo_ativo].append(linha)
+        for itens in por_tipo.values():
+            itens.sort(key=lambda item: item.data_ipo, reverse=True)
+        return por_tipo
 
     def _buscar_ipos_globais_stockanalysis(self, limite: date) -> list[_IpoBruto]:
         html = self._baixar_texto(_URL_STOCKANALYSIS)
@@ -96,6 +160,35 @@ class IpoRecentesServico:
                     moeda="USD",
                     preco_referencia_fonte=preco_ref,
                     variacao_ipo_pct_fonte=var_ipo,
+                )
+            )
+        return saida
+
+    def _buscar_etfs_novos_stockanalysis(self, limite: date) -> list[_IpoBruto]:
+        html = self._baixar_texto(_URL_ETFS_NOVOS)
+        if not html:
+            return []
+
+        saida: list[_IpoBruto] = []
+        for match in _REGEX_ETF_NOVO_SA.finditer(html):
+            resto = match.group("rest")
+            data_inicio = date.fromisoformat(match.group("inceptionDate"))
+            if data_inicio < limite:
+                continue
+            preco = self._extrair_numero_campo(resto, "price")
+            simbolo = match.group("s").strip().upper()
+            if not simbolo:
+                continue
+            saida.append(
+                _IpoBruto(
+                    simbolo=simbolo,
+                    nome=match.group("n").strip(),
+                    mercado="ETF — EUA / Global",
+                    data_ipo=data_inicio,
+                    preco_ipo=preco,
+                    moeda="USD",
+                    preco_referencia_fonte=preco,
+                    tipo_sugerido="etfs",
                 )
             )
         return saida
@@ -246,6 +339,12 @@ class IpoRecentesServico:
             moeda = "BRL"
 
         simbolo_b3, na_b3 = self._resolver_listagem_b3(bruto, simbolo_yahoo)
+        info: dict = {}
+        try:
+            info = dict(ticker.info or {})
+        except Exception:
+            pass
+        tipo_ativo = self._classificar_tipo_ativo(bruto, simbolo_yahoo, info)
 
         return LinhaIpoRecente(
             simbolo=simbolo_yahoo,
@@ -267,7 +366,38 @@ class IpoRecentesServico:
             variacao_alta_dia_pct=variacao_alta_pct,
             preco_fechamento_dia=preco_fechamento,
             moeda=moeda,
+            tipo_ativo=tipo_ativo,
         )
+
+    def _classificar_tipo_ativo(
+        self,
+        bruto: _IpoBruto,
+        simbolo_yahoo: str,
+        info: dict,
+    ) -> TipoAtivoIpo:
+        if bruto.tipo_sugerido:
+            return bruto.tipo_sugerido
+        if bruto.mercado == "B3":
+            return "acoes"
+
+        quote = str(info.get("quoteType") or "").upper()
+        if quote == "ETF":
+            return "etfs"
+        if quote == "CRYPTOCURRENCY" or simbolo_yahoo.upper().endswith("-USD"):
+            return "cripto"
+
+        nome = (bruto.nome or "").lower()
+        if any(palavra in nome for palavra in _PALAVRAS_CRIPTO_NOME):
+            return "cripto"
+        if " etf" in nome or nome.endswith(" etf"):
+            return "etfs"
+
+        for campo in ("industry", "sector", "category"):
+            texto = str(info.get(campo) or "").lower()
+            if "crypto" in texto or "bitcoin" in texto or "blockchain" in texto:
+                return "cripto"
+
+        return "acoes"
 
     def _resolver_listagem_b3(
         self,

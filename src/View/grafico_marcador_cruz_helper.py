@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.transforms import blended_transform_factory
 
+from src.View.formatadores import formatar_moeda
 from src.View.tema import CORES
 
 
@@ -13,6 +16,13 @@ class _EstadoMarcadorCruz:
     x: float | None = None
     y_preco: float | None = None
     y_volume: float | None = None
+
+
+@dataclass
+class _ContextoMarcadorCruz:
+    moeda: str = "BRL"
+    intraday: bool = False
+    pontos: list[dict] | None = None
 
 
 class GerenciadorMarcadorCruzScroll:
@@ -93,6 +103,12 @@ class GerenciadorMarcadorCruzScroll:
             "alpha": 0.9,
             "zorder": 7,
         }
+        estilo_texto = {
+            "fontsize": 8,
+            "color": cor,
+            "clip_on": False,
+            "zorder": 8,
+        }
 
         self._artistas.append(self._eixo.axvline(self._estado.x, **estilo))
         if self._estado.y_preco is not None:
@@ -102,6 +118,9 @@ class GerenciadorMarcadorCruzScroll:
             self._artistas.append(self._eixo_volume.axvline(self._estado.x, **estilo))
             if self._estado.y_volume is not None:
                 self._artistas.append(self._eixo_volume.axhline(self._estado.y_volume, **estilo))
+
+        contexto = _obter_contexto(self._figura())
+        self._adicionar_rotulos_valor(contexto, cor, estilo_texto)
 
     def _remover_artistas(self) -> None:
         for artista in self._artistas:
@@ -120,6 +139,106 @@ class GerenciadorMarcadorCruzScroll:
             pass
         self._cid_evento = None
 
+    def _adicionar_rotulos_valor(
+        self,
+        contexto: _ContextoMarcadorCruz,
+        cor: str,
+        estilo_texto: dict,
+    ) -> None:
+        rotulo_x = _formatar_rotulo_x_marcador(self._estado.x, contexto)
+        eixo_horario = self._eixo_volume if self._eixo_volume is not None else self._eixo
+        trans_horario = blended_transform_factory(eixo_horario.transData, eixo_horario.transAxes)
+        self._artistas.append(
+            eixo_horario.text(
+                self._estado.x,
+                -0.06,
+                rotulo_x,
+                transform=trans_horario,
+                ha="center",
+                va="top",
+                **estilo_texto,
+            )
+        )
+
+        if self._estado.y_preco is not None:
+            xlim = self._eixo.get_xlim()
+            texto_preco = formatar_moeda(self._estado.y_preco, contexto.moeda)
+            self._artistas.append(
+                self._eixo.text(
+                    xlim[1],
+                    self._estado.y_preco,
+                    f"  {texto_preco}",
+                    va="center",
+                    ha="left",
+                    **estilo_texto,
+                )
+            )
+
+        if self._eixo_volume is not None and self._estado.y_volume is not None:
+            xlim_vol = self._eixo_volume.get_xlim()
+            texto_volume = _formatar_volume_marcador(int(round(self._estado.y_volume)))
+            self._artistas.append(
+                self._eixo_volume.text(
+                    xlim_vol[1],
+                    self._estado.y_volume,
+                    f"  Vol. {texto_volume}",
+                    va="center",
+                    ha="left",
+                    **estilo_texto,
+                )
+            )
+
+
+def _obter_contexto(figura) -> _ContextoMarcadorCruz:
+    salvo = getattr(figura, "_marcador_cruz_contexto", None)
+    if isinstance(salvo, _ContextoMarcadorCruz):
+        return salvo
+    return _ContextoMarcadorCruz()
+
+
+def _mesclar_contexto(
+    figura,
+    *,
+    moeda: str | None = None,
+    intraday: bool | None = None,
+    pontos: list[dict] | None = None,
+) -> _ContextoMarcadorCruz:
+    contexto = _obter_contexto(figura)
+    if moeda is not None:
+        contexto.moeda = moeda
+    if intraday is not None:
+        contexto.intraday = intraday
+    if pontos is not None:
+        contexto.pontos = pontos
+    setattr(figura, "_marcador_cruz_contexto", contexto)
+    return contexto
+
+
+def _formatar_volume_marcador(volume: int) -> str:
+    return f"{int(volume):,}".replace(",", ".")
+
+
+def _minutos_dia_para_horario(minutos: float) -> str:
+    total = max(0, int(round(minutos)))
+    hora = (total // 60) % 24
+    minuto = total % 60
+    return f"{hora:02d}:{minuto:02d}"
+
+
+def _formatar_rotulo_x_marcador(x: float, contexto: _ContextoMarcadorCruz) -> str:
+    if contexto.intraday:
+        return _minutos_dia_para_horario(x)
+    if contexto.pontos:
+        from src.View.grafico_helper import _formatar_rotulo_data_eixo
+
+        indices = np.arange(len(contexto.pontos), dtype=float)
+        if len(indices) == 0:
+            return "—"
+        indice = int(np.argmin(np.abs(indices - x)))
+        ponto = contexto.pontos[indice]
+        return _formatar_rotulo_data_eixo(str(ponto.get("data", "")))
+    return f"{x:.2f}"
+
 
 def _carregar_estado_da_figura(eixo) -> _EstadoMarcadorCruz:
     salvo = getattr(eixo.figure, "_marcador_cruz_estado", None)
@@ -137,8 +256,17 @@ def configurar_marcador_cruz_scroll(
     eixo,
     *,
     eixo_volume=None,
+    moeda: str | None = None,
+    intraday: bool | None = None,
+    pontos: list[dict] | None = None,
 ) -> GerenciadorMarcadorCruzScroll:
     """Registra clique do botao do meio para marcar cruz H/V no grafico."""
+    _mesclar_contexto(
+        eixo.figure,
+        moeda=moeda,
+        intraday=intraday,
+        pontos=pontos,
+    )
     gerenciador = getattr(canvas, "_marcador_cruz_scroll", None)
     if gerenciador is None:
         gerenciador = GerenciadorMarcadorCruzScroll(canvas, eixo, eixo_volume=eixo_volume)

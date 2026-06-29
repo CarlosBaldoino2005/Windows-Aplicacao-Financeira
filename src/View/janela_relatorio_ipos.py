@@ -1,6 +1,7 @@
 """Relatorio de IPOs dos ultimos 30 dias (Brasil e mundo)."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
 import customtkinter as ctk
@@ -8,29 +9,52 @@ from tkinter import ttk
 
 from src.View import mensagem_helper as messagebox
 
+from src.Controller.controlador_mercado import ControladorMercado
 from src.Controller.controlador_relatorios import ControladorRelatorios
+from src.Model.ipo_recente import LinhaIpoRecente, TipoAtivoIpo
 from src.Tool.config_painel import ConfigPainelIni
+from src.Tool.cotacao_dual_helper import codigo_exibicao
 from src.Tool.janela_helper import (
     configurar_janela_maximizada,
     executar_em_thread,
     janela_ui_ainda_ativa,
 )
 from src.View.hub_painel_config_helper import ConfiguracaoHubPainel
+from src.View.janela_grafico_acao import JanelaGraficoAcao
 from src.View.tabela_ipos_helper import (
     criar_tabela_ipos,
+    obter_linha_ipo_duplo_clique,
     preencher_tabela_ipos,
     reaplicar_fonte_tabela_ipos,
+    simbolo_grafico_para_ipo,
 )
 from src.View.tema import CORES
+
+_ABAS_IPO: tuple[tuple[TipoAtivoIpo, str, str], ...] = (
+    ("acoes", "Acoes", "IPOs de acoes — ultimos 30 dias (duplo clique abre o grafico)"),
+    ("etfs", "ETFs", "ETFs novos — ultimos 30 dias (duplo clique abre o grafico)"),
+)
+_MENSAGEM_VAZIA_POR_TIPO: dict[TipoAtivoIpo, str] = {
+    "acoes": "Nenhum IPO de acoes nos ultimos 30 dias.",
+    "cripto": "Nenhum IPO ou listagem cripto nos ultimos 30 dias.",
+    "etfs": "Nenhum ETF novo nos ultimos 30 dias.",
+}
 
 
 class PainelRelatorioIpos(ctk.CTkFrame):
     """Grade de IPOs reutilizavel no hub ou em janela dedicada."""
 
-    def __init__(self, pai: ctk.CTkFrame, controlador: ControladorRelatorios) -> None:
+    def __init__(
+        self,
+        pai: ctk.CTkFrame,
+        controlador: ControladorRelatorios,
+        *,
+        ao_duplo_clique: Callable | None = None,
+    ) -> None:
         super().__init__(pai, fg_color=CORES["fundo"])
         self._controlador = controlador
-        self._tabela: ttk.Treeview | None = None
+        self._ao_duplo_clique = ao_duplo_clique
+        self._tabelas: dict[TipoAtivoIpo, ttk.Treeview] = {}
         self._buscando = False
 
         self.grid_rowconfigure(1, weight=1)
@@ -57,20 +81,39 @@ class PainelRelatorioIpos(ctk.CTkFrame):
             width=120,
         ).pack(side="right")
 
-        container = ctk.CTkFrame(self, fg_color="transparent")
-        container.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 4))
-        container.grid_rowconfigure(0, weight=1)
-        container.grid_columnconfigure(0, weight=1)
-
-        self._tabela = criar_tabela_ipos(
-            container,
-            "IPOs recentes (Brasil e mundo)",
-            altura=22,
-            expandir=True,
+        self._abas = ctk.CTkTabview(
+            self,
+            fg_color=CORES["fundo"],
+            segmented_button_fg_color=CORES["superficie"],
+            segmented_button_selected_color=CORES["primaria"],
+            segmented_button_selected_hover_color=CORES["primariaHover"],
+            segmented_button_unselected_color=CORES["zebraEscura"],
+            segmented_button_unselected_hover_color=CORES["borda"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
         )
+        self._abas.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 4))
+
+        for tipo, rotulo_aba, titulo_grid in _ABAS_IPO:
+            aba = self._abas.add(rotulo_aba)
+            aba.grid_rowconfigure(0, weight=1)
+            aba.grid_columnconfigure(0, weight=1)
+            container = ctk.CTkFrame(aba, fg_color="transparent")
+            container.grid(row=0, column=0, sticky="nsew")
+            container.grid_rowconfigure(0, weight=1)
+            container.grid_columnconfigure(0, weight=1)
+            self._tabelas[tipo] = criar_tabela_ipos(
+                container,
+                titulo_grid,
+                altura=22,
+                expandir=True,
+                ao_duplo_clique=ao_duplo_clique,
+            )
+
+        self._abas.set(_ABAS_IPO[0][1])
 
     def ao_mudar_fonte_grid(self) -> None:
-        reaplicar_fonte_tabela_ipos(self._tabela)
+        for tabela in self._tabelas.values():
+            reaplicar_fonte_tabela_ipos(tabela)
 
     def atualizar_grid(self, *, forcar: bool = False) -> None:
         janela = self.winfo_toplevel()
@@ -78,12 +121,12 @@ class PainelRelatorioIpos(ctk.CTkFrame):
             return
         if self._buscando and not forcar:
             return
-        if self._tabela is None:
+        if not self._tabelas:
             return
 
         self._buscando = True
         self._label_status.configure(
-            text="Buscando IPOs e cotacoes do dia...",
+            text="Buscando IPOs, ETFs e cotacoes do dia...",
             text_color=CORES["textoSecundario"],
         )
 
@@ -92,7 +135,7 @@ class PainelRelatorioIpos(ctk.CTkFrame):
 
         def ao_concluir(resultado, erro_thread):
             self._buscando = False
-            if not janela_ui_ainda_ativa(janela) or self._tabela is None:
+            if not janela_ui_ainda_ativa(janela) or not self._tabelas:
                 return
 
             if erro_thread:
@@ -100,20 +143,36 @@ class PainelRelatorioIpos(ctk.CTkFrame):
                 messagebox.showerror("IPOs", erro_thread, parent=janela)
                 return
 
-            itens, msg_erro = resultado if resultado is not None else ([], "Falha na consulta.")
-            if msg_erro and not itens:
+            dados, msg_erro = resultado if resultado is not None else ({}, "Falha na consulta.")
+            if msg_erro and not any(dados.values()):
                 self._label_status.configure(text=msg_erro, text_color=CORES["erro"])
-                preencher_tabela_ipos(self._tabela, [], msg_erro)
+                for tipo, tabela in self._tabelas.items():
+                    preencher_tabela_ipos(tabela, [], msg_erro)
                 return
 
-            preencher_tabela_ipos(
-                self._tabela,
-                itens,
-                "Nenhum IPO encontrado nos ultimos 30 dias.",
-            )
+            itens_acoes = list(dados.get("acoes", [])) + list(dados.get("cripto", []))
+            itens_por_aba = {
+                "acoes": itens_acoes,
+                "etfs": list(dados.get("etfs", [])),
+            }
+
+            total = 0
+            for tipo, tabela in self._tabelas.items():
+                itens = itens_por_aba.get(tipo, [])
+                total += len(itens)
+                preencher_tabela_ipos(
+                    tabela,
+                    itens,
+                    _MENSAGEM_VAZIA_POR_TIPO[tipo],
+                )
+
             hora = datetime.now().strftime("%H:%M:%S")
+            resumo = (
+                f"Acoes: {len(itens_acoes)} · "
+                f"ETFs: {len(dados.get('etfs', []))}"
+            )
             self._label_status.configure(
-                text=f"Atualizado as {hora} — {len(itens)} IPO(s) listado(s)",
+                text=f"Atualizado as {hora} — {total} registro(s) ({resumo})",
                 text_color=CORES["sucesso"],
             )
 
@@ -126,8 +185,10 @@ class JanelaRelatorioIpos(ctk.CTkToplevel):
     def __init__(self, pai: ctk.CTk, controlador: ControladorRelatorios) -> None:
         super().__init__(pai)
         self._controlador = controlador
+        self._controlador_mercado = ControladorMercado()
         self._config_painel = ConfigPainelIni()
         self._painel_ipos: PainelRelatorioIpos | None = None
+        self._janela_grafico: JanelaGraficoAcao | None = None
         self._config_hub = ConfiguracaoHubPainel(
             self,
             self._config_painel,
@@ -147,6 +208,12 @@ class JanelaRelatorioIpos(ctk.CTkToplevel):
         self.after(250, lambda: self._atualizar_grid(forcar=False))
 
     def _ao_fechar(self) -> None:
+        if self._janela_grafico is not None:
+            try:
+                if self._janela_grafico.winfo_exists():
+                    self._janela_grafico._ao_fechar()
+            except Exception:
+                pass
         self.destroy()
 
     def _montar_layout(self) -> None:
@@ -161,8 +228,10 @@ class JanelaRelatorioIpos(ctk.CTkToplevel):
         ctk.CTkLabel(
             cabecalho,
             text=(
-                "Empresas que abriram capital nos ultimos 30 dias (B3 e mercados internacionais). "
-                "Ordenado por data do IPO. Clique no cabecalho para ordenar ou filtrar."
+                "Empresas e fundos que abriram capital ou foram listados nos ultimos 30 dias "
+                "(B3 e mercados internacionais). Use as abas Acoes e ETFs. "
+                "Duplo clique na linha abre o grafico do ativo. "
+                "Clique no cabecalho da grade para ordenar ou filtrar."
             ),
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
@@ -173,7 +242,11 @@ class JanelaRelatorioIpos(ctk.CTkToplevel):
         secao = ctk.CTkFrame(self, fg_color=CORES["fundo"])
         secao.pack(fill="both", expand=True, padx=16, pady=(0, 8))
 
-        self._painel_ipos = PainelRelatorioIpos(secao, self._controlador)
+        self._painel_ipos = PainelRelatorioIpos(
+            secao,
+            self._controlador,
+            ao_duplo_clique=self._ao_duplo_clique_ipo,
+        )
         self._painel_ipos.pack(fill="both", expand=True)
 
         ctk.CTkLabel(
@@ -184,6 +257,28 @@ class JanelaRelatorioIpos(ctk.CTkToplevel):
             fg_color=CORES.get("destaqueAvisoLegal", CORES["avisoFundo"]),
             corner_radius=8,
         ).pack(fill="x", padx=16, pady=(0, 12))
+
+    def _ao_duplo_clique_ipo(self, evento) -> None:
+        linha = obter_linha_ipo_duplo_clique(evento.widget, evento)
+        if linha is None:
+            return
+        self._abrir_grafico_ipo(linha)
+
+    def _abrir_grafico_ipo(self, linha: LinhaIpoRecente) -> None:
+        simbolo = simbolo_grafico_para_ipo(linha)
+        if self._janela_grafico is not None:
+            try:
+                if self._janela_grafico.winfo_exists():
+                    self._janela_grafico._ao_fechar()
+            except Exception:
+                pass
+
+        self._janela_grafico = JanelaGraficoAcao(
+            self,
+            self._controlador_mercado,
+            simbolo,
+        )
+        self._janela_grafico.title(f"Grafico — {codigo_exibicao(simbolo)}")
 
     def _reconstruir_interface_apos_tema(self) -> None:
         for widget in self.winfo_children():

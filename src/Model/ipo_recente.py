@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Literal
+
+TipoAtivoIpo = Literal["acoes", "cripto", "etfs"]
 
 
 @dataclass
@@ -28,3 +31,4 @@ class LinhaIpoRecente:
     variacao_alta_dia_pct: float | None
     preco_fechamento_dia: float | None
     moeda: str = "USD"
+    tipo_ativo: TipoAtivoIpo = "acoes"

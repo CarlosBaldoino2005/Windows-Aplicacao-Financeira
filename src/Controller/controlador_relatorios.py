@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.Controller.controlador_carteira import ControladorCarteira
-from src.Model.ipo_recente import LinhaIpoRecente
+from src.Model.ipo_recente import LinhaIpoRecente, TipoAtivoIpo
 from src.Service.ipo_recentes_servico import IpoRecentesServico
 
 
@@ -21,5 +21,7 @@ class ControladorRelatorios:
     def carregar_relatorio_automatico_carteira(self):
         return self._carteira.carregar_relatorio_automatico()
 
-    def listar_ipos_ultimos_30_dias(self) -> tuple[list[LinhaIpoRecente], str | None]:
+    def listar_ipos_ultimos_30_dias(
+        self,
+    ) -> tuple[dict[TipoAtivoIpo, list[LinhaIpoRecente]], str | None]:
         return self._ipos.listar_ultimos_30_dias()

@@ -1,6 +1,8 @@
 """Grid de IPOs recentes com ordenacao e filtro por coluna."""
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import customtkinter as ctk
 from tkinter import ttk
 
@@ -20,6 +22,7 @@ from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_tags_treeview,
     configurar_interacao_treeview,
     liberar_interacao_treeview,
+    obter_simbolo_duplo_clique_treeview,
     sincronizar_tags_selecao_treeview,
     treeview_ainda_ativa,
 )
@@ -235,12 +238,34 @@ def aplicar_estilo_grid_ipos(
         label_vazio.configure(font=ctk.CTkFont(size=opcoes.fonte_mensagem_vazio))
 
 
+def simbolo_grafico_para_ipo(linha: LinhaIpoRecente) -> str:
+    """Prefere ticker negociavel na B3 quando houver BDR/listagem local."""
+    if linha.simbolo_b3:
+        return linha.simbolo_b3
+    return linha.simbolo
+
+
+def obter_linha_ipo_duplo_clique(
+    tabela: ttk.Treeview,
+    evento,
+) -> LinhaIpoRecente | None:
+    """Retorna a linha do IPO sob o cursor no duplo clique."""
+    simbolo = obter_simbolo_duplo_clique_treeview(tabela, evento)
+    if not simbolo:
+        return None
+    for linha in getattr(tabela, "_itens_originais", []):
+        if linha.simbolo == simbolo:
+            return linha
+    return None
+
+
 def criar_tabela_ipos(
     pai: ctk.CTkBaseClass,
     titulo: str,
     altura: int = 16,
     expandir: bool = True,
     opcoes_fonte: OpcoesFonteGrid | None = None,
+    ao_duplo_clique: Callable | None = None,
 ) -> ttk.Treeview:
     opcoes = _resolver_opcoes(opcoes_fonte)
     card = ctk.CTkFrame(pai, fg_color=CORES["superficie"], corner_radius=12)
@@ -282,7 +307,9 @@ def criar_tabela_ipos(
 
     _configurar_ordenacao_colunas(tabela)
     aplicar_estilo_grid_ipos(tabela, opcoes)
-    configurar_interacao_treeview(tabela)
+    configurar_interacao_treeview(tabela, ao_duplo_clique=ao_duplo_clique)
+    if ao_duplo_clique is not None:
+        tabela._ao_duplo_clique_ipo = ao_duplo_clique  # type: ignore[attr-defined]
 
     label_vazio = ctk.CTkLabel(
         card,
@@ -372,6 +399,9 @@ def _renderizar_tabela_ipos(tabela: ttk.Treeview) -> None:
 
     if itens:
         aplicar_estilo_grid_ipos(tabela)
+        callback = getattr(tabela, "_ao_duplo_clique_ipo", None)
+        if callback is not None:
+            configurar_interacao_treeview(tabela, ao_duplo_clique=callback)
         tags_zebra = ("par", "impar")
         for indice, linha in enumerate(itens):
             textos = _textos_linha_ipo(linha)

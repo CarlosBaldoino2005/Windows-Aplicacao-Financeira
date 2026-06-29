@@ -1061,7 +1061,14 @@ def configurar_tooltip_acao(
         return "\n".join(linhas)
 
     _configurar_tooltip(eixo, canvas, linha, texto_tooltip, eixo_volume=eixo_volume)
-    configurar_marcador_cruz_scroll(canvas, eixo, eixo_volume=eixo_volume)
+    configurar_marcador_cruz_scroll(
+        canvas,
+        eixo,
+        eixo_volume=eixo_volume,
+        moeda=moeda,
+        intraday=somente_horario,
+        pontos=pontos,
+    )
 
 
 def configurar_tooltip_comparacao(
@@ -1135,7 +1142,8 @@ def configurar_tooltip_comparacao(
     cid_mover = canvas.mpl_connect("motion_notify_event", ao_mover)
     cid_sair = canvas.mpl_connect("axes_leave_event", ao_sair)
     canvas._ids_tooltip_grafico = [cid_mover, cid_sair]
-    configurar_marcador_cruz_scroll(canvas, eixo)
+    pontos_comparacao = series[simbolos[0]] if simbolos else None
+    configurar_marcador_cruz_scroll(canvas, eixo, pontos=pontos_comparacao)
 
 
 def _desconectar_eventos_tooltip(canvas: FigureCanvasTkAgg) -> None:
