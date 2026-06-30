@@ -40,6 +40,10 @@ from src.View.grafico_helper import (
     restaurar_selecao_periodo_no_grafico,
 )
 from src.View.grafico_modelo_helper import ModeloGrafico, montar_seletor_modelo_grafico
+from src.View.grafico_nasdaq_helper import (
+    calcular_limites_eixo_nasdaq,
+    configurar_eixo_intraday_nasdaq,
+)
 from src.View.grafico_zoom_helper import criar_controle_zoom, montar_botoes_zoom_grafico
 from src.View.grafico_ferramentas_analise_helper import (
     montar_ferramentas_analise_grafico,
@@ -384,12 +388,21 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
 
         posicoes = np.asarray(posicoes_x, dtype=float)
         opcoes_medias = obter_opcoes_medias_do_frame(self._controles_medias_moveis)
-        xlim, ylim = calcular_limites_eixo_agora(
-            posicoes,
-            valores,
-            preco_fechamento_anterior=resumo.fechamento_anterior,
-            referencias_y_extra=valores_medias_para_limites(valores, opcoes_medias),
-        )
+        mercado_b3 = self._simbolo.upper().endswith(".SA")
+        if mercado_b3:
+            xlim, ylim = calcular_limites_eixo_agora(
+                posicoes,
+                valores,
+                preco_fechamento_anterior=resumo.fechamento_anterior,
+                referencias_y_extra=valores_medias_para_limites(valores, opcoes_medias),
+            )
+        else:
+            xlim, ylim = calcular_limites_eixo_nasdaq(
+                posicoes,
+                valores,
+                preco_fechamento_anterior=resumo.fechamento_anterior,
+                referencias_y_extra=valores_medias_para_limites(valores, opcoes_medias),
+            )
         cor = obter_cor_tendencia_agora(resumo.fechamento, resumo.fechamento_anterior)
         linha = desenhar_serie_agora(
             eixo,
@@ -402,7 +415,10 @@ class JanelaGraficoAgoraDia(ctk.CTkToplevel):
         )
         desenhar_linha_fechamento_anterior(eixo, resumo.fechamento_anterior, resumo.moeda, xlim)
         tem_medias = desenhar_medias_moveis(eixo, posicoes, valores, opcoes_medias)
-        configurar_eixo_intraday_agora(eixo, xlim, ylim)
+        if mercado_b3:
+            configurar_eixo_intraday_agora(eixo, xlim, ylim)
+        else:
+            configurar_eixo_intraday_nasdaq(eixo, xlim, ylim)
         ocultar_rotulos_eixo_x_preco(eixo)
         desenhar_volume_agora(eixo_volume, figura, posicoes, pontos_tooltip, xlim)
         titulo = (

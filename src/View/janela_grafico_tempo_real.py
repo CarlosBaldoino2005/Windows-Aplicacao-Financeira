@@ -39,6 +39,10 @@ from src.View.janela_grafico_agora_tela_cheia import (
     abrir_grafico_agora_tela_cheia,
     atualizar_estado_botao_grafico_tela_cheia,
 )
+from src.View.janela_grafico_nasdaq_agora import (
+    JanelaGraficoNasdaqAgora,
+    abrir_janela_grafico_nasdaq_agora,
+)
 from src.View.janela_negocios_agora import JanelaNegociosAgora, abrir_janela_negocios_agora
 from src.View.janela_resumo_semana_agora import (
     JanelaResumoSemanaAgora,
@@ -151,6 +155,7 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._janela_negocios: JanelaNegociosAgora | None = None
         self._janela_resumo_semana: JanelaResumoSemanaAgora | None = None
         self._janela_analise: JanelaAnaliseAgora | None = None
+        self._janela_nasdaq: JanelaGraficoNasdaqAgora | None = None
         self._janela_grafico_tela_cheia = None
         self._gerenciador_aba_variacao: GerenciadorAbaVariacaoAgora | None = None
         self._ultimos_pontos_tooltip: list[dict] = []
@@ -197,6 +202,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             except Exception:
                 pass
             self._janela_grafico_tela_cheia = None
+        if self._janela_nasdaq is not None:
+            try:
+                if self._janela_nasdaq.winfo_exists():
+                    self._janela_nasdaq._ao_fechar()
+            except Exception:
+                pass
+            self._janela_nasdaq = None
         if self._figura is not None:
             import matplotlib.pyplot as plt
 
@@ -288,6 +300,17 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
             barra_dia,
             text="Analise",
             command=self._abrir_analise,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=88,
+            height=28,
+        ).pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(
+            barra_dia,
+            text="Nasdaq",
+            command=self._abrir_grafico_nasdaq,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
@@ -586,6 +609,13 @@ class JanelaGraficoTempoReal(ctk.CTkToplevel):
         self._janela_analise = abrir_janela_analise_agora(
             self,
             obter_contexto=self._montar_contexto_analise,
+        )
+
+    def _abrir_grafico_nasdaq(self) -> None:
+        self._janela_nasdaq = abrir_janela_grafico_nasdaq_agora(
+            self,
+            self._simbolo,
+            janela_atual=self._janela_nasdaq,
         )
 
     def _montar_contexto_analise(self) -> ContextoAnaliseAgora:
