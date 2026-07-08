@@ -18,7 +18,13 @@ from src.Model.resultado_busca import ResultadoBusca
 from src.Tool.blacklist_ativos_helper import confirmar_cadastro_blacklist
 from src.Tool.carteira_ativo_helper import normalizar_simbolo_carteira
 from src.Tool.cotacao_dual_helper import codigo_exibicao
-from src.Tool.janela_helper import configurar_janela_filha_modal, executar_em_thread, liberar_modal_janela_filha, centralizar_janela_sobre_referencia
+from src.Tool.janela_helper import (
+    agendar_na_ui,
+    centralizar_janela_sobre_referencia,
+    configurar_janela_filha_modal,
+    executar_em_thread,
+    liberar_modal_janela_filha,
+)
 from src.Tool.mascara_moeda_helper import aplicar_mascara_moeda_ptbr, formatar_centavos_ptbr
 from src.View.campo_data_calendario_helper import (
     CampoDataCalendario,
@@ -28,8 +34,11 @@ from src.View.campo_data_calendario_helper import (
 from src.View.tema import CORES
 
 _LARGURA = 520
-_ALTURA = 700
-_MARGEM_ALTURA_EXTRA_PX = 24
+_ALTURA = 660
+_ALTURA_COMPACTA = 520
+_ALTURA_AREA_FORMULARIO = 480
+_ALTURA_AREA_FORMULARIO_COMPACTA = 280
+_MARGEM_ALTURA_EXTRA_PX = 32
 
 
 def _texto_moeda(valor: float) -> str:
@@ -78,29 +87,84 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         self.title(titulo)
         self.configure(fg_color=CORES["fundo"])
         self.resizable(False, False)
-        self.minsize(_LARGURA, _ALTURA)
+        self.minsize(_LARGURA, self._altura_minima_conteudo())
 
         self._montar_interface()
         self._aplicar_preenchimento_inicial()
+        for entrada in (self._entrada_quantidade, self._entrada_preco, self._campo_data.entrada):
+            entrada.bind("<Return>", lambda _e: self._salvar())
         self._ajustar_tamanho_conteudo(pai)
         configurar_janela_filha_modal(self, pai)
+        self._agendar_reajuste_tamanho_ao_exibir()
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         self.focus_force()
 
     def _centralizar_sobre_pai(self, pai: ctk.CTk | ctk.CTkToplevel) -> None:
         try:
             self.update_idletasks()
-            altura = max(_ALTURA, int(self.winfo_reqheight()))
+            altura = max(self._altura_minima_conteudo(), self._medir_altura_janela())
             centralizar_janela_sobre_referencia(self, pai, _LARGURA, altura)
+        except Exception:
+            pass
+
+    def _altura_area_formulario(self) -> int:
+        """Altura visivel da area rolavel com os campos do formulario."""
+        if self._editando or self._nova_compra_ativo:
+            return _ALTURA_AREA_FORMULARIO_COMPACTA
+        return _ALTURA_AREA_FORMULARIO
+
+    def _altura_minima_conteudo(self) -> int:
+        """Altura minima da janela conforme o modo do formulario."""
+        cabecalho = 130 if not (self._editando or self._nova_compra_ativo) else 96
+        area_topo = 150 if not (self._editando or self._nova_compra_ativo) else 0
+        return cabecalho + area_topo + self._altura_area_formulario() + 56 + _MARGEM_ALTURA_EXTRA_PX
+
+    def _medir_altura_janela(self) -> int:
+        """Soma cabecalho, area rolavel e barra de botoes sem comprimir o painel."""
+        self.update_idletasks()
+        altura_cabecalho = int(self._cabecalho.winfo_reqheight())
+        altura_topo = 0
+        if hasattr(self, "_area_topo") and self._area_topo.winfo_manager():
+            altura_topo = int(self._area_topo.winfo_reqheight())
+        altura_area = self._altura_area_formulario()
+        altura_botoes = int(self._barra_botoes.winfo_reqheight())
+        margens = 16 + 8 + 16 + 24
+        return altura_cabecalho + altura_topo + altura_area + altura_botoes + margens + _MARGEM_ALTURA_EXTRA_PX
+
+    def _rolar_para_campo_preco(self) -> None:
+        """Garante que o campo de valor fique visivel na area rolavel."""
+        try:
+            self.update_idletasks()
+            canvas = self._area_formulario._parent_canvas
+            canvas.update_idletasks()
+            y_widget = self._entrada_preco.winfo_rooty() - self._area_formulario.winfo_rooty()
+            altura_visivel = max(1, self._area_formulario.winfo_height())
+            fracao = max(0.0, min(1.0, (y_widget - altura_visivel * 0.35) / max(1, canvas.bbox("all")[3])))
+            canvas.yview_moveto(fracao)
+        except Exception:
+            pass
+
+    def _agendar_reajuste_tamanho_ao_exibir(self) -> None:
+        """Recalcula altura apos exibir; evita cortar campos no primeiro paint."""
+
+        def reajustar() -> None:
+            self._ajustar_tamanho_conteudo(self._janela_pai_ref)
+            self._rolar_para_campo_preco()
+
+        agendar_na_ui(self, reajustar)
+
+        def ao_exibir(_evento=None) -> None:
+            agendar_na_ui(self, reajustar)
+
+        try:
+            self.bind("<Map>", ao_exibir, add=True)
         except Exception:
             pass
 
     def _ajustar_tamanho_conteudo(self, pai: ctk.CTk | ctk.CTkToplevel | None = None) -> None:
         referencia = pai or self._janela_pai_ref
         try:
-            self.update_idletasks()
-            altura_necessaria = int(self.winfo_reqheight()) + _MARGEM_ALTURA_EXTRA_PX
-            altura = max(_ALTURA, altura_necessaria)
+            altura = max(self._altura_minima_conteudo(), self._medir_altura_janela())
             self.minsize(_LARGURA, altura)
             self.geometry(f"{_LARGURA}x{altura}")
             if referencia is not None:
@@ -117,8 +181,10 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        painel = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
-        painel.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 8))
+        self._painel = ctk.CTkFrame(self, fg_color=CORES["superficie"], corner_radius=12)
+        self._painel.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 8))
+        self._painel.grid_columnconfigure(0, weight=1)
+        self._painel.grid_rowconfigure(2, weight=1)
 
         if self._editando:
             titulo_form = "Editar posicao"
@@ -127,12 +193,15 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         else:
             titulo_form = "Registrar compra"
 
+        self._cabecalho = ctk.CTkFrame(self._painel, fg_color="transparent")
+        self._cabecalho.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+
         ctk.CTkLabel(
-            painel,
+            self._cabecalho,
             text=titulo_form,
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=CORES["texto"],
-        ).pack(anchor="w", padx=16, pady=(16, 4))
+        ).pack(anchor="w")
 
         if self._nova_compra_ativo:
             texto_ajuda = (
@@ -153,16 +222,33 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             )
 
         ctk.CTkLabel(
-            painel,
+            self._cabecalho,
             text=texto_ajuda,
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
             wraplength=_LARGURA - 80,
             justify="left",
-        ).pack(anchor="w", padx=16, pady=(0, 12))
+        ).pack(anchor="w", pady=(4, 0))
 
-        bloco_tipo = ctk.CTkFrame(painel, fg_color="transparent")
-        bloco_tipo.pack(fill="x", padx=16, pady=(0, 10))
+        self._area_topo = ctk.CTkFrame(self._painel, fg_color="transparent")
+        self._area_topo.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+
+        self._area_formulario = ctk.CTkScrollableFrame(
+            self._painel,
+            fg_color=CORES["fundo"],
+            label_text="",
+            height=self._altura_area_formulario(),
+        )
+        linha_scroll = 2 if not self._editando and not self._nova_compra_ativo else 1
+        if self._editando or self._nova_compra_ativo:
+            self._painel.grid_rowconfigure(1, weight=1)
+        self._area_formulario.grid(row=linha_scroll, column=0, sticky="nsew", padx=12, pady=(0, 12))
+
+        bloco_tipo = ctk.CTkFrame(
+            self._area_topo if not self._editando and not self._nova_compra_ativo else self._area_formulario,
+            fg_color="transparent",
+        )
+        bloco_tipo.pack(fill="x", pady=(0, 10))
         ctk.CTkLabel(
             bloco_tipo,
             text="Tipo de ativo",
@@ -183,27 +269,33 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                 text="Detectado automaticamente ao buscar ou informar o codigo.",
                 font=ctk.CTkFont(size=11),
                 text_color=CORES["textoSecundario"],
-                wraplength=_LARGURA - 80,
+                wraplength=_LARGURA - 96,
                 justify="left",
             ).pack(anchor="w", pady=(4, 0))
 
         if not self._editando and not self._nova_compra_ativo:
-            self._montar_busca_ativo(painel)
+            self._montar_campo_busca(self._area_topo)
+            self._montar_resultados_busca(self._area_formulario)
         else:
+            try:
+                self._area_topo.grid_remove()
+            except Exception:
+                pass
             self._label_ativo_fixo = ctk.CTkLabel(
-                painel,
+                self._area_formulario,
                 text="",
                 font=ctk.CTkFont(size=14, weight="bold"),
                 text_color=CORES["texto"],
             )
-            self._label_ativo_fixo.pack(anchor="w", padx=16, pady=(0, 10))
+            self._label_ativo_fixo.pack(anchor="w", pady=(0, 10))
 
-        self._montar_campos_compra(painel)
-        self._montar_botoes(self)
+        self._montar_campos_compra(self._area_formulario)
+        self._barra_botoes = self._montar_botoes(self)
 
-    def _montar_busca_ativo(self, painel: ctk.CTkFrame) -> None:
-        bloco_busca = ctk.CTkFrame(painel, fg_color="transparent")
-        bloco_busca.pack(fill="x", padx=16, pady=(0, 8))
+    def _montar_campo_busca(self, area: ctk.CTkFrame) -> None:
+        """Campo e botao de busca ficam fora da area rolavel para nao serem cortados."""
+        bloco_busca = ctk.CTkFrame(area, fg_color="transparent")
+        bloco_busca.pack(fill="x")
         ctk.CTkLabel(
             bloco_busca,
             text="Codigo ou nome",
@@ -213,45 +305,53 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
 
         linha_busca = ctk.CTkFrame(bloco_busca, fg_color="transparent")
         linha_busca.pack(fill="x", pady=(6, 0))
-        self._entrada_busca = ctk.CTkEntry(linha_busca, width=280, placeholder_text="Ex.: PETR4, BTC, HGLG11")
-        self._entrada_busca.pack(side="left", padx=(0, 8))
+        linha_busca.grid_columnconfigure(0, weight=1)
+
+        self._entrada_busca = ctk.CTkEntry(
+            linha_busca,
+            placeholder_text="Ex.: PETR4, BTC, HGLG11",
+        )
+        self._entrada_busca.grid(row=0, column=0, columnspan=2, sticky="ew")
         self._entrada_busca.bind("<Return>", lambda _e: self._pesquisar())
+
         self._entrada_codigo = ctk.CTkEntry(
             linha_busca,
-            width=100,
-            placeholder_text="Opcional",
+            placeholder_text="Codigo opcional",
         )
-        self._entrada_codigo.pack(side="left", padx=(0, 8))
+        self._entrada_codigo.grid(row=1, column=0, sticky="ew", pady=(8, 0), padx=(0, 8))
         self._entrada_codigo.bind("<Return>", lambda _e: self._confirmar_busca_ou_codigo())
-        ctk.CTkButton(
+
+        self._botao_buscar = ctk.CTkButton(
             linha_busca,
             text="Buscar",
             command=self._pesquisar,
             fg_color=CORES["primaria"],
             hover_color=CORES["primariaHover"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
-            width=90,
-        ).pack(side="left")
+            width=110,
+        )
+        self._botao_buscar.grid(row=1, column=1, pady=(8, 0))
 
+    def _montar_resultados_busca(self, area: ctk.CTkScrollableFrame) -> None:
         self._frame_resultados = ctk.CTkScrollableFrame(
-            painel,
-            height=100,
-            fg_color=CORES["fundo"],
+            area,
+            height=88,
+            fg_color=CORES["superficie"],
             label_text="Resultados",
         )
-        self._frame_resultados.pack(fill="x", padx=16, pady=(0, 10))
+        self._frame_resultados.pack(fill="x", pady=(0, 10))
 
         self._label_selecionado = ctk.CTkLabel(
-            painel,
+            area,
             text="Nenhum ativo selecionado.",
             font=ctk.CTkFont(size=12),
             text_color=CORES["textoSecundario"],
         )
-        self._label_selecionado.pack(anchor="w", padx=16, pady=(0, 10))
+        self._label_selecionado.pack(anchor="w", pady=(0, 10))
 
-    def _montar_campos_compra(self, painel: ctk.CTkFrame) -> None:
-        bloco = ctk.CTkFrame(painel, fg_color="transparent")
-        bloco.pack(fill="x", padx=16, pady=(0, 8))
+    def _montar_campos_compra(self, area: ctk.CTkScrollableFrame) -> None:
+        bloco = ctk.CTkFrame(area, fg_color="transparent")
+        bloco.pack(fill="x", pady=(0, 8))
 
         linha1 = ctk.CTkFrame(bloco, fg_color="transparent")
         linha1.pack(fill="x", pady=(0, 8))
@@ -272,6 +372,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             bloco,
             values=["Por cota", "Valor total"],
             command=self._atualizar_modo_valor_compra,
+            fg_color=CORES["borda"],
             selected_color=CORES["primaria"],
             unselected_color=CORES["superficie"],
             text_color=CORES.get("textoInverso", "#FFFFFF"),
@@ -287,7 +388,13 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
         )
         self._rotulo_preco_compra.pack(anchor="w", pady=(0, 4))
 
-        self._entrada_preco = ctk.CTkEntry(bloco, width=200, placeholder_text="R$ 0,00")
+        self._entrada_preco = ctk.CTkEntry(
+            bloco,
+            width=240,
+            placeholder_text="R$ 0,00",
+            fg_color=CORES["fundo"],
+            border_color=CORES["borda"],
+        )
         self._entrada_preco.pack(anchor="w", pady=(0, 8))
         aplicar_mascara_moeda_ptbr(self._entrada_preco)
 
@@ -309,6 +416,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             if total is not None:
                 self._entrada_preco.delete(0, "end")
                 self._entrada_preco.insert(0, _texto_moeda(total))
+            agendar_na_ui(self, self._rolar_para_campo_preco)
             return
 
         self._modo_valor_compra["valor"] = "por_cota"
@@ -343,7 +451,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             return round(self._posicao.preco_compra * self._posicao.quantidade, 2)
         return None
 
-    def _montar_botoes(self, pai: ctk.CTkBaseClass) -> None:
+    def _montar_botoes(self, pai: ctk.CTkBaseClass) -> ctk.CTkFrame:
         barra = ctk.CTkFrame(pai, fg_color=CORES["fundo"])
         barra.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 16))
         ctk.CTkButton(
@@ -364,6 +472,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             text_color=CORES.get("textoInverso", "#FFFFFF"),
             width=110,
         ).pack(side="right", padx=(0, 8))
+        return barra
 
     def _aplicar_preenchimento_inicial(self) -> None:
         hoje = date.today()
@@ -525,6 +634,7 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
                 text_color=CORES["textoSecundario"],
             )
         self._ajustar_tamanho_conteudo()
+        agendar_na_ui(self, self._rolar_para_campo_preco)
 
     def _selecionar_ativo(self, simbolo: str, tipo: TipoAtivoCarteira) -> None:
         self._simbolo_selecionado = simbolo
@@ -536,6 +646,8 @@ class JanelaAdicionarCarteira(ctk.CTkToplevel):
             text=f"Selecionado: {codigo_exibicao(simbolo)} ({rotulo_tipo})",
             text_color=CORES["sucesso"],
         )
+        self._ajustar_tamanho_conteudo()
+        agendar_na_ui(self, self._rolar_para_campo_preco)
 
     def _usar_codigo_direto(self) -> None:
         codigo = self._entrada_codigo.get().strip() or self._entrada_busca.get().strip()

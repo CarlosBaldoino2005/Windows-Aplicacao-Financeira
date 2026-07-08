@@ -1,6 +1,8 @@
 """Janela com metricas dos ultimos trinta dias uteis do ativo (tela Agora)."""
 from __future__ import annotations
 
+from datetime import date
+
 import customtkinter as ctk
 
 from src.Model.resumo_semana_agora import ResumoSemanaAgora
@@ -8,6 +10,8 @@ from src.Service.resumo_semana_agora_servico import ResumoSemanaAgoraServico
 from src.Tool.cotacao_dual_helper import codigo_exibicao, rotulo_tipo_ativo
 from src.Tool.janela_helper import configurar_janela_maximizada, executar_em_thread, janela_ui_ainda_ativa
 from src.View.formatadores import formatar_moeda, formatar_variacao
+from src.View.grid_interacao_treeview_helper import obter_simbolo_duplo_clique_treeview
+from src.View.janela_grafico_agora_dia import abrir_grafico_agora_dia
 from src.View.tabela_resumo_semana_agora_helper import (
     criar_grid_resumo_semana_agora,
     liberar_grid_resumo_semana_agora,
@@ -25,6 +29,7 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
         self._servico = ResumoSemanaAgoraServico()
         self._tabela = None
         self._carregando = False
+        self._janela_dia_historico = None
 
         codigo = codigo_exibicao(simbolo)
         self.title(f"Resumo do mês — {codigo}")
@@ -39,6 +44,13 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
 
     def _ao_fechar(self) -> None:
         liberar_grid_resumo_semana_agora(self._tabela)
+        if self._janela_dia_historico is not None:
+            try:
+                if self._janela_dia_historico.winfo_exists():
+                    self._janela_dia_historico.destroy()
+            except Exception:
+                pass
+            self._janela_dia_historico = None
         self.destroy()
 
     def _montar_interface(self) -> None:
@@ -108,6 +120,7 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
             corpo,
             "Metricas por dia de pregão",
             altura=18,
+            ao_duplo_clique=self._ao_duplo_clique,
         )
 
         rodape = ctk.CTkFrame(self, fg_color="transparent")
@@ -115,7 +128,10 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             rodape,
-            text="Variacao diaria em relacao ao fechamento do pregão anterior. Dados via Yahoo Finance.",
+            text=(
+                "Duplo clique em um dia para abrir o historico daquele pregao. "
+                "Variacao diaria em relacao ao fechamento anterior. Dados via Yahoo Finance."
+            ),
             font=ctk.CTkFont(size=11),
             text_color=CORES["textoSecundario"],
             anchor="w",
@@ -250,6 +266,39 @@ class JanelaResumoSemanaAgora(ctk.CTkToplevel):
                 text=f"{quantidade_dias} dias uteis · {periodo}",
                 text_color=CORES["textoSecundario"],
             )
+
+    def _ao_duplo_clique(self, evento) -> None:
+        """Abre a tela de historico intraday do dia clicado na grid."""
+        if self._tabela is None:
+            return
+
+        # O iid da linha e a data em formato ISO (aaaa-mm-dd).
+        iid = obter_simbolo_duplo_clique_treeview(self._tabela, evento)
+        if not iid:
+            return
+
+        try:
+            data_ref = date.fromisoformat(str(iid))
+        except ValueError:
+            return
+
+        self._abrir_historico_dia(data_ref)
+
+    def _abrir_historico_dia(self, data_ref: date) -> None:
+        """Abre (ou substitui) a janela de dia historico para a data informada."""
+        if self._janela_dia_historico is not None:
+            try:
+                if self._janela_dia_historico.winfo_exists():
+                    self._janela_dia_historico.destroy()
+            except Exception:
+                pass
+            self._janela_dia_historico = None
+
+        self._janela_dia_historico = abrir_grafico_agora_dia(
+            self,
+            self._simbolo,
+            data_ref,
+        )
 
 
 def abrir_janela_resumo_semana_agora(

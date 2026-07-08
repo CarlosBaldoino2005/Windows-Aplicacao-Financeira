@@ -1,6 +1,8 @@
 """Grid do resumo mensal da tela Agora."""
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import customtkinter as ctk
 from tkinter import ttk
 
@@ -17,6 +19,7 @@ from src.View.formatadores import formatar_moeda, formatar_variacao
 from src.View.grid_interacao_treeview_helper import (
     aplicar_destaque_estilo_treeview,
     aplicar_destaque_tags_treeview,
+    configurar_duplo_clique_treeview,
     configurar_interacao_treeview,
     liberar_interacao_treeview,
     sincronizar_tags_selecao_treeview,
@@ -242,6 +245,7 @@ def criar_grid_resumo_semana_agora(
     *,
     altura: int = 8,
     opcoes: OpcoesFonteGrid | None = None,
+    ao_duplo_clique: Callable | None = None,
 ) -> ttk.Treeview:
     opcoes_grid = _resolver_opcoes(opcoes)
 
@@ -292,7 +296,9 @@ def criar_grid_resumo_semana_agora(
 
     _configurar_ordenacao_colunas(tabela)
     aplicar_estilo_grid_resumo_semana_agora(tabela, opcoes_grid)
-    configurar_interacao_treeview(tabela)
+    # Guarda o callback para reaplicar apos recarregar linhas da grid.
+    tabela._ao_duplo_clique_resumo = ao_duplo_clique  # type: ignore[attr-defined]
+    configurar_interacao_treeview(tabela, ao_duplo_clique=ao_duplo_clique)
 
     vincular_botao_exportar_treeview(
         frame_botoes,
@@ -338,6 +344,7 @@ def _renderizar_grid_resumo_semana_agora(tabela: ttk.Treeview) -> None:
 
     for indice, dia in enumerate(dias):
         tag = _tag_linha(indice, dia)
+        # iid em ISO (aaaa-mm-dd) para abrir o historico do dia no duplo clique.
         iid = dia.data.isoformat()
         tabela._tags_zebra[iid] = tag  # type: ignore[attr-defined]
         volume_texto = f"{dia.volume:,}".replace(",", ".") if dia.volume is not None else "—"
@@ -361,6 +368,10 @@ def _renderizar_grid_resumo_semana_agora(tabela: ttk.Treeview) -> None:
         )
 
     sincronizar_tags_selecao_treeview(tabela)
+    # Reaplica so o Double-1 (bind substitui o anterior; hover/clique ja ficam no create).
+    callback_duplo = getattr(tabela, "_ao_duplo_clique_resumo", None)
+    if callback_duplo is not None:
+        configurar_duplo_clique_treeview(tabela, callback_duplo)
 
 
 def liberar_grid_resumo_semana_agora(tabela: ttk.Treeview | None) -> None:
