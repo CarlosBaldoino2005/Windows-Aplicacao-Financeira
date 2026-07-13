@@ -351,13 +351,32 @@ class JanelaManutencaoAtivoCarteira(ctk.CTkToplevel):
             text_color=CORES["texto"],
         ).pack(anchor="w", padx=16, pady=(16, 4))
 
+        linha_qtd = ctk.CTkFrame(painel, fg_color="transparent")
+        linha_qtd.pack(anchor="w", padx=16, pady=(0, 10))
+
         entrada_qtd = ctk.CTkEntry(
-            painel,
-            width=220,
+            linha_qtd,
+            width=180,
             placeholder_text="Ex.: 0,5" if not qtd_inteira else "Ex.: 50",
         )
-        entrada_qtd.pack(anchor="w", padx=16, pady=(0, 10))
+        entrada_qtd.pack(side="left")
+        entrada_qtd.insert(0, texto_qtd_max)
         entrada_qtd.focus_set()
+
+        def preencher_qtd_maxima() -> None:
+            entrada_qtd.delete(0, "end")
+            entrada_qtd.insert(0, texto_qtd_max)
+
+        ctk.CTkButton(
+            linha_qtd,
+            text="Max",
+            command=preencher_qtd_maxima,
+            fg_color=CORES["primaria"],
+            hover_color=CORES["primariaHover"],
+            text_color=CORES.get("textoInverso", "#FFFFFF"),
+            width=50,
+            height=28,
+        ).pack(side="left", padx=(8, 0))
 
         ctk.CTkLabel(
             painel,
